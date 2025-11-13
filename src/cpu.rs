@@ -199,14 +199,18 @@ impl<M: MemoryBus> CPU<M> {
             return Err(ExecutionError::UnimplementedOpcode(opcode));
         }
 
-        // Execute instruction (would implement actual instruction logic here in future)
-        // For now, all instructions return unimplemented since implemented flag is always false
-
-        // Increment cycle counter
-        self.cycles += metadata.base_cycles as u64;
-
-        // Advance PC
-        self.pc = self.pc.wrapping_add(metadata.size_bytes as u16);
+        // Execute instruction based on mnemonic
+        match metadata.mnemonic {
+            "ADC" => {
+                self.execute_adc(opcode)?;
+            }
+            _ => {
+                // Other instructions not yet implemented
+                self.cycles += metadata.base_cycles as u64;
+                self.pc = self.pc.wrapping_add(metadata.size_bytes as u16);
+                return Err(ExecutionError::UnimplementedOpcode(opcode));
+            }
+        }
 
         Ok(())
     }
@@ -396,6 +400,259 @@ impl<M: MemoryBus> CPU<M> {
     /// Returns true if the Carry flag is set.
     pub fn flag_c(&self) -> bool {
         self.flag_c
+    }
+
+    // ========== Register Setters (for testing) ==========
+
+    /// Sets the accumulator register value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cpu6502::{CPU, FlatMemory, MemoryBus};
+    ///
+    /// let mut mem = FlatMemory::new();
+    /// mem.write(0xFFFC, 0x00);
+    /// mem.write(0xFFFD, 0x80);
+    ///
+    /// let mut cpu = CPU::new(mem);
+    /// cpu.set_a(0x42);
+    /// assert_eq!(cpu.a(), 0x42);
+    /// ```
+    pub fn set_a(&mut self, value: u8) {
+        self.a = value;
+    }
+
+    /// Sets the X index register value.
+    pub fn set_x(&mut self, value: u8) {
+        self.x = value;
+    }
+
+    /// Sets the Y index register value.
+    pub fn set_y(&mut self, value: u8) {
+        self.y = value;
+    }
+
+    /// Sets the Carry flag.
+    pub fn set_flag_c(&mut self, value: bool) {
+        self.flag_c = value;
+    }
+
+    /// Sets the Zero flag.
+    pub fn set_flag_z(&mut self, value: bool) {
+        self.flag_z = value;
+    }
+
+    /// Sets the Interrupt Disable flag.
+    pub fn set_flag_i(&mut self, value: bool) {
+        self.flag_i = value;
+    }
+
+    /// Sets the Decimal mode flag.
+    pub fn set_flag_d(&mut self, value: bool) {
+        self.flag_d = value;
+    }
+
+    /// Sets the Break flag.
+    pub fn set_flag_b(&mut self, value: bool) {
+        self.flag_b = value;
+    }
+
+    /// Sets the Overflow flag.
+    pub fn set_flag_v(&mut self, value: bool) {
+        self.flag_v = value;
+    }
+
+    /// Sets the Negative flag.
+    pub fn set_flag_n(&mut self, value: bool) {
+        self.flag_n = value;
+    }
+
+    /// Returns a mutable reference to the memory bus.
+    ///
+    /// This allows tests and external code to write to memory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cpu6502::{CPU, FlatMemory, MemoryBus};
+    ///
+    /// let mut mem = FlatMemory::new();
+    /// mem.write(0xFFFC, 0x00);
+    /// mem.write(0xFFFD, 0x80);
+    ///
+    /// let mut cpu = CPU::new(mem);
+    /// cpu.memory_mut().write(0x8000, 0xEA); // Write NOP instruction
+    /// ```
+    pub fn memory_mut(&mut self) -> &mut M {
+        &mut self.memory
+    }
+
+    // ========== Private Instruction Implementation Methods ==========
+
+    /// Executes the ADC (Add with Carry) instruction.
+    ///
+    /// Adds the value at the effective address (determined by addressing mode)
+    /// plus the carry flag to the accumulator. Updates all relevant flags.
+    ///
+    /// # Arguments
+    ///
+    /// * `opcode` - The opcode byte for this ADC instruction
+    fn execute_adc(&mut self, opcode: u8) -> Result<(), ExecutionError> {
+        let metadata = &OPCODE_TABLE[opcode as usize];
+
+        // Get the operand value and check for page crossing
+        let (value, page_crossed) = self.get_operand_value(metadata.addressing_mode)?;
+
+        // Perform the ADC operation
+        let a = self.a;
+        let carry_in = if self.flag_c { 1 } else { 0 };
+
+        // Perform addition with carry
+        let result16 = a as u16 + value as u16 + carry_in as u16;
+        let result = result16 as u8;
+
+        // Update flags
+
+        // Carry flag: Set if result > 255
+        self.flag_c = result16 > 0xFF;
+
+        // Zero flag: Set if result is 0
+        self.flag_z = result == 0;
+
+        // Negative flag: Set if bit 7 of result is set
+        self.flag_n = (result & 0x80) != 0;
+
+        // Overflow flag: Set if sign bit is incorrect
+        // Overflow occurs when:
+        // - Adding two positive numbers yields a negative result, or
+        // - Adding two negative numbers yields a positive result
+        // Formula: V = (A^result) & (M^result) & 0x80
+        // This checks if both operands had same sign but result has different sign
+        let overflow = ((a ^ result) & (value ^ result) & 0x80) != 0;
+        self.flag_v = overflow;
+
+        // Store result in accumulator
+        self.a = result;
+
+        // Update cycle count (add extra cycle for page crossing if applicable)
+        let mut cycles = metadata.base_cycles as u64;
+        if page_crossed {
+            cycles += 1;
+        }
+        self.cycles += cycles;
+
+        // Advance PC
+        self.pc = self.pc.wrapping_add(metadata.size_bytes as u16);
+
+        Ok(())
+    }
+
+    /// Gets the operand value for an instruction based on its addressing mode.
+    ///
+    /// Returns a tuple of (value, page_crossed) where page_crossed indicates
+    /// whether a page boundary was crossed during address calculation (relevant
+    /// for cycle-accurate emulation).
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - The addressing mode to use
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (operand_value, page_boundary_crossed)
+    fn get_operand_value(&self, mode: crate::AddressingMode) -> Result<(u8, bool), ExecutionError> {
+        use crate::AddressingMode;
+
+        match mode {
+            AddressingMode::Immediate => {
+                // Value is the byte immediately after the opcode
+                let value = self.memory.read(self.pc.wrapping_add(1));
+                Ok((value, false))
+            }
+            AddressingMode::ZeroPage => {
+                // Address is in zero page (0x00XX)
+                let addr = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                let value = self.memory.read(addr);
+                Ok((value, false))
+            }
+            AddressingMode::ZeroPageX => {
+                // Address is (zero page + X register) mod 256
+                let base = self.memory.read(self.pc.wrapping_add(1));
+                let addr = base.wrapping_add(self.x) as u16;
+                let value = self.memory.read(addr);
+                Ok((value, false))
+            }
+            AddressingMode::Absolute => {
+                // Full 16-bit address
+                let addr_lo = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
+                let addr = (addr_hi << 8) | addr_lo;
+                let value = self.memory.read(addr);
+                Ok((value, false))
+            }
+            AddressingMode::AbsoluteX => {
+                // 16-bit address + X register
+                let addr_lo = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
+                let base_addr = (addr_hi << 8) | addr_lo;
+                let effective_addr = base_addr.wrapping_add(self.x as u16);
+
+                // Check for page crossing
+                let page_crossed = (base_addr & 0xFF00) != (effective_addr & 0xFF00);
+
+                let value = self.memory.read(effective_addr);
+                Ok((value, page_crossed))
+            }
+            AddressingMode::AbsoluteY => {
+                // 16-bit address + Y register
+                let addr_lo = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
+                let base_addr = (addr_hi << 8) | addr_lo;
+                let effective_addr = base_addr.wrapping_add(self.y as u16);
+
+                // Check for page crossing
+                let page_crossed = (base_addr & 0xFF00) != (effective_addr & 0xFF00);
+
+                let value = self.memory.read(effective_addr);
+                Ok((value, page_crossed))
+            }
+            AddressingMode::IndirectX => {
+                // (Zero page + X), then dereference
+                let base = self.memory.read(self.pc.wrapping_add(1));
+                let zp_addr = base.wrapping_add(self.x);
+
+                // Read 16-bit address from zero page (with wraparound)
+                let addr_lo = self.memory.read(zp_addr as u16) as u16;
+                let addr_hi = self.memory.read(zp_addr.wrapping_add(1) as u16) as u16;
+                let addr = (addr_hi << 8) | addr_lo;
+
+                let value = self.memory.read(addr);
+                Ok((value, false))
+            }
+            AddressingMode::IndirectY => {
+                // Zero page dereference, then + Y
+                let zp_addr = self.memory.read(self.pc.wrapping_add(1));
+
+                // Read 16-bit base address from zero page
+                let addr_lo = self.memory.read(zp_addr as u16) as u16;
+                let addr_hi = self.memory.read(zp_addr.wrapping_add(1) as u16) as u16;
+                let base_addr = (addr_hi << 8) | addr_lo;
+
+                // Add Y register
+                let effective_addr = base_addr.wrapping_add(self.y as u16);
+
+                // Check for page crossing
+                let page_crossed = (base_addr & 0xFF00) != (effective_addr & 0xFF00);
+
+                let value = self.memory.read(effective_addr);
+                Ok((value, page_crossed))
+            }
+            _ => {
+                // Other addressing modes not applicable for ADC
+                panic!("Invalid addressing mode for ADC");
+            }
+        }
     }
 }
 
