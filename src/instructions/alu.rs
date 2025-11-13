@@ -3,9 +3,10 @@
 //! This module implements arithmetic and logical operations:
 //! - ADC: Add with Carry
 //! - AND: Logical AND
-//! - (Future: SBC, ORA, EOR, CMP, CPX, CPY, BIT)
+//! - BIT: Bit Test
+//! - (Future: SBC, ORA, EOR, CMP, CPX, CPY)
 
-use crate::{ExecutionError, MemoryBus, OPCODE_TABLE, CPU};
+use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
 /// Executes the ADC (Add with Carry) instruction.
 ///
@@ -107,6 +108,50 @@ pub(crate) fn execute_and<M: MemoryBus>(
         cycles += 1;
     }
     cpu.cycles += cycles;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
+
+/// Executes the BIT (Bit Test) instruction.
+///
+/// Tests bits in memory with the accumulator. The result of A & M is used to
+/// set the Z flag, but the result is not stored. Bits 7 and 6 of the memory
+/// value are copied directly into the N and V flags respectively.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this BIT instruction
+pub(crate) fn execute_bit<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Get the memory value (BIT doesn't have page crossing penalties)
+    let (value, _page_crossed) = cpu.get_operand_value(metadata.addressing_mode)?;
+
+    // Perform the AND operation for the Z flag (but don't store result)
+    let result = cpu.a & value;
+
+    // Update flags
+
+    // Zero flag: Set if (A & M) is 0
+    cpu.flag_z = result == 0;
+
+    // Negative flag: Set to bit 7 of memory value
+    cpu.flag_n = (value & 0x80) != 0;
+
+    // Overflow flag: Set to bit 6 of memory value
+    cpu.flag_v = (value & 0x40) != 0;
+
+    // Note: A is NOT modified - result is discarded
+
+    // Update cycle count (BIT has no page crossing penalty)
+    cpu.cycles += metadata.base_cycles as u64;
 
     // Advance PC
     cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
