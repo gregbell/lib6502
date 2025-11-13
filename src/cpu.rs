@@ -204,6 +204,9 @@ impl<M: MemoryBus> CPU<M> {
             "ADC" => {
                 self.execute_adc(opcode)?;
             }
+            "AND" => {
+                self.execute_and(opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
@@ -531,6 +534,47 @@ impl<M: MemoryBus> CPU<M> {
         // This checks if both operands had same sign but result has different sign
         let overflow = ((a ^ result) & (value ^ result) & 0x80) != 0;
         self.flag_v = overflow;
+
+        // Store result in accumulator
+        self.a = result;
+
+        // Update cycle count (add extra cycle for page crossing if applicable)
+        let mut cycles = metadata.base_cycles as u64;
+        if page_crossed {
+            cycles += 1;
+        }
+        self.cycles += cycles;
+
+        // Advance PC
+        self.pc = self.pc.wrapping_add(metadata.size_bytes as u16);
+
+        Ok(())
+    }
+
+    /// Executes the AND (Logical AND) instruction.
+    ///
+    /// Performs a bitwise AND operation between the accumulator and the value at
+    /// the effective address (determined by addressing mode). Updates Z and N flags.
+    ///
+    /// # Arguments
+    ///
+    /// * `opcode` - The opcode byte for this AND instruction
+    fn execute_and(&mut self, opcode: u8) -> Result<(), ExecutionError> {
+        let metadata = &OPCODE_TABLE[opcode as usize];
+
+        // Get the operand value and check for page crossing
+        let (value, page_crossed) = self.get_operand_value(metadata.addressing_mode)?;
+
+        // Perform the AND operation
+        let result = self.a & value;
+
+        // Update flags
+
+        // Zero flag: Set if result is 0
+        self.flag_z = result == 0;
+
+        // Negative flag: Set if bit 7 of result is set
+        self.flag_n = (result & 0x80) != 0;
 
         // Store result in accumulator
         self.a = result;

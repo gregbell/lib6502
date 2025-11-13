@@ -78,6 +78,8 @@ fn test_illegal_opcodes_marked() {
 fn test_implemented_opcodes() {
     // ADC opcodes should be marked as implemented
     let adc_opcodes = [0x61, 0x65, 0x69, 0x6D, 0x71, 0x75, 0x79, 0x7D];
+    // AND opcodes should be marked as implemented
+    let and_opcodes = [0x21, 0x25, 0x29, 0x2D, 0x31, 0x35, 0x39, 0x3D];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -91,10 +93,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be ADC mnemonic",
                 opcode
             );
+        } else if and_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "AND opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "AND",
+                "Opcode 0x{:02X} should be AND mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC and AND opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
