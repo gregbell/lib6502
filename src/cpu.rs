@@ -207,6 +207,9 @@ impl<M: MemoryBus> CPU<M> {
             "AND" => {
                 self.execute_and(opcode)?;
             }
+            "ASL" => {
+                self.execute_asl(opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
@@ -592,6 +595,62 @@ impl<M: MemoryBus> CPU<M> {
         Ok(())
     }
 
+    /// Executes the ASL (Arithmetic Shift Left) instruction.
+    ///
+    /// Shifts all bits of the accumulator or memory contents one bit left.
+    /// Bit 0 is set to 0 and bit 7 is placed in the carry flag.
+    /// Updates C, Z, and N flags.
+    ///
+    /// # Arguments
+    ///
+    /// * `opcode` - The opcode byte for this ASL instruction
+    fn execute_asl(&mut self, opcode: u8) -> Result<(), ExecutionError> {
+        let metadata = &OPCODE_TABLE[opcode as usize];
+
+        let result = if metadata.addressing_mode == crate::AddressingMode::Accumulator {
+            // Accumulator mode: shift the accumulator
+            let value = self.a;
+
+            // Carry flag gets old bit 7
+            self.flag_c = (value & 0x80) != 0;
+
+            // Shift left by 1 (bit 0 becomes 0)
+            let result = value << 1;
+
+            // Update accumulator
+            self.a = result;
+
+            result
+        } else {
+            // Memory mode: read, shift, write back
+            let addr = self.get_effective_address(metadata.addressing_mode)?;
+            let value = self.memory.read(addr);
+
+            // Carry flag gets old bit 7
+            self.flag_c = (value & 0x80) != 0;
+
+            // Shift left by 1
+            let result = value << 1;
+
+            // Write back to memory
+            self.memory.write(addr, result);
+
+            result
+        };
+
+        // Update Z and N flags based on result
+        self.flag_z = result == 0;
+        self.flag_n = (result & 0x80) != 0;
+
+        // Update cycle count (no page crossing penalties for ASL)
+        self.cycles += metadata.base_cycles as u64;
+
+        // Advance PC
+        self.pc = self.pc.wrapping_add(metadata.size_bytes as u16);
+
+        Ok(())
+    }
+
     /// Gets the operand value for an instruction based on its addressing mode.
     ///
     /// Returns a tuple of (value, page_crossed) where page_crossed indicates
@@ -695,6 +754,53 @@ impl<M: MemoryBus> CPU<M> {
             _ => {
                 // Other addressing modes not applicable for ADC
                 panic!("Invalid addressing mode for ADC");
+            }
+        }
+    }
+
+    /// Gets the effective address for an instruction based on its addressing mode.
+    ///
+    /// Used for instructions that need to write to memory (like ASL, ROL, etc.).
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - The addressing mode to use
+    ///
+    /// # Returns
+    ///
+    /// The effective address where the instruction should operate
+    fn get_effective_address(&self, mode: crate::AddressingMode) -> Result<u16, ExecutionError> {
+        use crate::AddressingMode;
+
+        match mode {
+            AddressingMode::ZeroPage => {
+                // Address is in zero page (0x00XX)
+                let addr = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                Ok(addr)
+            }
+            AddressingMode::ZeroPageX => {
+                // Address is (zero page + X register) mod 256
+                let base = self.memory.read(self.pc.wrapping_add(1));
+                let addr = base.wrapping_add(self.x) as u16;
+                Ok(addr)
+            }
+            AddressingMode::Absolute => {
+                // Full 16-bit address
+                let addr_lo = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
+                let addr = (addr_hi << 8) | addr_lo;
+                Ok(addr)
+            }
+            AddressingMode::AbsoluteX => {
+                // 16-bit address + X register
+                let addr_lo = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
+                let base_addr = (addr_hi << 8) | addr_lo;
+                let effective_addr = base_addr.wrapping_add(self.x as u16);
+                Ok(effective_addr)
+            }
+            _ => {
+                panic!("Invalid addressing mode for memory write operation");
             }
         }
     }
