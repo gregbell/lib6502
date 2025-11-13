@@ -82,6 +82,8 @@ fn test_implemented_opcodes() {
     let and_opcodes = [0x21, 0x25, 0x29, 0x2D, 0x31, 0x35, 0x39, 0x3D];
     // ASL opcodes should be marked as implemented
     let asl_opcodes = [0x06, 0x0A, 0x0E, 0x16, 0x1E];
+    // BCC opcode should be marked as implemented
+    let bcc_opcodes = [0x90];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -117,10 +119,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be ASL mnemonic",
                 opcode
             );
+        } else if bcc_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "BCC opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "BCC",
+                "Opcode 0x{:02X} should be BCC mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, and ASL opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, and BCC opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
