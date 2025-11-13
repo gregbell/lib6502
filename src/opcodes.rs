@@ -299,7 +299,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
     // 0x60
     OpcodeMetadata { mnemonic: "RTS", addressing_mode: AddressingMode::Implicit, base_cycles: 6, size_bytes: 1, implemented: false },
     // 0x61
-    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::IndirectX, base_cycles: 6, size_bytes: 2, implemented: false },
+    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::IndirectX, base_cycles: 6, size_bytes: 2, implemented: true },
     // 0x62 - Illegal/Undocumented opcode
     OpcodeMetadata { mnemonic: "???", addressing_mode: AddressingMode::Implicit, base_cycles: 0, size_bytes: 1, implemented: false },
     // 0x63 - Illegal/Undocumented opcode
@@ -307,7 +307,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
     // 0x64 - Illegal/Undocumented opcode
     OpcodeMetadata { mnemonic: "???", addressing_mode: AddressingMode::Implicit, base_cycles: 0, size_bytes: 1, implemented: false },
     // 0x65
-    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::ZeroPage, base_cycles: 3, size_bytes: 2, implemented: false },
+    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::ZeroPage, base_cycles: 3, size_bytes: 2, implemented: true },
     // 0x66
     OpcodeMetadata { mnemonic: "ROR", addressing_mode: AddressingMode::ZeroPage, base_cycles: 5, size_bytes: 2, implemented: false },
     // 0x67 - Illegal/Undocumented opcode
@@ -315,7 +315,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
     // 0x68
     OpcodeMetadata { mnemonic: "PLA", addressing_mode: AddressingMode::Implicit, base_cycles: 4, size_bytes: 1, implemented: false },
     // 0x69
-    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::Immediate, base_cycles: 2, size_bytes: 2, implemented: false },
+    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::Immediate, base_cycles: 2, size_bytes: 2, implemented: true },
     // 0x6A
     OpcodeMetadata { mnemonic: "ROR", addressing_mode: AddressingMode::Accumulator, base_cycles: 2, size_bytes: 1, implemented: false },
     // 0x6B - Illegal/Undocumented opcode
@@ -323,7 +323,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
     // 0x6C
     OpcodeMetadata { mnemonic: "JMP", addressing_mode: AddressingMode::Indirect, base_cycles: 5, size_bytes: 3, implemented: false },
     // 0x6D
-    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::Absolute, base_cycles: 4, size_bytes: 3, implemented: false },
+    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::Absolute, base_cycles: 4, size_bytes: 3, implemented: true },
     // 0x6E
     OpcodeMetadata { mnemonic: "ROR", addressing_mode: AddressingMode::Absolute, base_cycles: 6, size_bytes: 3, implemented: false },
     // 0x6F - Illegal/Undocumented opcode
@@ -331,7 +331,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
     // 0x70
     OpcodeMetadata { mnemonic: "BVS", addressing_mode: AddressingMode::Relative, base_cycles: 2, size_bytes: 2, implemented: false },
     // 0x71
-    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::IndirectY, base_cycles: 5, size_bytes: 2, implemented: false },
+    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::IndirectY, base_cycles: 5, size_bytes: 2, implemented: true },
     // 0x72 - Illegal/Undocumented opcode
     OpcodeMetadata { mnemonic: "???", addressing_mode: AddressingMode::Implicit, base_cycles: 0, size_bytes: 1, implemented: false },
     // 0x73 - Illegal/Undocumented opcode
@@ -339,7 +339,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
     // 0x74 - Illegal/Undocumented opcode
     OpcodeMetadata { mnemonic: "???", addressing_mode: AddressingMode::Implicit, base_cycles: 0, size_bytes: 1, implemented: false },
     // 0x75
-    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::ZeroPageX, base_cycles: 4, size_bytes: 2, implemented: false },
+    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::ZeroPageX, base_cycles: 4, size_bytes: 2, implemented: true },
     // 0x76
     OpcodeMetadata { mnemonic: "ROR", addressing_mode: AddressingMode::ZeroPageX, base_cycles: 6, size_bytes: 2, implemented: false },
     // 0x77 - Illegal/Undocumented opcode
@@ -347,7 +347,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
     // 0x78
     OpcodeMetadata { mnemonic: "SEI", addressing_mode: AddressingMode::Implicit, base_cycles: 2, size_bytes: 1, implemented: false },
     // 0x79
-    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::AbsoluteY, base_cycles: 4, size_bytes: 3, implemented: false },
+    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::AbsoluteY, base_cycles: 4, size_bytes: 3, implemented: true },
     // 0x7A - Illegal/Undocumented opcode
     OpcodeMetadata { mnemonic: "???", addressing_mode: AddressingMode::Implicit, base_cycles: 0, size_bytes: 1, implemented: false },
     // 0x7B - Illegal/Undocumented opcode
@@ -355,7 +355,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
     // 0x7C - Illegal/Undocumented opcode
     OpcodeMetadata { mnemonic: "???", addressing_mode: AddressingMode::Implicit, base_cycles: 0, size_bytes: 1, implemented: false },
     // 0x7D
-    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::AbsoluteX, base_cycles: 4, size_bytes: 3, implemented: false },
+    OpcodeMetadata { mnemonic: "ADC", addressing_mode: AddressingMode::AbsoluteX, base_cycles: 4, size_bytes: 3, implemented: true },
     // 0x7E
     OpcodeMetadata { mnemonic: "ROR", addressing_mode: AddressingMode::AbsoluteX, base_cycles: 7, size_bytes: 3, implemented: false },
     // 0x7F - Illegal/Undocumented opcode

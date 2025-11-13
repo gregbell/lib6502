@@ -75,14 +75,30 @@ fn test_illegal_opcodes_marked() {
 }
 
 #[test]
-fn test_all_implemented_flags_are_false() {
-    // All opcodes should have implemented = false in this feature
+fn test_implemented_opcodes() {
+    // ADC opcodes should be marked as implemented
+    let adc_opcodes = vec![0x61, 0x65, 0x69, 0x6D, 0x71, 0x75, 0x79, 0x7D];
+
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
-        assert_eq!(
-            metadata.implemented, false,
-            "Opcode 0x{:02X} should not be marked as implemented in foundation feature",
-            opcode
-        );
+        if adc_opcodes.contains(&(opcode as u8)) {
+            assert_eq!(
+                metadata.implemented, true,
+                "ADC opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "ADC",
+                "Opcode 0x{:02X} should be ADC mnemonic",
+                opcode
+            );
+        } else {
+            assert_eq!(
+                metadata.implemented, false,
+                "Only ADC opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                opcode,
+                metadata.mnemonic
+            );
+        }
     }
 }
 
