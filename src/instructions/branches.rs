@@ -7,7 +7,7 @@
 //! All branch instructions use relative addressing with a signed 8-bit offset.
 //! Cycle timing varies based on whether the branch is taken and whether a page boundary is crossed.
 
-use crate::{ExecutionError, MemoryBus, OPCODE_TABLE, CPU};
+use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
 /// Executes the BCC (Branch if Carry Clear) instruction.
 ///

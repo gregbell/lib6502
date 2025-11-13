@@ -4,7 +4,7 @@
 //! - ASL: Arithmetic Shift Left
 //! - (Future: LSR, ROL, ROR)
 
-use crate::{AddressingMode, ExecutionError, MemoryBus, OPCODE_TABLE, CPU};
+use crate::{AddressingMode, ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
 /// Executes the ASL (Arithmetic Shift Left) instruction.
 ///

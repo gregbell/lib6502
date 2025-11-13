@@ -213,6 +213,9 @@ impl<M: MemoryBus> CPU<M> {
             "BCC" => {
                 crate::instructions::branches::execute_bcc(self, opcode)?;
             }
+            "BIT" => {
+                crate::instructions::alu::execute_bit(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
@@ -512,7 +515,10 @@ impl<M: MemoryBus> CPU<M> {
     /// # Returns
     ///
     /// A tuple of (operand_value, page_boundary_crossed)
-    pub(crate) fn get_operand_value(&self, mode: crate::AddressingMode) -> Result<(u8, bool), ExecutionError> {
+    pub(crate) fn get_operand_value(
+        &self,
+        mode: crate::AddressingMode,
+    ) -> Result<(u8, bool), ExecutionError> {
         use crate::AddressingMode;
 
         match mode {
@@ -617,7 +623,10 @@ impl<M: MemoryBus> CPU<M> {
     /// # Returns
     ///
     /// The effective address where the instruction should operate
-    pub(crate) fn get_effective_address(&self, mode: crate::AddressingMode) -> Result<u16, ExecutionError> {
+    pub(crate) fn get_effective_address(
+        &self,
+        mode: crate::AddressingMode,
+    ) -> Result<u16, ExecutionError> {
         use crate::AddressingMode;
 
         match mode {
