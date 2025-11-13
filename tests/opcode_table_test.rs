@@ -95,8 +95,7 @@ fn test_implemented_opcodes() {
             assert_eq!(
                 metadata.implemented, false,
                 "Only ADC opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
-                opcode,
-                metadata.mnemonic
+                opcode, metadata.mnemonic
             );
         }
     }

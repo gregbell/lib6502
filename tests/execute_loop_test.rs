@@ -43,11 +43,7 @@ fn test_step_increments_cycle_counter() {
         cpu.cycles() > initial_cycles,
         "Cycle counter should increment after step()"
     );
-    assert_eq!(
-        cpu.cycles(),
-        initial_cycles + 2,
-        "NOP should add 2 cycles"
-    );
+    assert_eq!(cpu.cycles(), initial_cycles + 2, "NOP should add 2 cycles");
 }
 
 #[test]

@@ -96,6 +96,7 @@ When adding new instructions:
 6. Update cycle counter (base + page crossing)
 7. Advance PC by instruction size
 8. Add comprehensive tests in `tests/` directory
+9. Run `cargo test`, `cargo clippy`, and `cargo fmt`
 
 ## Key Design Constraints
 

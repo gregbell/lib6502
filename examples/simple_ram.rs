@@ -45,7 +45,11 @@ fn main() {
     println!("  A:  0x{:02X}", cpu.a());
     println!("  X:  0x{:02X}", cpu.x());
     println!("  Y:  0x{:02X}", cpu.y());
-    println!("  Status: 0x{:02X} (NV-BDIZC: {:08b})", cpu.status(), cpu.status());
+    println!(
+        "  Status: 0x{:02X} (NV-BDIZC: {:08b})",
+        cpu.status(),
+        cpu.status()
+    );
     println!("  Flags:");
     println!("    N (Negative):         {}", cpu.flag_n());
     println!("    V (Overflow):         {}", cpu.flag_v());
@@ -80,9 +84,7 @@ fn main() {
                     "Step {}: Opcode 0x{:02X} ({}) at 0x{:04X}",
                     step, opcode, metadata.mnemonic, pc_before
                 );
-                println!(
-                    "        Status: NOT IMPLEMENTED (expected in this foundation feature)"
-                );
+                println!("        Status: NOT IMPLEMENTED (expected in this foundation feature)");
                 println!(
                     "        Mode: {:?}, Cycles: {}, Size: {} bytes",
                     metadata.addressing_mode, metadata.base_cycles, metadata.size_bytes

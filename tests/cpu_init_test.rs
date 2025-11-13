@@ -49,7 +49,11 @@ fn test_status_register_format() {
     assert_eq!(status & 0b00100000, 0b00100000, "Bit 5 should always be 1");
 
     // Verify I flag is set (bit 2)
-    assert_eq!(status & 0b00000100, 0b00000100, "I flag should be set on reset");
+    assert_eq!(
+        status & 0b00000100,
+        0b00000100,
+        "I flag should be set on reset"
+    );
 
     // Status register should be 0x24 (00100100) on reset
     // Bit 5 = 1 (always), Bit 2 = 1 (I flag)
@@ -66,7 +70,11 @@ fn test_reset_vector_little_endian() {
     memory.write(0xFFFD, 0xAB);
 
     let cpu = CPU::new(memory);
-    assert_eq!(cpu.pc(), 0xABCD, "PC should correctly load little-endian reset vector");
+    assert_eq!(
+        cpu.pc(),
+        0xABCD,
+        "PC should correctly load little-endian reset vector"
+    );
 }
 
 #[test]

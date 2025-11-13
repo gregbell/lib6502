@@ -7,7 +7,7 @@
 //! - Overflow/underflow conditions
 //! - Cycle counts including page crossing penalties
 
-use cpu6502::{CPU, FlatMemory, MemoryBus};
+use cpu6502::{FlatMemory, MemoryBus, CPU};
 
 /// Helper function to create a CPU with reset vector at 0x8000
 fn setup_cpu() -> CPU<FlatMemory> {
@@ -74,7 +74,7 @@ fn test_adc_carry_flag() {
 
     assert_eq!(cpu.a(), 0x00); // 0x01 + 0xFF = 0x100 (wrapped to 0x00)
     assert!(cpu.flag_c()); // Carry should be set
-    assert!(cpu.flag_z());  // Result is zero
+    assert!(cpu.flag_z()); // Result is zero
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn test_adc_no_overflow_negative_negative() {
 
     assert_eq!(cpu.a(), 0xFD);
     assert!(!cpu.flag_v()); // No signed overflow
-    assert!(cpu.flag_c());  // Unsigned carry
+    assert!(cpu.flag_c()); // Unsigned carry
 }
 
 // ========== Addressing Mode Tests ==========
