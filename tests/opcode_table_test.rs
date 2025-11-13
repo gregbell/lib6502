@@ -77,12 +77,12 @@ fn test_illegal_opcodes_marked() {
 #[test]
 fn test_implemented_opcodes() {
     // ADC opcodes should be marked as implemented
-    let adc_opcodes = vec![0x61, 0x65, 0x69, 0x6D, 0x71, 0x75, 0x79, 0x7D];
+    let adc_opcodes = [0x61, 0x65, 0x69, 0x6D, 0x71, 0x75, 0x79, 0x7D];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
-            assert_eq!(
-                metadata.implemented, true,
+            assert!(
+                metadata.implemented,
                 "ADC opcode 0x{:02X} should be marked as implemented",
                 opcode
             );
@@ -92,8 +92,8 @@ fn test_implemented_opcodes() {
                 opcode
             );
         } else {
-            assert_eq!(
-                metadata.implemented, false,
+            assert!(
+                !metadata.implemented,
                 "Only ADC opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );

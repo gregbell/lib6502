@@ -70,7 +70,10 @@ cargo test test_name
 cargo test -- --nocapture
 
 # Lint
-cargo clippy
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Format
+cargo fmt
 
 # Run examples
 cargo run --example simple_ram

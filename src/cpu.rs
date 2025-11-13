@@ -680,13 +680,13 @@ mod tests {
         assert_eq!(cpu.cycles(), 0);
 
         // Verify status flags
-        assert_eq!(cpu.flag_i(), true); // Interrupt disable set on reset
-        assert_eq!(cpu.flag_n(), false);
-        assert_eq!(cpu.flag_v(), false);
-        assert_eq!(cpu.flag_b(), false);
-        assert_eq!(cpu.flag_d(), false);
-        assert_eq!(cpu.flag_z(), false);
-        assert_eq!(cpu.flag_c(), false);
+        assert!(cpu.flag_i()); // Interrupt disable set on reset
+        assert!(!cpu.flag_n());
+        assert!(!cpu.flag_v());
+        assert!(!cpu.flag_b());
+        assert!(!cpu.flag_d());
+        assert!(!cpu.flag_z());
+        assert!(!cpu.flag_c());
     }
 
     #[test]

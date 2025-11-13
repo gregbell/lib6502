@@ -24,13 +24,13 @@ fn test_cpu_reset_values() {
     assert_eq!(cpu.sp(), 0xFD, "Stack pointer should be 0xFD");
 
     // Verify initial status flags
-    assert_eq!(cpu.flag_i(), true, "Interrupt disable flag should be set");
-    assert_eq!(cpu.flag_n(), false, "Negative flag should be clear");
-    assert_eq!(cpu.flag_v(), false, "Overflow flag should be clear");
-    assert_eq!(cpu.flag_b(), false, "Break flag should be clear");
-    assert_eq!(cpu.flag_d(), false, "Decimal flag should be clear");
-    assert_eq!(cpu.flag_z(), false, "Zero flag should be clear");
-    assert_eq!(cpu.flag_c(), false, "Carry flag should be clear");
+    assert!(cpu.flag_i(), "Interrupt disable flag should be set");
+    assert!(!cpu.flag_n(), "Negative flag should be clear");
+    assert!(!cpu.flag_v(), "Overflow flag should be clear");
+    assert!(!cpu.flag_b(), "Break flag should be clear");
+    assert!(!cpu.flag_d(), "Decimal flag should be clear");
+    assert!(!cpu.flag_z(), "Zero flag should be clear");
+    assert!(!cpu.flag_c(), "Carry flag should be clear");
 
     // Verify cycle counter
     assert_eq!(cpu.cycles(), 0, "Cycle counter should start at 0");
