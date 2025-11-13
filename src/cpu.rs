@@ -202,16 +202,16 @@ impl<M: MemoryBus> CPU<M> {
         // Execute instruction based on mnemonic
         match metadata.mnemonic {
             "ADC" => {
-                self.execute_adc(opcode)?;
+                crate::instructions::alu::execute_adc(self, opcode)?;
             }
             "AND" => {
-                self.execute_and(opcode)?;
+                crate::instructions::alu::execute_and(self, opcode)?;
             }
             "ASL" => {
-                self.execute_asl(opcode)?;
+                crate::instructions::shifts::execute_asl(self, opcode)?;
             }
             "BCC" => {
-                self.execute_bcc(opcode)?;
+                crate::instructions::branches::execute_bcc(self, opcode)?;
             }
             _ => {
                 // Other instructions not yet implemented
@@ -497,221 +497,7 @@ impl<M: MemoryBus> CPU<M> {
         &mut self.memory
     }
 
-    // ========== Private Instruction Implementation Methods ==========
-
-    /// Executes the ADC (Add with Carry) instruction.
-    ///
-    /// Adds the value at the effective address (determined by addressing mode)
-    /// plus the carry flag to the accumulator. Updates all relevant flags.
-    ///
-    /// # Arguments
-    ///
-    /// * `opcode` - The opcode byte for this ADC instruction
-    fn execute_adc(&mut self, opcode: u8) -> Result<(), ExecutionError> {
-        let metadata = &OPCODE_TABLE[opcode as usize];
-
-        // Get the operand value and check for page crossing
-        let (value, page_crossed) = self.get_operand_value(metadata.addressing_mode)?;
-
-        // Perform the ADC operation
-        let a = self.a;
-        let carry_in = if self.flag_c { 1 } else { 0 };
-
-        // Perform addition with carry
-        let result16 = a as u16 + value as u16 + carry_in as u16;
-        let result = result16 as u8;
-
-        // Update flags
-
-        // Carry flag: Set if result > 255
-        self.flag_c = result16 > 0xFF;
-
-        // Zero flag: Set if result is 0
-        self.flag_z = result == 0;
-
-        // Negative flag: Set if bit 7 of result is set
-        self.flag_n = (result & 0x80) != 0;
-
-        // Overflow flag: Set if sign bit is incorrect
-        // Overflow occurs when:
-        // - Adding two positive numbers yields a negative result, or
-        // - Adding two negative numbers yields a positive result
-        // Formula: V = (A^result) & (M^result) & 0x80
-        // This checks if both operands had same sign but result has different sign
-        let overflow = ((a ^ result) & (value ^ result) & 0x80) != 0;
-        self.flag_v = overflow;
-
-        // Store result in accumulator
-        self.a = result;
-
-        // Update cycle count (add extra cycle for page crossing if applicable)
-        let mut cycles = metadata.base_cycles as u64;
-        if page_crossed {
-            cycles += 1;
-        }
-        self.cycles += cycles;
-
-        // Advance PC
-        self.pc = self.pc.wrapping_add(metadata.size_bytes as u16);
-
-        Ok(())
-    }
-
-    /// Executes the AND (Logical AND) instruction.
-    ///
-    /// Performs a bitwise AND operation between the accumulator and the value at
-    /// the effective address (determined by addressing mode). Updates Z and N flags.
-    ///
-    /// # Arguments
-    ///
-    /// * `opcode` - The opcode byte for this AND instruction
-    fn execute_and(&mut self, opcode: u8) -> Result<(), ExecutionError> {
-        let metadata = &OPCODE_TABLE[opcode as usize];
-
-        // Get the operand value and check for page crossing
-        let (value, page_crossed) = self.get_operand_value(metadata.addressing_mode)?;
-
-        // Perform the AND operation
-        let result = self.a & value;
-
-        // Update flags
-
-        // Zero flag: Set if result is 0
-        self.flag_z = result == 0;
-
-        // Negative flag: Set if bit 7 of result is set
-        self.flag_n = (result & 0x80) != 0;
-
-        // Store result in accumulator
-        self.a = result;
-
-        // Update cycle count (add extra cycle for page crossing if applicable)
-        let mut cycles = metadata.base_cycles as u64;
-        if page_crossed {
-            cycles += 1;
-        }
-        self.cycles += cycles;
-
-        // Advance PC
-        self.pc = self.pc.wrapping_add(metadata.size_bytes as u16);
-
-        Ok(())
-    }
-
-    /// Executes the ASL (Arithmetic Shift Left) instruction.
-    ///
-    /// Shifts all bits of the accumulator or memory contents one bit left.
-    /// Bit 0 is set to 0 and bit 7 is placed in the carry flag.
-    /// Updates C, Z, and N flags.
-    ///
-    /// # Arguments
-    ///
-    /// * `opcode` - The opcode byte for this ASL instruction
-    fn execute_asl(&mut self, opcode: u8) -> Result<(), ExecutionError> {
-        let metadata = &OPCODE_TABLE[opcode as usize];
-
-        let result = if metadata.addressing_mode == crate::AddressingMode::Accumulator {
-            // Accumulator mode: shift the accumulator
-            let value = self.a;
-
-            // Carry flag gets old bit 7
-            self.flag_c = (value & 0x80) != 0;
-
-            // Shift left by 1 (bit 0 becomes 0)
-            let result = value << 1;
-
-            // Update accumulator
-            self.a = result;
-
-            result
-        } else {
-            // Memory mode: read, shift, write back
-            let addr = self.get_effective_address(metadata.addressing_mode)?;
-            let value = self.memory.read(addr);
-
-            // Carry flag gets old bit 7
-            self.flag_c = (value & 0x80) != 0;
-
-            // Shift left by 1
-            let result = value << 1;
-
-            // Write back to memory
-            self.memory.write(addr, result);
-
-            result
-        };
-
-        // Update Z and N flags based on result
-        self.flag_z = result == 0;
-        self.flag_n = (result & 0x80) != 0;
-
-        // Update cycle count (no page crossing penalties for ASL)
-        self.cycles += metadata.base_cycles as u64;
-
-        // Advance PC
-        self.pc = self.pc.wrapping_add(metadata.size_bytes as u16);
-
-        Ok(())
-    }
-
-    /// Executes the BCC (Branch if Carry Clear) instruction.
-    ///
-    /// Branches to a new location if the carry flag is clear (C = 0).
-    /// Uses relative addressing mode with a signed 8-bit offset.
-    ///
-    /// Cycle timing:
-    /// - 2 cycles if branch not taken
-    /// - 3 cycles if branch taken to same page
-    /// - 4 cycles if branch taken to different page
-    ///
-    /// No flags are affected.
-    ///
-    /// # Arguments
-    ///
-    /// * `opcode` - The opcode byte for this BCC instruction (0x90)
-    fn execute_bcc(&mut self, opcode: u8) -> Result<(), ExecutionError> {
-        let metadata = &OPCODE_TABLE[opcode as usize];
-
-        // Read the signed 8-bit offset from PC+1
-        let offset = self.memory.read(self.pc.wrapping_add(1)) as i8;
-
-        // Start with base cycles
-        let mut cycles = metadata.base_cycles as u64;
-
-        // Calculate the address after the instruction (PC + 2)
-        let pc_after_instruction = self.pc.wrapping_add(metadata.size_bytes as u16);
-
-        // Check if carry flag is clear
-        if !self.flag_c {
-            // Branch is taken
-            // Calculate the target address by adding the signed offset
-            // Use wrapping_add_signed to handle both positive and negative offsets correctly
-            let target_pc = pc_after_instruction.wrapping_add_signed(offset as i16);
-
-            // Check if page boundary was crossed
-            // A page boundary is crossed if the high byte of the address changes
-            let page_crossed = (pc_after_instruction & 0xFF00) != (target_pc & 0xFF00);
-
-            // Add 1 cycle for branch taken
-            cycles += 1;
-
-            // Add 1 more cycle if page boundary was crossed
-            if page_crossed {
-                cycles += 1;
-            }
-
-            // Update PC to target address
-            self.pc = target_pc;
-        } else {
-            // Branch not taken, just advance PC normally
-            self.pc = pc_after_instruction;
-        }
-
-        // Update cycle count
-        self.cycles += cycles;
-
-        Ok(())
-    }
+    // ========== Helper Methods for Instruction Implementations ==========
 
     /// Gets the operand value for an instruction based on its addressing mode.
     ///
@@ -726,7 +512,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Returns
     ///
     /// A tuple of (operand_value, page_boundary_crossed)
-    fn get_operand_value(&self, mode: crate::AddressingMode) -> Result<(u8, bool), ExecutionError> {
+    pub(crate) fn get_operand_value(&self, mode: crate::AddressingMode) -> Result<(u8, bool), ExecutionError> {
         use crate::AddressingMode;
 
         match mode {
@@ -831,7 +617,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Returns
     ///
     /// The effective address where the instruction should operate
-    fn get_effective_address(&self, mode: crate::AddressingMode) -> Result<u16, ExecutionError> {
+    pub(crate) fn get_effective_address(&self, mode: crate::AddressingMode) -> Result<u16, ExecutionError> {
         use crate::AddressingMode;
 
         match mode {

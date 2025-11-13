@@ -53,6 +53,9 @@ pub mod cpu;
 pub mod memory;
 pub mod opcodes;
 
+// Internal instruction implementations (not part of public API)
+mod instructions;
+
 // Re-export public API
 pub use addressing::AddressingMode;
 pub use cpu::CPU;
