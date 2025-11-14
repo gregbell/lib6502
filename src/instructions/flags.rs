@@ -177,3 +177,58 @@ pub(crate) fn execute_cld<M: MemoryBus>(
 
     Ok(())
 }
+
+/// Executes the CLV (Clear Overflow Flag) instruction.
+///
+/// Sets the overflow flag to 0.
+///
+/// Addressing Mode: Implied
+/// Opcode: 0xB8
+/// Bytes: 1
+/// Cycles: 2
+///
+/// Flags affected:
+/// - V: Set to 0
+/// - All other flags: Unchanged
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this CLV instruction (0xB8)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0xB8); // CLV
+///
+/// let mut cpu = CPU::new(memory);
+/// cpu.set_flag_v(true); // Set overflow flag
+///
+/// cpu.step().unwrap();
+///
+/// assert_eq!(cpu.flag_v(), false); // Overflow flag cleared
+/// assert_eq!(cpu.pc(), 0x8001);
+/// assert_eq!(cpu.cycles(), 2);
+/// ```
+pub(crate) fn execute_clv<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Clear the overflow flag
+    cpu.flag_v = false;
+
+    // Advance PC by instruction size (1 byte for implicit addressing)
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    // Add cycles (2 cycles for CLV)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
