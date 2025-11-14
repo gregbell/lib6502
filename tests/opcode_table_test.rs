@@ -86,6 +86,8 @@ fn test_implemented_opcodes() {
     let bcc_opcodes = [0x90];
     // BCS opcode should be marked as implemented
     let bcs_opcodes = [0xB0];
+    // BEQ opcode should be marked as implemented
+    let beq_opcodes = [0xF0];
     // BIT opcodes should be marked as implemented
     let bit_opcodes = [0x24, 0x2C];
     // BMI opcode should be marked as implemented
@@ -147,6 +149,17 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be BCS mnemonic",
                 opcode
             );
+        } else if beq_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "BEQ opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "BEQ",
+                "Opcode 0x{:02X} should be BEQ mnemonic",
+                opcode
+            );
         } else if bit_opcodes.contains(&(opcode as u8)) {
             assert!(
                 metadata.implemented,
@@ -172,7 +185,7 @@ fn test_implemented_opcodes() {
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BIT, and BMI opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI,  and BIT opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
