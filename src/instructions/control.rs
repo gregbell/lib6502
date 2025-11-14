@@ -55,26 +55,7 @@ pub(crate) fn execute_brk<M: MemoryBus>(
     // Build status byte with B flag set (bit 4) and bit 5 always set
     // Note: This doesn't actually set cpu.flag_b, it only sets the B flag
     // in the pushed status byte
-    let mut status: u8 = 0b00110000; // Bits 5 and 4 set
-
-    if cpu.flag_n {
-        status |= 0b10000000;
-    }
-    if cpu.flag_v {
-        status |= 0b01000000;
-    }
-    if cpu.flag_d {
-        status |= 0b00001000;
-    }
-    if cpu.flag_i {
-        status |= 0b00000100;
-    }
-    if cpu.flag_z {
-        status |= 0b00000010;
-    }
-    if cpu.flag_c {
-        status |= 0b00000001;
-    }
+    let status = cpu.status() | 0b00110000; // Set B flag
 
     // Push status byte to stack
     let stack_addr = 0x0100 | (cpu.sp as u16);
