@@ -255,6 +255,9 @@ impl<M: MemoryBus> CPU<M> {
             "CMP" => {
                 crate::instructions::alu::execute_cmp(self, opcode)?;
             }
+            "CPX" => {
+                crate::instructions::alu::execute_cpx(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
