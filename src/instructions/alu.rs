@@ -5,7 +5,8 @@
 //! - AND: Logical AND
 //! - BIT: Bit Test
 //! - CMP: Compare Accumulator
-//! - (Future: SBC, ORA, EOR, CPX, CPY)
+//! - CPX: Compare X Register
+//! - (Future: SBC, ORA, EOR, CPY)
 
 use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
@@ -210,6 +211,58 @@ pub(crate) fn execute_cmp<M: MemoryBus>(
         cycles += 1;
     }
     cpu.cycles += cycles;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
+
+/// Executes the CPX (Compare X Register) instruction.
+///
+/// Compares the X register with the value at the effective address by performing
+/// a subtraction (X - M) and setting flags based on the result. The X register
+/// is NOT modified.
+///
+/// # Flag Behavior
+///
+/// - Carry (C): Set if X >= M (no borrow needed)
+/// - Zero (Z): Set if X == M (result is zero)
+/// - Negative (N): Set if bit 7 of the result is set
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this CPX instruction
+pub(crate) fn execute_cpx<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Get the operand value (CPX doesn't have page crossing penalties)
+    let (value, _page_crossed) = cpu.get_operand_value(metadata.addressing_mode)?;
+
+    // Perform the comparison (X - M)
+    let x = cpu.x;
+    let result = x.wrapping_sub(value);
+
+    // Update flags
+
+    // Carry flag: Set if X >= M (no borrow needed)
+    // In subtraction, carry is set when no borrow occurs
+    cpu.flag_c = x >= value;
+
+    // Zero flag: Set if X == M (result is zero)
+    cpu.flag_z = result == 0;
+
+    // Negative flag: Set if bit 7 of result is set
+    cpu.flag_n = (result & 0x80) != 0;
+
+    // Note: X register is NOT modified - this is a comparison only
+
+    // Update cycle count (CPX has no page crossing penalty)
+    cpu.cycles += metadata.base_cycles as u64;
 
     // Advance PC
     cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
