@@ -237,6 +237,9 @@ impl<M: MemoryBus> CPU<M> {
             "BVC" => {
                 crate::instructions::branches::execute_bvc(self, opcode)?;
             }
+            "BVS" => {
+                crate::instructions::branches::execute_bvs(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;

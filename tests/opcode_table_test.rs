@@ -100,6 +100,8 @@ fn test_implemented_opcodes() {
     let brk_opcodes = [0x00];
     // BVC opcode should be marked as implemented
     let bvc_opcodes = [0x50];
+    // BVS opcode should be marked as implemented
+    let bvs_opcodes = [0x70];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -234,10 +236,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be BVC mnemonic",
                 opcode
             );
+        } else if bvs_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "BVS opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "BVS",
+                "Opcode 0x{:02X} should be BVS mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, and BVC opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, and BVS opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
