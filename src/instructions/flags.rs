@@ -68,6 +68,61 @@ pub(crate) fn execute_clc<M: MemoryBus>(
     Ok(())
 }
 
+/// Executes the CLI (Clear Interrupt Disable) instruction.
+///
+/// Sets the interrupt disable flag to 0, allowing normal interrupt requests to be serviced.
+///
+/// Addressing Mode: Implied
+/// Opcode: 0x58
+/// Bytes: 1
+/// Cycles: 2
+///
+/// Flags affected:
+/// - I: Set to 0
+/// - All other flags: Unchanged
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this CLI instruction (0x58)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0x58); // CLI
+///
+/// let mut cpu = CPU::new(memory);
+/// cpu.set_flag_i(true); // Set interrupt disable flag
+///
+/// cpu.step().unwrap();
+///
+/// assert_eq!(cpu.flag_i(), false); // Interrupt disable flag cleared
+/// assert_eq!(cpu.pc(), 0x8001);
+/// assert_eq!(cpu.cycles(), 2);
+/// ```
+pub(crate) fn execute_cli<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Clear the interrupt disable flag
+    cpu.flag_i = false;
+
+    // Advance PC by instruction size (1 byte for implicit addressing)
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    // Add cycles (2 cycles for CLI)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
 /// Executes the CLD (Clear Decimal Mode) instruction.
 ///
 /// Sets the decimal mode flag to 0.
