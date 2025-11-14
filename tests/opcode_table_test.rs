@@ -124,6 +124,8 @@ fn test_implemented_opcodes() {
     let dey_opcodes = [0x88];
     // EOR opcodes should be marked as implemented
     let eor_opcodes = [0x41, 0x45, 0x49, 0x4D, 0x51, 0x55, 0x59, 0x5D];
+    // INC opcodes should be marked as implemented
+    let inc_opcodes = [0xE6, 0xEE, 0xF6, 0xFE];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -390,10 +392,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be EOR mnemonic",
                 opcode
             );
+        } else if inc_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "INC opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "INC",
+                "Opcode 0x{:02X} should be INC mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, and EOR opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, and INC opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
