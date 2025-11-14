@@ -1006,7 +1006,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Relative,
         base_cycles: 2,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0x71
     OpcodeMetadata {
