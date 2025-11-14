@@ -261,6 +261,9 @@ impl<M: MemoryBus> CPU<M> {
             "CPY" => {
                 crate::instructions::alu::execute_cpy(self, opcode)?;
             }
+            "DEC" => {
+                crate::instructions::inc_dec::execute_dec(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
