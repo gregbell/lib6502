@@ -270,6 +270,9 @@ impl<M: MemoryBus> CPU<M> {
             "DEY" => {
                 crate::instructions::inc_dec::execute_dey(self, opcode)?;
             }
+            "EOR" => {
+                crate::instructions::alu::execute_eor(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
