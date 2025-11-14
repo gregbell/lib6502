@@ -219,6 +219,9 @@ impl<M: MemoryBus> CPU<M> {
             "BEQ" => {
                 crate::instructions::branches::execute_beq(self, opcode)?;
             }
+            "BIT" => {
+                crate::instructions::alu::execute_bit(self, opcode)?;
+            }
             "BMI" => {
                 crate::instructions::branches::execute_bmi(self, opcode)?;
             }
@@ -228,8 +231,8 @@ impl<M: MemoryBus> CPU<M> {
             "BPL" => {
                 crate::instructions::branches::execute_bpl(self, opcode)?;
             }
-            "BIT" => {
-                crate::instructions::alu::execute_bit(self, opcode)?;
+            "BRK" => {
+                crate::instructions::control::execute_brk(self, opcode)?;
             }
             _ => {
                 // Other instructions not yet implemented
@@ -493,6 +496,16 @@ impl<M: MemoryBus> CPU<M> {
     /// Sets the Negative flag.
     pub fn set_flag_n(&mut self, value: bool) {
         self.flag_n = value;
+    }
+
+    /// Sets the program counter value.
+    pub fn set_pc(&mut self, value: u16) {
+        self.pc = value;
+    }
+
+    /// Sets the stack pointer value.
+    pub fn set_sp(&mut self, value: u8) {
+        self.sp = value;
     }
 
     /// Returns a mutable reference to the memory bus.
