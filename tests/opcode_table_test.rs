@@ -120,6 +120,8 @@ fn test_implemented_opcodes() {
     let dec_opcodes = [0xC6, 0xCE, 0xD6, 0xDE];
     // DEX opcode should be marked as implemented
     let dex_opcodes = [0xCA];
+    // DEY opcode should be marked as implemented
+    let dey_opcodes = [0x88];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -364,10 +366,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be DEX mnemonic",
                 opcode
             );
+        } else if dey_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "DEY opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "DEY",
+                "Opcode 0x{:02X} should be DEY mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, and DEX opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, and DEY opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
