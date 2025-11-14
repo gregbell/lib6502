@@ -114,6 +114,8 @@ fn test_implemented_opcodes() {
     let cmp_opcodes = [0xC1, 0xC5, 0xC9, 0xCD, 0xD1, 0xD5, 0xD9, 0xDD];
     // CPX opcodes should be marked as implemented
     let cpx_opcodes = [0xE0, 0xE4, 0xEC];
+    // CPY opcodes should be marked as implemented
+    let cpy_opcodes = [0xC0, 0xC4, 0xCC];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -325,10 +327,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be CPX mnemonic",
                 opcode
             );
+        } else if cpy_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "CPY opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "CPY",
+                "Opcode 0x{:02X} should be CPY mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, and CPX opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, and CPY opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }

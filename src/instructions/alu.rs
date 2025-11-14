@@ -6,7 +6,8 @@
 //! - BIT: Bit Test
 //! - CMP: Compare Accumulator
 //! - CPX: Compare X Register
-//! - (Future: SBC, ORA, EOR, CPY)
+//! - CPY: Compare Y Register
+//! - (Future: SBC, ORA, EOR)
 
 use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
@@ -262,6 +263,58 @@ pub(crate) fn execute_cpx<M: MemoryBus>(
     // Note: X register is NOT modified - this is a comparison only
 
     // Update cycle count (CPX has no page crossing penalty)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
+
+/// Executes the CPY (Compare Y Register) instruction.
+///
+/// Compares the Y register with the value at the effective address by performing
+/// a subtraction (Y - M) and setting flags based on the result. The Y register
+/// is NOT modified.
+///
+/// # Flag Behavior
+///
+/// - Carry (C): Set if Y >= M (no borrow needed)
+/// - Zero (Z): Set if Y == M (result is zero)
+/// - Negative (N): Set if bit 7 of the result is set
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this CPY instruction
+pub(crate) fn execute_cpy<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Get the operand value (CPY doesn't have page crossing penalties)
+    let (value, _page_crossed) = cpu.get_operand_value(metadata.addressing_mode)?;
+
+    // Perform the comparison (Y - M)
+    let y = cpu.y;
+    let result = y.wrapping_sub(value);
+
+    // Update flags
+
+    // Carry flag: Set if Y >= M (no borrow needed)
+    // In subtraction, carry is set when no borrow occurs
+    cpu.flag_c = y >= value;
+
+    // Zero flag: Set if Y == M (result is zero)
+    cpu.flag_z = result == 0;
+
+    // Negative flag: Set if bit 7 of result is set
+    cpu.flag_n = (result & 0x80) != 0;
+
+    // Note: Y register is NOT modified - this is a comparison only
+
+    // Update cycle count (CPY has no page crossing penalty)
     cpu.cycles += metadata.base_cycles as u64;
 
     // Advance PC
