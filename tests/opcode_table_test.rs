@@ -108,6 +108,8 @@ fn test_implemented_opcodes() {
     let cld_opcodes = [0xD8];
     // CLI opcode should be marked as implemented
     let cli_opcodes = [0x58];
+    // CLV opcode should be marked as implemented
+    let clv_opcodes = [0xB8];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -286,10 +288,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be CLI mnemonic",
                 opcode
             );
+        } else if clv_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "CLV opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "CLV",
+                "Opcode 0x{:02X} should be CLV mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, and CLI opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, and CLV opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }

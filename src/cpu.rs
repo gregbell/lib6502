@@ -249,6 +249,9 @@ impl<M: MemoryBus> CPU<M> {
             "CLI" => {
                 crate::instructions::flags::execute_cli(self, opcode)?;
             }
+            "CLV" => {
+                crate::instructions::flags::execute_clv(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
