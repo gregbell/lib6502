@@ -243,6 +243,9 @@ impl<M: MemoryBus> CPU<M> {
             "CLC" => {
                 crate::instructions::flags::execute_clc(self, opcode)?;
             }
+            "CLD" => {
+                crate::instructions::flags::execute_cld(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
