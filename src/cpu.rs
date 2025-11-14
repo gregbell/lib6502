@@ -219,6 +219,9 @@ impl<M: MemoryBus> CPU<M> {
             "BEQ" => {
                 crate::instructions::branches::execute_beq(self, opcode)?;
             }
+            "BMI" => {
+                crate::instructions::branches::execute_bmi(self, opcode)?;
+            }
             "BIT" => {
                 crate::instructions::alu::execute_bit(self, opcode)?;
             }
