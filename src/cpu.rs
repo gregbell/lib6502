@@ -225,6 +225,9 @@ impl<M: MemoryBus> CPU<M> {
             "BNE" => {
                 crate::instructions::branches::execute_bne(self, opcode)?;
             }
+            "BPL" => {
+                crate::instructions::branches::execute_bpl(self, opcode)?;
+            }
             "BIT" => {
                 crate::instructions::alu::execute_bit(self, opcode)?;
             }

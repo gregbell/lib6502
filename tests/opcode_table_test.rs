@@ -94,6 +94,8 @@ fn test_implemented_opcodes() {
     let bmi_opcodes = [0x30];
     // BNE opcode should be marked as implemented
     let bne_opcodes = [0xD0];
+    // BPL opcode should be marked as implemented
+    let bpl_opcodes = [0x10];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -195,10 +197,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be BNE mnemonic",
                 opcode
             );
+        } else if bpl_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "BPL opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "BPL",
+                "Opcode 0x{:02X} should be BPL mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, and BIT opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, and BPL opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
