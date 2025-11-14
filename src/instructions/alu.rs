@@ -4,7 +4,8 @@
 //! - ADC: Add with Carry
 //! - AND: Logical AND
 //! - BIT: Bit Test
-//! - (Future: SBC, ORA, EOR, CMP, CPX, CPY)
+//! - CMP: Compare Accumulator
+//! - (Future: SBC, ORA, EOR, CPX, CPY)
 
 use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
@@ -152,6 +153,63 @@ pub(crate) fn execute_bit<M: MemoryBus>(
 
     // Update cycle count (BIT has no page crossing penalty)
     cpu.cycles += metadata.base_cycles as u64;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
+
+/// Executes the CMP (Compare Accumulator) instruction.
+///
+/// Compares the accumulator with the value at the effective address by performing
+/// a subtraction (A - M) and setting flags based on the result. The accumulator
+/// is NOT modified.
+///
+/// # Flag Behavior
+///
+/// - Carry (C): Set if A >= M (no borrow needed)
+/// - Zero (Z): Set if A == M (result is zero)
+/// - Negative (N): Set if bit 7 of the result is set
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this CMP instruction
+pub(crate) fn execute_cmp<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Get the operand value and check for page crossing
+    let (value, page_crossed) = cpu.get_operand_value(metadata.addressing_mode)?;
+
+    // Perform the comparison (A - M)
+    // The subtraction is: A - M, which is equivalent to A + (!M) + 1
+    let a = cpu.a;
+    let result = a.wrapping_sub(value);
+
+    // Update flags
+
+    // Carry flag: Set if A >= M (no borrow needed)
+    // In subtraction, carry is set when no borrow occurs
+    cpu.flag_c = a >= value;
+
+    // Zero flag: Set if A == M (result is zero)
+    cpu.flag_z = result == 0;
+
+    // Negative flag: Set if bit 7 of result is set
+    cpu.flag_n = (result & 0x80) != 0;
+
+    // Note: Accumulator is NOT modified - this is a comparison only
+
+    // Update cycle count (add extra cycle for page crossing if applicable)
+    let mut cycles = metadata.base_cycles as u64;
+    if page_crossed {
+        cycles += 1;
+    }
+    cpu.cycles += cycles;
 
     // Advance PC
     cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
