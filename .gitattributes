@@ -1,0 +1,3 @@
+# Binary test files - do not apply text transformations
+*.bin binary
+*.lst text eol=lf
