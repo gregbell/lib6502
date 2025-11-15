@@ -319,6 +319,43 @@ LOOP:
     assert_eq!(output.bytes[3], 0xFC); // Offset -4
 }
 
+// Test for forward branch to confirm Pass-1 sizing bug is fixed
+#[test]
+fn test_forward_branch_label_sizing() {
+    let source = r#"
+    BEQ FORWARD   ; Should be 2 bytes at address 0-1
+    NOP           ; Should be at address 2
+FORWARD:
+    LDA #$42      ; Should be at address 3
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble with forward branch to label"
+    );
+
+    let output = result.unwrap();
+
+    // Verify symbol table - FORWARD should be at address 3
+    let symbol = output.lookup_symbol("FORWARD");
+    assert!(symbol.is_some(), "FORWARD label should exist in symbol table");
+    assert_eq!(
+        symbol.unwrap().address,
+        3,
+        "FORWARD should be at address 3 (BEQ=2 bytes, NOP=1 byte)"
+    );
+
+    // Verify assembled bytes
+    assert_eq!(output.bytes[0], 0xF0); // BEQ opcode
+    // From address 0, branch to address 3
+    // Offset = 3 - (0 + 2) = 1
+    assert_eq!(output.bytes[1], 0x01); // Offset +1
+    assert_eq!(output.bytes[2], 0xEA); // NOP opcode
+    assert_eq!(output.bytes[3], 0xA9); // LDA #$42
+    assert_eq!(output.bytes[4], 0x42);
+}
+
 // T065: Integration test for undefined label error
 #[test]
 fn test_undefined_label_error() {

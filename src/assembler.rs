@@ -147,6 +147,14 @@ pub enum AssemblerDirective {
     Word { values: Vec<u16> },
 }
 
+/// Helper to detect if a mnemonic is a branch instruction
+fn is_branch_mnemonic(mnemonic: &str) -> bool {
+    matches!(
+        mnemonic,
+        "BCC" | "BCS" | "BEQ" | "BMI" | "BNE" | "BPL" | "BVC" | "BVS"
+    )
+}
+
 /// Assemble source code into machine code
 ///
 /// # Arguments
@@ -243,7 +251,12 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
             current_address += opcode_meta.size_bytes as u16;
         } else {
             // Error will be caught in Pass 2
-            current_address += 1;
+            // Branch instructions are always 2 bytes (opcode + relative offset)
+            if is_branch_mnemonic(mnemonic) {
+                current_address += 2;
+            } else {
+                current_address += 1;
+            }
         }
     }
 
