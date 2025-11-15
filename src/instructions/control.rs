@@ -4,7 +4,8 @@
 //! - BRK: Force Interrupt
 //! - JMP: Jump to address
 //! - JSR: Jump to Subroutine
-//! - (Future: RTS, RTI, NOP)
+//! - NOP: No Operation
+//! - (Future: RTS, RTI)
 //!
 //! BRK is a software interrupt that:
 //! 1. Pushes PC+2 to the stack (high byte first, then low byte)
@@ -201,6 +202,57 @@ pub(crate) fn execute_jsr<M: MemoryBus>(
     cpu.pc = target_address;
 
     // Update cycle count
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
+/// Executes the NOP (No Operation) instruction.
+///
+/// NOP causes no changes to the processor other than the normal incrementing
+/// of the program counter to the next instruction.
+///
+/// Addressing Mode: Implicit
+/// Opcode: 0xEA
+/// Bytes: 1
+/// Cycles: 2
+///
+/// Flags affected: None
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this NOP instruction (0xEA)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0xEA); // NOP
+///
+/// let mut cpu = CPU::new(memory);
+///
+/// cpu.step().unwrap();
+///
+/// // NOP does nothing except advance PC and consume cycles
+/// assert_eq!(cpu.pc(), 0x8001);
+/// assert_eq!(cpu.cycles(), 2);
+/// ```
+pub(crate) fn execute_nop<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // NOP does nothing - just advance PC and add cycles
+    // Advance PC by instruction size (1 byte for implicit addressing)
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    // Add cycles (2 cycles for NOP)
     cpu.cycles += metadata.base_cycles as u64;
 
     Ok(())
