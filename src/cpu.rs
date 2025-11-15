@@ -288,6 +288,9 @@ impl<M: MemoryBus> CPU<M> {
             "JSR" => {
                 crate::instructions::control::execute_jsr(self, opcode)?;
             }
+            "LDA" => {
+                crate::instructions::load_store::execute_lda(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;

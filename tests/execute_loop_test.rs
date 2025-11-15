@@ -167,13 +167,13 @@ fn test_error_contains_opcode_value() {
 
     memory.write(0xFFFC, 0x00);
     memory.write(0xFFFD, 0x80);
-    memory.write(0x8000, 0xA9); // LDA immediate
+    memory.write(0x8000, 0xEA); // NOP (not yet implemented)
 
     let mut cpu = CPU::new(memory);
 
     match cpu.step() {
         Err(ExecutionError::UnimplementedOpcode(opcode)) => {
-            assert_eq!(opcode, 0xA9, "Error should contain the opcode value");
+            assert_eq!(opcode, 0xEA, "Error should contain the opcode value");
         }
         _ => panic!("Expected UnimplementedOpcode error"),
     }
