@@ -17,6 +17,9 @@ pub struct AssemblyLine {
     /// Optional operand text (e.g., "#$42", "$1234,X")
     pub operand: Option<String>,
 
+    /// Optional directive (e.g., .org, .byte, .word)
+    pub directive: Option<crate::assembler::AssemblerDirective>,
+
     /// Optional comment text (after semicolon)
     pub comment: Option<String>,
 

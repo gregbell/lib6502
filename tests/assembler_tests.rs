@@ -362,3 +362,123 @@ MY-LABEL:
     let result = assemble(source3);
     assert!(result.is_err(), "Should fail on label with invalid characters");
 }
+
+// ========== Phase 8: User Story 5 - Comments and Directives ==========
+
+// T089: Integration test for comment parsing and ignoring
+#[test]
+fn test_comment_parsing() {
+    let source = r#"
+; This is a full-line comment
+LDA #$42  ; Load the value 42
+STA $8000 ; Store it
+; Another comment
+NOP       ; No operation
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Should successfully assemble code with comments");
+
+    let output = result.unwrap();
+
+    // Verify the instructions are assembled correctly (comments ignored)
+    assert_eq!(output.bytes.len(), 6); // LDA (2) + STA (3) + NOP (1)
+    assert_eq!(output.bytes[0], 0xA9); // LDA immediate
+    assert_eq!(output.bytes[1], 0x42);
+    assert_eq!(output.bytes[2], 0x8D); // STA absolute
+    assert_eq!(output.bytes[5], 0xEA); // NOP
+}
+
+// T090: Integration test for .org directive setting origin address
+#[test]
+fn test_org_directive() {
+    let source = r#"
+.org $8000
+LDA #$42
+STA $8005
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Should successfully assemble with .org directive");
+
+    let output = result.unwrap();
+
+    // Origin should be set, but bytes are just the instructions
+    assert_eq!(output.bytes.len(), 5); // LDA (2) + STA (3)
+
+    // Check source map reflects the org address
+    let loc = output.get_source_location(0x8000);
+    assert!(loc.is_some(), "First instruction should be at $8000 due to .org");
+}
+
+// T091: Integration test for .byte directive inserting literal bytes
+#[test]
+fn test_byte_directive() {
+    let source = r#"
+.byte $42, $43, $44
+LDA #$FF
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Should successfully assemble with .byte directive");
+
+    let output = result.unwrap();
+
+    // .byte inserts 3 bytes, then LDA adds 2 more
+    assert_eq!(output.bytes.len(), 5);
+    assert_eq!(output.bytes[0], 0x42);
+    assert_eq!(output.bytes[1], 0x43);
+    assert_eq!(output.bytes[2], 0x44);
+    assert_eq!(output.bytes[3], 0xA9); // LDA
+    assert_eq!(output.bytes[4], 0xFF);
+}
+
+// T092: Integration test for .word directive with little-endian encoding
+#[test]
+fn test_word_directive() {
+    let source = r#"
+.word $1234, $5678
+LDA #$FF
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Should successfully assemble with .word directive");
+
+    let output = result.unwrap();
+
+    // .word inserts 4 bytes (2 words in little-endian), then LDA adds 2 more
+    assert_eq!(output.bytes.len(), 6);
+
+    // $1234 in little-endian: $34 $12
+    assert_eq!(output.bytes[0], 0x34);
+    assert_eq!(output.bytes[1], 0x12);
+
+    // $5678 in little-endian: $78 $56
+    assert_eq!(output.bytes[2], 0x78);
+    assert_eq!(output.bytes[3], 0x56);
+
+    // LDA #$FF
+    assert_eq!(output.bytes[4], 0xA9);
+    assert_eq!(output.bytes[5], 0xFF);
+}
+
+// T093: Integration test for invalid directive error
+#[test]
+fn test_invalid_directive_error() {
+    let source = r#"
+.invalid $1234
+LDA #$42
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail on invalid directive");
+
+    let errors = result.unwrap_err();
+    assert!(errors.len() > 0);
+
+    // Should have an invalid directive error
+    let invalid_directive_errors = errors.iter()
+        .filter(|e| e.error_type == ErrorType::InvalidDirective)
+        .count();
+    assert!(invalid_directive_errors >= 1, "Should have invalid directive error");
+}
