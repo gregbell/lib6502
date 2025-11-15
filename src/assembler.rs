@@ -7,7 +7,7 @@ pub mod parser;
 pub mod source_map;
 pub mod symbol_table;
 
-use crate::addressing::AddressingMode;
+use crate::opcodes;
 
 /// Complete output from assembling source code
 #[derive(Debug, Clone)]
@@ -120,16 +120,76 @@ pub enum AssemblerDirective {
 pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     let mut errors = Vec::new();
 
-    // TODO: Implement two-pass assembly
-    // Pass 1: Parse and build symbol table
-    // Pass 2: Encode and emit bytes
+    // Parse all lines
+    let parsed_lines: Vec<_> = source
+        .lines()
+        .enumerate()
+        .filter_map(|(idx, line)| parser::parse_line(line, idx + 1))
+        .collect();
+
+    // Pass 1: Just encode without labels (for now - labels will be Phase 6)
+    // For now, we only handle instructions without labels
+    let mut bytes = Vec::new();
+
+    for line in &parsed_lines {
+        // Skip lines with only labels or comments
+        if line.mnemonic.is_none() {
+            continue;
+        }
+
+        let mnemonic = line.mnemonic.as_ref().unwrap();
+
+        // Detect addressing mode and operand value
+        let (mode, value) = if let Some(ref operand) = line.operand {
+            match parser::detect_addressing_mode(operand) {
+                Ok((m, v)) => (m, v),
+                Err(e) => {
+                    errors.push(AssemblerError {
+                        error_type: ErrorType::InvalidOperand,
+                        line: line.line_number,
+                        column: 0,
+                        span: line.span,
+                        message: format!("Invalid operand '{}': {}", operand, e),
+                    });
+                    continue; // Error recovery: skip this line
+                }
+            }
+        } else {
+            (crate::addressing::AddressingMode::Implicit, 0)
+        };
+
+        // Encode the instruction
+        match encoder::encode_instruction(mnemonic, mode, value) {
+            Ok(instruction_bytes) => {
+                bytes.extend(instruction_bytes);
+            }
+            Err(mut e) => {
+                // Update error with correct line info
+                e.line = line.line_number;
+                e.span = line.span;
+
+                // Check if this is an invalid mnemonic
+                let is_valid_mnemonic = opcodes::OPCODE_TABLE
+                    .iter()
+                    .any(|op| op.mnemonic == mnemonic.as_str());
+
+                if !is_valid_mnemonic {
+                    e.error_type = ErrorType::InvalidMnemonic;
+                    e.message = format!("Invalid mnemonic '{}'", mnemonic);
+                }
+
+                errors.push(e);
+                // Error recovery: continue to collect more errors
+            }
+        }
+    }
 
     if !errors.is_empty() {
         return Err(errors);
     }
 
     Ok(AssemblerOutput {
-        bytes: Vec::new(),
+        bytes,
         symbol_table: Vec::new(),
         source_map: source_map::SourceMap::new(),
         warnings: Vec::new(),

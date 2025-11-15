@@ -1,6 +1,6 @@
 //! Assembly source parser
 
-use crate::assembler::{AssemblerDirective, AssemblerError, ErrorType};
+use crate::addressing::AddressingMode;
 
 /// A parsed line of assembly source
 #[derive(Debug, Clone, PartialEq)]
@@ -42,6 +42,171 @@ pub fn parse_number(s: &str) -> Result<u16, String> {
         // Decimal
         s.parse::<u16>()
             .map_err(|e| format!("invalid decimal number: {}", e))
+    }
+}
+
+/// Parse a single line of assembly source
+///
+/// # Arguments
+///
+/// * `line` - The source line to parse
+/// * `line_number` - The 1-indexed line number
+///
+/// # Returns
+///
+/// Some(AssemblyLine) if the line contains code, None for empty/comment-only lines
+pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
+    let trimmed = line.trim();
+
+    // Empty line
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Comment-only line
+    if trimmed.starts_with(';') {
+        return Some(AssemblyLine {
+            line_number,
+            label: None,
+            mnemonic: None,
+            operand: None,
+            comment: Some(trimmed[1..].trim().to_string()),
+            span: (0, line.len()),
+        });
+    }
+
+    // Strip inline comment
+    let (code_part, comment_part) = if let Some(comment_pos) = trimmed.find(';') {
+        let code = &trimmed[..comment_pos];
+        let comment = &trimmed[comment_pos + 1..];
+        (code.trim(), Some(comment.trim().to_string()))
+    } else {
+        (trimmed, None)
+    };
+
+    if code_part.is_empty() {
+        return Some(AssemblyLine {
+            line_number,
+            label: None,
+            mnemonic: None,
+            operand: None,
+            comment: comment_part,
+            span: (0, line.len()),
+        });
+    }
+
+    // Check for label (ends with colon)
+    let (label, rest) = if let Some(colon_pos) = code_part.find(':') {
+        let label_name = code_part[..colon_pos].trim().to_uppercase();
+        let rest = code_part[colon_pos + 1..].trim();
+        (Some(label_name), rest)
+    } else {
+        (None, code_part)
+    };
+
+    // Parse mnemonic and operand
+    let (mnemonic, operand) = if !rest.is_empty() {
+        let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
+        let mnemonic = parts[0].trim().to_uppercase();
+        let operand = if parts.len() > 1 {
+            Some(parts[1].trim().to_string())
+        } else {
+            None
+        };
+        (Some(mnemonic), operand)
+    } else {
+        (None, None)
+    };
+
+    Some(AssemblyLine {
+        line_number,
+        label,
+        mnemonic,
+        operand,
+        comment: comment_part,
+        span: (0, line.len()),
+    })
+}
+
+/// Detect the addressing mode from operand syntax
+///
+/// Returns (addressing_mode, operand_value) where operand_value is the parsed number
+pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), String> {
+    let operand = operand.trim();
+
+    if operand.is_empty() {
+        return Ok((AddressingMode::Implicit, 0));
+    }
+
+    // Accumulator mode: just "A"
+    if operand.eq_ignore_ascii_case("A") {
+        return Ok((AddressingMode::Accumulator, 0));
+    }
+
+    // Immediate: #$XX or #value
+    if operand.starts_with('#') {
+        let value = parse_number(&operand[1..])?;
+        return Ok((AddressingMode::Immediate, value));
+    }
+
+    // Indirect: ($XXXX)
+    if operand.starts_with('(') && operand.ends_with(')') && !operand.contains(',') {
+        let addr_str = &operand[1..operand.len() - 1];
+        let addr = parse_number(addr_str)?;
+        return Ok((AddressingMode::Indirect, addr));
+    }
+
+    // Indexed Indirect: ($XX,X)
+    if operand.starts_with('(') && operand.contains(",X)") {
+        let comma_pos = operand.find(',').unwrap();
+        let addr_str = &operand[1..comma_pos];
+        let addr = parse_number(addr_str)?;
+        return Ok((AddressingMode::IndirectX, addr));
+    }
+
+    // Indirect Indexed: ($XX),Y
+    if operand.starts_with('(') && operand.contains("),Y") {
+        let paren_pos = operand.find(')').unwrap();
+        let addr_str = &operand[1..paren_pos];
+        let addr = parse_number(addr_str)?;
+        return Ok((AddressingMode::IndirectY, addr));
+    }
+
+    // Indexed modes: $XXXX,X or $XXXX,Y
+    if operand.contains(",X") {
+        let comma_pos = operand.find(',').unwrap();
+        let addr_str = &operand[..comma_pos];
+        let addr = parse_number(addr_str)?;
+
+        // Choose zero-page or absolute based on value
+        if addr <= 0xFF {
+            return Ok((AddressingMode::ZeroPageX, addr));
+        } else {
+            return Ok((AddressingMode::AbsoluteX, addr));
+        }
+    }
+
+    if operand.contains(",Y") {
+        let comma_pos = operand.find(',').unwrap();
+        let addr_str = &operand[..comma_pos];
+        let addr = parse_number(addr_str)?;
+
+        // Choose zero-page or absolute based on value
+        if addr <= 0xFF {
+            return Ok((AddressingMode::ZeroPageY, addr));
+        } else {
+            return Ok((AddressingMode::AbsoluteY, addr));
+        }
+    }
+
+    // Plain address: $XXXX or value (could be zero-page, absolute, or relative)
+    let value = parse_number(operand)?;
+
+    // Choose zero-page or absolute based on value
+    if value <= 0xFF {
+        Ok((AddressingMode::ZeroPage, value))
+    } else {
+        Ok((AddressingMode::Absolute, value))
     }
 }
 

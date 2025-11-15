@@ -92,7 +92,7 @@ mod tests {
         assert_eq!(instr.address, 0x1000);
         assert_eq!(instr.opcode, 0xEA);
         assert_eq!(instr.mnemonic, "NOP");
-        assert_eq!(instr.addressing_mode, AddressingMode::Implied);
+        assert_eq!(instr.addressing_mode, AddressingMode::Implicit);
         assert_eq!(instr.operand_bytes.len(), 0);
         assert_eq!(instr.size_bytes, 1);
     }

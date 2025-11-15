@@ -93,27 +93,27 @@ All paths are relative to repository root:
 
 ### Tests for User Story 2
 
-- [ ] T028 [P] [US2] Integration test for single instruction assembly (LDA #$42) in tests/assembler_tests.rs
-- [ ] T029 [P] [US2] Integration test for multi-line assembly in tests/assembler_tests.rs
-- [ ] T030 [P] [US2] Integration test for number format parsing (hex $42, decimal 66, binary %01000010) in tests/assembler_tests.rs
-- [ ] T031 [P] [US2] Integration test for case-insensitive and whitespace-tolerant parsing in tests/assembler_tests.rs
-- [ ] T032 [P] [US2] Integration test for syntax error reporting with line/column info in tests/assembler_tests.rs
-- [ ] T033 [P] [US2] Integration test for multiple error collection in tests/assembler_tests.rs
+- [X] T028 [P] [US2] Integration test for single instruction assembly (LDA #$42) in tests/assembler_tests.rs
+- [X] T029 [P] [US2] Integration test for multi-line assembly in tests/assembler_tests.rs
+- [X] T030 [P] [US2] Integration test for number format parsing (hex $42, decimal 66, binary %01000010) in tests/assembler_tests.rs
+- [X] T031 [P] [US2] Integration test for case-insensitive and whitespace-tolerant parsing in tests/assembler_tests.rs
+- [X] T032 [P] [US2] Integration test for syntax error reporting with line/column info in tests/assembler_tests.rs
+- [X] T033 [P] [US2] Integration test for multiple error collection in tests/assembler_tests.rs
 
 ### Implementation for User Story 2
 
-- [ ] T034 [P] [US2] Implement number parser for hex ($XX), decimal, and binary (%XXXXXXXX) in src/assembler/parser.rs
-- [ ] T035 [P] [US2] Implement line tokenizer (split on whitespace, handle special chars) in src/assembler/parser.rs
-- [ ] T036 [US2] Implement parse_line function that creates AssemblyLine struct in src/assembler/parser.rs
-- [ ] T037 [US2] Implement mnemonic-to-opcode lookup using OPCODE_TABLE in src/assembler/encoder.rs
-- [ ] T038 [P] [US2] Implement operand parser for each addressing mode (detect mode from operand syntax) in src/assembler/parser.rs
-- [ ] T039 [US2] Implement encode_instruction function that produces bytes from AssemblyLine in src/assembler/encoder.rs
-- [ ] T040 [US2] Implement assemble function (Pass 1: parse, Pass 2: encode) in src/assembler.rs
-- [ ] T041 [US2] Add error recovery logic to continue parsing after errors in src/assembler/parser.rs
-- [ ] T042 [US2] Add validation for addressing mode operand ranges (immediate 0-255, zero-page 0-255) in src/assembler/encoder.rs
-- [ ] T043 [US2] Add unit tests for number parsing in src/assembler/parser.rs
-- [ ] T044 [US2] Add unit tests for operand mode detection in src/assembler/parser.rs
-- [ ] T045 [US2] Add unit tests for instruction encoding in src/assembler/encoder.rs
+- [X] T034 [P] [US2] Implement number parser for hex ($XX), decimal, and binary (%XXXXXXXX) in src/assembler/parser.rs
+- [X] T035 [P] [US2] Implement line tokenizer (split on whitespace, handle special chars) in src/assembler/parser.rs
+- [X] T036 [US2] Implement parse_line function that creates AssemblyLine struct in src/assembler/parser.rs
+- [X] T037 [US2] Implement mnemonic-to-opcode lookup using OPCODE_TABLE in src/assembler/encoder.rs
+- [X] T038 [P] [US2] Implement operand parser for each addressing mode (detect mode from operand syntax) in src/assembler/parser.rs
+- [X] T039 [US2] Implement encode_instruction function that produces bytes from AssemblyLine in src/assembler/encoder.rs
+- [X] T040 [US2] Implement assemble function (Pass 1: parse, Pass 2: encode) in src/assembler.rs
+- [X] T041 [US2] Add error recovery logic to continue parsing after errors in src/assembler/parser.rs
+- [X] T042 [US2] Add validation for addressing mode operand ranges (immediate 0-255, zero-page 0-255) in src/assembler/encoder.rs
+- [X] T043 [US2] Add unit tests for number parsing in src/assembler/parser.rs
+- [X] T044 [US2] Add unit tests for operand mode detection in src/assembler/parser.rs
+- [X] T045 [US2] Add unit tests for instruction encoding in src/assembler/encoder.rs
 
 **Checkpoint**: At this point, User Stories 1 AND 2 both work independently - basic disassembly and assembly without labels
 
