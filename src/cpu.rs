@@ -330,6 +330,9 @@ impl<M: MemoryBus> CPU<M> {
             "RTS" => {
                 crate::instructions::control::execute_rts(self, opcode)?;
             }
+            "SBC" => {
+                crate::instructions::alu::execute_sbc(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
@@ -846,16 +849,14 @@ mod tests {
         let mut mem = FlatMemory::new();
         mem.write(0xFFFC, 0x00);
         mem.write(0xFFFD, 0x80);
-        mem.write(0x8000, 0xE9); // SBC immediate instruction (not implemented)
+        mem.write(0x8000, 0x02); // Illegal/undocumented opcode (not implemented)
 
         let mut cpu = CPU::new(mem);
-        let initial_cycles = cpu.cycles();
 
         match cpu.step() {
-            Err(ExecutionError::UnimplementedOpcode(0xE9)) => {
+            Err(ExecutionError::UnimplementedOpcode(0x02)) => {
                 // Expected error
-                assert!(cpu.cycles() > initial_cycles); // Cycles incremented
-                assert_eq!(cpu.pc(), 0x8002); // PC advanced by instruction size (2 bytes for immediate)
+                assert_eq!(cpu.pc(), 0x8001); // PC advanced by instruction size (1 byte for illegal opcodes)
             }
             _ => panic!("Expected UnimplementedOpcode error"),
         }

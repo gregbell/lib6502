@@ -9,7 +9,7 @@
 //! - CPY: Compare Y Register
 //! - EOR: Exclusive OR
 //! - ORA: Logical Inclusive OR
-//! - (Future: SBC)
+//! - SBC: Subtract with Carry
 
 use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
@@ -408,6 +408,73 @@ pub(crate) fn execute_cpy<M: MemoryBus>(
 
     // Update cycle count (CPY has no page crossing penalty)
     cpu.cycles += metadata.base_cycles as u64;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
+
+/// Executes the SBC (Subtract with Carry) instruction.
+///
+/// Subtracts the value at the effective address (determined by addressing mode)
+/// and the NOT of the carry flag from the accumulator. Updates all relevant flags.
+///
+/// The operation is: A = A - M - (1 - C)
+/// Equivalently: A = A + ~M + C (using two's complement arithmetic)
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this SBC instruction
+pub(crate) fn execute_sbc<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Get the operand value and check for page crossing
+    let (value, page_crossed) = cpu.get_operand_value(metadata.addressing_mode)?;
+
+    // Perform the SBC operation
+    // SBC is: A = A - M - (1 - C) = A + ~M + C
+    let a = cpu.a;
+    let carry_in = if cpu.flag_c { 1 } else { 0 };
+
+    // Perform subtraction using two's complement: A - M - (1 - C) = A + ~M + C
+    let result16 = a as u16 + (!value) as u16 + carry_in as u16;
+    let result = result16 as u8;
+
+    // Update flags
+
+    // Carry flag: Set if no borrow occurred (result >= 0 in signed terms)
+    // In subtraction, carry is set when result16 > 0xFF (no borrow needed)
+    cpu.flag_c = result16 > 0xFF;
+
+    // Zero flag: Set if result is 0
+    cpu.flag_z = result == 0;
+
+    // Negative flag: Set if bit 7 of result is set
+    cpu.flag_n = (result & 0x80) != 0;
+
+    // Overflow flag: Set if sign bit is incorrect
+    // Overflow occurs when:
+    // - Subtracting a positive from a negative yields a positive, or
+    // - Subtracting a negative from a positive yields a negative
+    // Formula: V = (A^result) & (A^M) & 0x80
+    // This checks if A and M had different signs and result has different sign from A
+    let overflow = ((a ^ result) & (a ^ value) & 0x80) != 0;
+    cpu.flag_v = overflow;
+
+    // Store result in accumulator
+    cpu.a = result;
+
+    // Update cycle count (add extra cycle for page crossing if applicable)
+    let mut cycles = metadata.base_cycles as u64;
+    if page_crossed {
+        cycles += 1;
+    }
+    cpu.cycles += cycles;
 
     // Advance PC
     cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
