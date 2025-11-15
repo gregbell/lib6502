@@ -297,6 +297,9 @@ impl<M: MemoryBus> CPU<M> {
             "LDY" => {
                 crate::instructions::load_store::execute_ldy(self, opcode)?;
             }
+            "LSR" => {
+                crate::instructions::shifts::execute_lsr(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
