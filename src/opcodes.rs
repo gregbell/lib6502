@@ -1390,7 +1390,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Immediate,
         base_cycles: 2,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0xA1
     OpcodeMetadata {
@@ -1422,7 +1422,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::ZeroPage,
         base_cycles: 3,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0xA5
     OpcodeMetadata {
@@ -1486,7 +1486,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Absolute,
         base_cycles: 4,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0xAD
     OpcodeMetadata {
@@ -1550,7 +1550,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::ZeroPageX,
         base_cycles: 4,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0xB5
     OpcodeMetadata {
@@ -1614,7 +1614,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::AbsoluteX,
         base_cycles: 4,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0xBD
     OpcodeMetadata {
