@@ -68,6 +68,61 @@ pub(crate) fn execute_clc<M: MemoryBus>(
     Ok(())
 }
 
+/// Executes the SEC (Set Carry Flag) instruction.
+///
+/// Sets the carry flag to 1.
+///
+/// Addressing Mode: Implied
+/// Opcode: 0x38
+/// Bytes: 1
+/// Cycles: 2
+///
+/// Flags affected:
+/// - C: Set to 1
+/// - All other flags: Unchanged
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this SEC instruction (0x38)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0x38); // SEC
+///
+/// let mut cpu = CPU::new(memory);
+/// cpu.set_flag_c(false); // Clear carry flag
+///
+/// cpu.step().unwrap();
+///
+/// assert_eq!(cpu.flag_c(), true); // Carry flag set
+/// assert_eq!(cpu.pc(), 0x8001);
+/// assert_eq!(cpu.cycles(), 2);
+/// ```
+pub(crate) fn execute_sec<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Set the carry flag
+    cpu.flag_c = true;
+
+    // Advance PC by instruction size (1 byte for implicit addressing)
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    // Add cycles (2 cycles for SEC)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
 /// Executes the CLI (Clear Interrupt Disable) instruction.
 ///
 /// Sets the interrupt disable flag to 0, allowing normal interrupt requests to be serviced.
