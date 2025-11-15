@@ -285,6 +285,9 @@ impl<M: MemoryBus> CPU<M> {
             "JMP" => {
                 crate::instructions::control::execute_jmp(self, opcode)?;
             }
+            "JSR" => {
+                crate::instructions::control::execute_jsr(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
