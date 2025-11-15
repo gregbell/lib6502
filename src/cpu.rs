@@ -309,6 +309,9 @@ impl<M: MemoryBus> CPU<M> {
             "PHA" => {
                 crate::instructions::stack::execute_pha(self, opcode)?;
             }
+            "PHP" => {
+                crate::instructions::stack::execute_php(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
