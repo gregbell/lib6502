@@ -282,6 +282,9 @@ impl<M: MemoryBus> CPU<M> {
             "INY" => {
                 crate::instructions::inc_dec::execute_iny(self, opcode)?;
             }
+            "JMP" => {
+                crate::instructions::control::execute_jmp(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
