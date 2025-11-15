@@ -8,7 +8,8 @@
 //! - CPX: Compare X Register
 //! - CPY: Compare Y Register
 //! - EOR: Exclusive OR
-//! - (Future: SBC, ORA)
+//! - ORA: Logical Inclusive OR
+//! - (Future: SBC)
 
 use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
@@ -139,6 +140,51 @@ pub(crate) fn execute_eor<M: MemoryBus>(
 
     // Perform the EOR operation
     let result = cpu.a ^ value;
+
+    // Update flags
+
+    // Zero flag: Set if result is 0
+    cpu.flag_z = result == 0;
+
+    // Negative flag: Set if bit 7 of result is set
+    cpu.flag_n = (result & 0x80) != 0;
+
+    // Store result in accumulator
+    cpu.a = result;
+
+    // Update cycle count (add extra cycle for page crossing if applicable)
+    let mut cycles = metadata.base_cycles as u64;
+    if page_crossed {
+        cycles += 1;
+    }
+    cpu.cycles += cycles;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
+
+/// Executes the ORA (Logical Inclusive OR) instruction.
+///
+/// Performs a bitwise inclusive OR operation between the accumulator and the value at
+/// the effective address (determined by addressing mode). Updates Z and N flags.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this ORA instruction
+pub(crate) fn execute_ora<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Get the operand value and check for page crossing
+    let (value, page_crossed) = cpu.get_operand_value(metadata.addressing_mode)?;
+
+    // Perform the ORA operation
+    let result = cpu.a | value;
 
     // Update flags
 

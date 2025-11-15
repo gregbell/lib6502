@@ -303,6 +303,9 @@ impl<M: MemoryBus> CPU<M> {
             "NOP" => {
                 crate::instructions::control::execute_nop(self, opcode)?;
             }
+            "ORA" => {
+                crate::instructions::alu::execute_ora(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
