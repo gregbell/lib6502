@@ -300,6 +300,9 @@ impl<M: MemoryBus> CPU<M> {
             "LSR" => {
                 crate::instructions::shifts::execute_lsr(self, opcode)?;
             }
+            "NOP" => {
+                crate::instructions::control::execute_nop(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
@@ -816,16 +819,16 @@ mod tests {
         let mut mem = FlatMemory::new();
         mem.write(0xFFFC, 0x00);
         mem.write(0xFFFD, 0x80);
-        mem.write(0x8000, 0xEA); // NOP instruction (not implemented)
+        mem.write(0x8000, 0xE9); // SBC immediate instruction (not implemented)
 
         let mut cpu = CPU::new(mem);
         let initial_cycles = cpu.cycles();
 
         match cpu.step() {
-            Err(ExecutionError::UnimplementedOpcode(0xEA)) => {
+            Err(ExecutionError::UnimplementedOpcode(0xE9)) => {
                 // Expected error
                 assert!(cpu.cycles() > initial_cycles); // Cycles incremented
-                assert_eq!(cpu.pc(), 0x8001); // PC advanced by instruction size
+                assert_eq!(cpu.pc(), 0x8002); // PC advanced by instruction size (2 bytes for immediate)
             }
             _ => panic!("Expected UnimplementedOpcode error"),
         }
@@ -844,11 +847,12 @@ mod tests {
 
         let mut cpu = CPU::new(mem);
 
-        // Try to run for 10 cycles (should execute ~5 NOPs)
+        // Run for 10 cycles (should execute 5 NOPs)
         let result = cpu.run_for_cycles(10);
 
-        // Will fail with UnimplementedOpcode, but should have advanced
-        assert!(result.is_err());
-        assert!(cpu.cycles() >= 2); // At least one instruction executed
+        // Should succeed now that NOP is implemented
+        assert!(result.is_ok());
+        assert_eq!(cpu.cycles(), 10); // Executed exactly 10 cycles (5 NOPs)
+        assert_eq!(cpu.pc(), 0x8005); // PC advanced by 5 bytes (5 NOPs)
     }
 }
