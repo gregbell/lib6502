@@ -324,6 +324,9 @@ impl<M: MemoryBus> CPU<M> {
             "ROR" => {
                 crate::instructions::shifts::execute_ror(self, opcode)?;
             }
+            "RTI" => {
+                crate::instructions::control::execute_rti(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
