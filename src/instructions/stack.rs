@@ -3,7 +3,8 @@
 //! This module implements stack manipulation instructions:
 //! - PHA: Push Accumulator on Stack
 //! - PHP: Push Processor Status on Stack
-//! - (Future: PLA, PLP)
+//! - PLA: Pull Accumulator from Stack
+//! - (Future: PLP)
 //!
 //! The 6502 stack is located at memory addresses 0x0100-0x01FF and grows downward.
 //! The stack pointer (SP) is an 8-bit register that serves as an offset into this
@@ -140,6 +141,84 @@ pub(crate) fn execute_php<M: MemoryBus>(
     cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
 
     // Add cycles (3 cycles for PHP)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
+/// Executes the PLA (Pull Accumulator) instruction.
+///
+/// PLA pulls an 8-bit value from the stack and stores it in the accumulator.
+/// The stack pointer is incremented before the pull operation.
+///
+/// Stack operation:
+/// 1. Increment SP (wraps from 0xFF to 0x00)
+/// 2. Read value from 0x0100 | SP
+/// 3. Store value in accumulator
+///
+/// Addressing Mode: Implicit (opcode 0x68)
+/// Bytes: 1
+/// Cycles: 4
+///
+/// Flags affected:
+/// - Z: Set if accumulator is zero after pull
+/// - N: Set if bit 7 of accumulator is set after pull
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this PLA instruction (0x68)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0x68); // PLA
+///
+/// let mut cpu = CPU::new(memory);
+///
+/// // Setup: Push a value onto stack first
+/// cpu.memory_mut().write(0x01FD, 0x42);
+/// cpu.set_sp(0xFC); // SP points below the value
+///
+/// cpu.step().unwrap();
+///
+/// // Accumulator should contain the pulled value
+/// assert_eq!(cpu.a(), 0x42);
+/// assert_eq!(cpu.sp(), 0xFD); // SP incremented
+/// assert_eq!(cpu.pc(), 0x8001);
+/// assert_eq!(cpu.cycles(), 4);
+/// assert!(!cpu.flag_z()); // 0x42 is not zero
+/// assert!(!cpu.flag_n()); // Bit 7 is not set
+/// ```
+pub(crate) fn execute_pla<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Increment stack pointer first (pull operation)
+    cpu.sp = cpu.sp.wrapping_add(1);
+
+    // Pull value from stack
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    let value = cpu.memory.read(stack_addr);
+
+    // Store in accumulator
+    cpu.a = value;
+
+    // Update flags
+    cpu.flag_z = value == 0;
+    cpu.flag_n = (value & 0b10000000) != 0;
+
+    // Advance PC by instruction size (1 byte for implicit addressing)
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    // Add cycles (4 cycles for PLA)
     cpu.cycles += metadata.base_cycles as u64;
 
     Ok(())

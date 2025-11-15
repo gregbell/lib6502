@@ -150,6 +150,8 @@ fn test_implemented_opcodes() {
     let pha_opcodes = [0x48];
     // PHP opcode should be marked as implemented
     let php_opcodes = [0x08];
+    // PLA opcode should be marked as implemented
+    let pla_opcodes = [0x68];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -559,10 +561,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be PHP mnemonic",
                 opcode
             );
+        } else if pla_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "PLA opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "PLA",
+                "Opcode 0x{:02X} should be PLA mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, PHA, and PHP opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, PHA, PHP, and PLA opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }

@@ -942,7 +942,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Implicit,
         base_cycles: 4,
         size_bytes: 1,
-        implemented: false,
+        implemented: true,
     },
     // 0x69
     OpcodeMetadata {
