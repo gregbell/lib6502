@@ -158,6 +158,8 @@ fn test_implemented_opcodes() {
     let rol_opcodes = [0x26, 0x2A, 0x2E, 0x36, 0x3E];
     // ROR opcodes should be marked as implemented
     let ror_opcodes = [0x66, 0x6A, 0x6E, 0x76, 0x7E];
+    // RTI opcode should be marked as implemented
+    let rti_opcodes = [0x40];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -611,10 +613,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be ROR mnemonic",
                 opcode
             );
+        } else if rti_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "RTI opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "RTI",
+                "Opcode 0x{:02X} should be RTI mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, PHA, PHP, PLA, PLP, ROL, and ROR opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, PHA, PHP, PLA, PLP, ROL, ROR, and RTI opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }

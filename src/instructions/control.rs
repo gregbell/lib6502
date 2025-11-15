@@ -5,7 +5,8 @@
 //! - JMP: Jump to address
 //! - JSR: Jump to Subroutine
 //! - NOP: No Operation
-//! - (Future: RTS, RTI)
+//! - RTI: Return from Interrupt
+//! - (Future: RTS)
 //!
 //! BRK is a software interrupt that:
 //! 1. Pushes PC+2 to the stack (high byte first, then low byte)
@@ -253,6 +254,120 @@ pub(crate) fn execute_nop<M: MemoryBus>(
     cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
 
     // Add cycles (2 cycles for NOP)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
+/// Executes the RTI (Return from Interrupt) instruction.
+///
+/// RTI returns from an interrupt handler by:
+/// 1. Pulling the processor status flags from the stack
+/// 2. Pulling the program counter from the stack
+///
+/// This is the complementary instruction to BRK and hardware interrupts (IRQ/NMI).
+/// It restores the CPU state that was saved when the interrupt was triggered.
+///
+/// Stack operations (in order):
+/// 1. Increment SP (pull operation)
+/// 2. Pull status byte from stack and restore all flags
+/// 3. Increment SP (pull operation)
+/// 4. Pull low byte of PC from stack
+/// 5. Increment SP (pull operation)
+/// 6. Pull high byte of PC from stack
+/// 7. Set PC from pulled values
+///
+/// Addressing Mode: Implicit (opcode 0x40)
+/// Bytes: 1
+/// Cycles: 6
+///
+/// Flags affected:
+/// - C: Set from bit 0 of pulled status
+/// - Z: Set from bit 1 of pulled status
+/// - I: Set from bit 2 of pulled status
+/// - D: Set from bit 3 of pulled status
+/// - B: Set from bit 4 of pulled status
+/// - V: Set from bit 6 of pulled status
+/// - N: Set from bit 7 of pulled status
+///
+/// (Bit 5 is always ignored)
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this RTI instruction (0x40)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0x40); // RTI
+///
+/// let mut cpu = CPU::new(memory);
+///
+/// // Setup: Simulate an interrupt by pushing status and PC onto stack
+/// // BRK pushes: PC_high at SP, PC_low at SP-1, status at SP-2
+/// // So with final SP=0xFA: PC_high at 0x01FD, PC_low at 0x01FC, status at 0x01FB
+/// cpu.memory_mut().write(0x01FD, 0x12); // PC high byte
+/// cpu.memory_mut().write(0x01FC, 0x34); // PC low byte -> PC = 0x1234
+/// cpu.memory_mut().write(0x01FB, 0b00100011); // Status (with C and Z flags set)
+/// cpu.set_sp(0xFA); // SP points below the pushed values
+///
+/// cpu.step().unwrap();
+///
+/// // CPU state should be restored from stack
+/// assert_eq!(cpu.pc(), 0x1234); // PC restored
+/// assert!(cpu.flag_c()); // Carry flag restored
+/// assert!(cpu.flag_z()); // Zero flag restored
+/// assert_eq!(cpu.sp(), 0xFD); // SP incremented 3 times
+/// assert_eq!(cpu.cycles(), 6);
+/// ```
+pub(crate) fn execute_rti<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Pull status byte from stack
+    cpu.sp = cpu.sp.wrapping_add(1);
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    let status = cpu.memory.read(stack_addr);
+
+    // Restore all flags from the status byte
+    // Bit 7: N (Negative)
+    cpu.flag_n = (status & 0b10000000) != 0;
+    // Bit 6: V (Overflow)
+    cpu.flag_v = (status & 0b01000000) != 0;
+    // Bit 5: Always ignored (unused bit)
+    // Bit 4: B (Break)
+    cpu.flag_b = (status & 0b00010000) != 0;
+    // Bit 3: D (Decimal mode)
+    cpu.flag_d = (status & 0b00001000) != 0;
+    // Bit 2: I (Interrupt disable)
+    cpu.flag_i = (status & 0b00000100) != 0;
+    // Bit 1: Z (Zero)
+    cpu.flag_z = (status & 0b00000010) != 0;
+    // Bit 0: C (Carry)
+    cpu.flag_c = (status & 0b00000001) != 0;
+
+    // Pull low byte of PC from stack
+    cpu.sp = cpu.sp.wrapping_add(1);
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    let pc_low = cpu.memory.read(stack_addr) as u16;
+
+    // Pull high byte of PC from stack
+    cpu.sp = cpu.sp.wrapping_add(1);
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    let pc_high = cpu.memory.read(stack_addr) as u16;
+
+    // Restore PC from pulled values
+    cpu.pc = (pc_high << 8) | pc_low;
+
+    // Update cycle count (6 cycles for RTI)
     cpu.cycles += metadata.base_cycles as u64;
 
     Ok(())
