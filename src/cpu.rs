@@ -279,6 +279,9 @@ impl<M: MemoryBus> CPU<M> {
             "INX" => {
                 crate::instructions::inc_dec::execute_inx(self, opcode)?;
             }
+            "INY" => {
+                crate::instructions::inc_dec::execute_iny(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
