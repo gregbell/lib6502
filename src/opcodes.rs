@@ -118,7 +118,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::IndirectX,
         base_cycles: 6,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0x02 - Illegal/Undocumented opcode
     OpcodeMetadata {
@@ -150,7 +150,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::ZeroPage,
         base_cycles: 3,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0x06
     OpcodeMetadata {
@@ -182,7 +182,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Immediate,
         base_cycles: 2,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0x0A
     OpcodeMetadata {
@@ -214,7 +214,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Absolute,
         base_cycles: 4,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0x0E
     OpcodeMetadata {
@@ -246,7 +246,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::IndirectY,
         base_cycles: 5,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0x12 - Illegal/Undocumented opcode
     OpcodeMetadata {
@@ -278,7 +278,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::ZeroPageX,
         base_cycles: 4,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0x16
     OpcodeMetadata {
@@ -310,7 +310,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::AbsoluteY,
         base_cycles: 4,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0x1A - Illegal/Undocumented opcode
     OpcodeMetadata {
@@ -342,7 +342,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::AbsoluteX,
         base_cycles: 4,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0x1E
     OpcodeMetadata {

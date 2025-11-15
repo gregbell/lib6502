@@ -144,6 +144,8 @@ fn test_implemented_opcodes() {
     let lsr_opcodes = [0x46, 0x4A, 0x4E, 0x56, 0x5E];
     // NOP opcode should be marked as implemented
     let nop_opcodes = [0xEA];
+    // ORA opcodes should be marked as implemented
+    let ora_opcodes = [0x01, 0x05, 0x09, 0x0D, 0x11, 0x15, 0x19, 0x1D];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -520,10 +522,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be NOP mnemonic",
                 opcode
             );
+        } else if ora_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "ORA opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "ORA",
+                "Opcode 0x{:02X} should be ORA mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, and NOP opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, NOP, and ORA opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
