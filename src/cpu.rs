@@ -336,6 +336,9 @@ impl<M: MemoryBus> CPU<M> {
             "SEC" => {
                 crate::instructions::flags::execute_sec(self, opcode)?;
             }
+            "SED" => {
+                crate::instructions::flags::execute_sed(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
