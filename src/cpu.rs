@@ -318,6 +318,9 @@ impl<M: MemoryBus> CPU<M> {
             "PLP" => {
                 crate::instructions::stack::execute_plp(self, opcode)?;
             }
+            "ROL" => {
+                crate::instructions::shifts::execute_rol(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;

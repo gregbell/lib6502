@@ -414,7 +414,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::ZeroPage,
         base_cycles: 5,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0x27 - Illegal/Undocumented opcode
     OpcodeMetadata {
@@ -446,7 +446,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Accumulator,
         base_cycles: 2,
         size_bytes: 1,
-        implemented: false,
+        implemented: true,
     },
     // 0x2B - Illegal/Undocumented opcode
     OpcodeMetadata {
@@ -478,7 +478,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Absolute,
         base_cycles: 6,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0x2F - Illegal/Undocumented opcode
     OpcodeMetadata {
@@ -542,7 +542,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::ZeroPageX,
         base_cycles: 6,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0x37 - Illegal/Undocumented opcode
     OpcodeMetadata {
@@ -606,7 +606,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::AbsoluteX,
         base_cycles: 7,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0x3F - Illegal/Undocumented opcode
     OpcodeMetadata {
