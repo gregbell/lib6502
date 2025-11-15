@@ -35,12 +35,12 @@ pub fn parse_number(s: &str) -> Result<u16, String> {
         return Err("empty number string".to_string());
     }
 
-    if s.starts_with('$') {
+    if let Some(stripped) = s.strip_prefix('$') {
         // Hexadecimal
-        u16::from_str_radix(&s[1..], 16).map_err(|e| format!("invalid hex number: {}", e))
-    } else if s.starts_with('%') {
+        u16::from_str_radix(stripped, 16).map_err(|e| format!("invalid hex number: {}", e))
+    } else if let Some(stripped) = s.strip_prefix('%') {
         // Binary
-        u16::from_str_radix(&s[1..], 2).map_err(|e| format!("invalid binary number: {}", e))
+        u16::from_str_radix(stripped, 2).map_err(|e| format!("invalid binary number: {}", e))
     } else {
         // Decimal
         s.parse::<u16>()
@@ -67,14 +67,14 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
     }
 
     // Comment-only line
-    if trimmed.starts_with(';') {
+    if let Some(stripped) = trimmed.strip_prefix(';') {
         return Some(AssemblyLine {
             line_number,
             label: None,
             mnemonic: None,
             operand: None,
             directive: None,
-            comment: Some(trimmed[1..].trim().to_string()),
+            comment: Some(stripped.trim().to_string()),
             span: (0, line.len()),
         });
     }
@@ -326,8 +326,8 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
     }
 
     // Immediate: #$XX or #value
-    if operand.starts_with('#') {
-        let value = parse_number(&operand[1..])?;
+    if let Some(stripped) = operand.strip_prefix('#') {
+        let value = parse_number(stripped)?;
         return Ok((AddressingMode::Immediate, value));
     }
 

@@ -95,7 +95,7 @@ fn test_syntax_error_reporting() {
     let error = &errors[0];
     assert_eq!(error.error_type, ErrorType::InvalidMnemonic);
     assert!(error.line > 0, "Should have line number");
-    assert!(error.column >= 0, "Should have column number");
+    // Column is 0-indexed; just ensure span is consistent and message exists
     assert!(!error.message.is_empty(), "Should have error message");
 }
 
@@ -331,7 +331,7 @@ fn test_undefined_label_error() {
     assert!(result.is_err(), "Should fail on undefined label");
 
     let errors = result.unwrap_err();
-    assert!(errors.len() > 0);
+    assert!(!errors.is_empty());
 
     // Should have an undefined label error
     let undefined_errors = errors
@@ -355,7 +355,7 @@ START:
     assert!(result.is_err(), "Should fail on duplicate label");
 
     let errors = result.unwrap_err();
-    assert!(errors.len() > 0);
+    assert!(!errors.is_empty());
 
     // Should have a duplicate label error
     let duplicate_errors = errors
@@ -519,7 +519,7 @@ LDA #$42
     assert!(result.is_err(), "Should fail on invalid directive");
 
     let errors = result.unwrap_err();
-    assert!(errors.len() > 0);
+    assert!(!errors.is_empty());
 
     // Should have an invalid directive error
     let invalid_directive_errors = errors
