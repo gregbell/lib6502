@@ -3,7 +3,8 @@
 //! This module implements control flow operations:
 //! - BRK: Force Interrupt
 //! - JMP: Jump to address
-//! - (Future: JSR, RTS, RTI, NOP)
+//! - JSR: Jump to Subroutine
+//! - (Future: RTS, RTI, NOP)
 //!
 //! BRK is a software interrupt that:
 //! 1. Pushes PC+2 to the stack (high byte first, then low byte)
@@ -137,6 +138,64 @@ pub(crate) fn execute_jmp<M: MemoryBus>(
             panic!("Invalid addressing mode for JMP");
         }
     };
+
+    // Set PC to target address
+    cpu.pc = target_address;
+
+    // Update cycle count
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
+/// Executes the JSR (Jump to Subroutine) instruction.
+///
+/// JSR pushes the address (minus one) of the return point onto the stack and then
+/// sets the program counter to the target memory address.
+///
+/// The return address pushed is PC+2, which is the address of the last byte of the
+/// JSR instruction. When RTS is executed, it pulls this address and adds 1 to get
+/// the address of the next instruction.
+///
+/// Addressing modes:
+/// - Absolute (0x20): JSR $1234 - Jump to subroutine at address $1234
+///
+/// Cycle timing: 6 cycles (fixed)
+///
+/// Flags affected: None
+///
+/// Stack operations:
+/// 1. Push high byte of return address (PC+2)
+/// 2. Push low byte of return address (PC+2)
+/// 3. Set PC to target address
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this JSR instruction (0x20)
+pub(crate) fn execute_jsr<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Read the target address from operand (little-endian)
+    let addr_lo = cpu.memory.read(cpu.pc.wrapping_add(1)) as u16;
+    let addr_hi = cpu.memory.read(cpu.pc.wrapping_add(2)) as u16;
+    let target_address = (addr_hi << 8) | addr_lo;
+
+    // Calculate return address (PC + 2, which is the address of the last byte of JSR)
+    let return_address = cpu.pc.wrapping_add(2);
+
+    // Push high byte of return address to stack
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    cpu.memory.write(stack_addr, (return_address >> 8) as u8);
+    cpu.sp = cpu.sp.wrapping_sub(1);
+
+    // Push low byte of return address to stack
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    cpu.memory.write(stack_addr, (return_address & 0xFF) as u8);
+    cpu.sp = cpu.sp.wrapping_sub(1);
 
     // Set PC to target address
     cpu.pc = target_address;

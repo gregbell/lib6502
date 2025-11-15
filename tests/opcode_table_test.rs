@@ -132,6 +132,8 @@ fn test_implemented_opcodes() {
     let iny_opcodes = [0xC8];
     // JMP opcodes should be marked as implemented
     let jmp_opcodes = [0x4C, 0x6C];
+    // JSR opcode should be marked as implemented
+    let jsr_opcodes = [0x20];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -442,10 +444,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be JMP mnemonic",
                 opcode
             );
+        } else if jsr_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "JSR opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "JSR",
+                "Opcode 0x{:02X} should be JSR mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, and JMP opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, and JSR opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
