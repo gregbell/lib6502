@@ -273,6 +273,9 @@ impl<M: MemoryBus> CPU<M> {
             "EOR" => {
                 crate::instructions::alu::execute_eor(self, opcode)?;
             }
+            "INC" => {
+                crate::instructions::inc_dec::execute_inc(self, opcode)?;
+            }
             "INX" => {
                 crate::instructions::inc_dec::execute_inx(self, opcode)?;
             }
