@@ -113,3 +113,99 @@ fn test_multiple_error_collection() {
         .count();
     assert!(invalid_mnemonics >= 2, "Should detect at least 2 invalid mnemonics");
 }
+
+// T046: Integration test for error reporting with line/column/span
+#[test]
+fn test_error_span_information() {
+    let source = r#"
+LDA #$42
+BADMNEM #$10
+STA $8000
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err());
+
+    let errors = result.unwrap_err();
+    let error = &errors[0];
+
+    // Error should have detailed location info
+    assert_eq!(error.line, 3, "Error on line 3");
+    assert!(error.span.0 < error.span.1, "Span should have start < end");
+    assert_eq!(error.error_type, ErrorType::InvalidMnemonic);
+}
+
+// T047: Integration test for source map query by instruction address
+#[test]
+fn test_source_map_by_address() {
+    let source = r#"
+LDA #$42
+STA $8000
+NOP
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok());
+
+    let output = result.unwrap();
+
+    // Query source location for first instruction (LDA at address 0)
+    let loc = output.get_source_location(0);
+    assert!(loc.is_some(), "Should find source location for address 0");
+    let loc = loc.unwrap();
+    assert_eq!(loc.line, 2, "LDA is on line 2");
+
+    // Query source location for second instruction (STA at address 2)
+    let loc = output.get_source_location(2);
+    assert!(loc.is_some(), "Should find source location for address 2");
+    let loc = loc.unwrap();
+    assert_eq!(loc.line, 3, "STA is on line 3");
+}
+
+// T048: Integration test for source map query by source line
+#[test]
+fn test_source_map_by_line() {
+    let source = r#"
+LDA #$42
+STA $8000
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok());
+
+    let output = result.unwrap();
+
+    // Query address range for line 2 (LDA #$42)
+    let range = output.get_address_range(2);
+    assert!(range.is_some(), "Should find address range for line 2");
+    let range = range.unwrap();
+    assert_eq!(range.start, 0);
+    assert_eq!(range.end, 2); // LDA #$42 is 2 bytes
+
+    // Query address range for line 3 (STA $8000)
+    let range = output.get_address_range(3);
+    assert!(range.is_some(), "Should find address range for line 3");
+    let range = range.unwrap();
+    assert_eq!(range.start, 2);
+    assert_eq!(range.end, 5); // STA $8000 is 3 bytes
+}
+
+// T049: Integration test for symbol table access
+#[test]
+fn test_symbol_table_access() {
+    let source = "LDA #$42\nSTA $8000";
+
+    let result = assemble(source);
+    assert!(result.is_ok());
+
+    let output = result.unwrap();
+
+    // No labels in this simple code, but symbol table should be accessible
+    assert_eq!(output.symbol_table.len(), 0, "No labels defined");
+
+    // Lookup should return None for non-existent symbols
+    assert!(output.lookup_symbol("NONEXISTENT").is_none());
+}
+
+// T050: Integration test for structured Instruction data (already tested in disassembler_tests.rs)
+// The Instruction struct is already being validated in disassembler tests

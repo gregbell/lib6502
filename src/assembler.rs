@@ -25,6 +25,23 @@ pub struct AssemblerOutput {
     pub warnings: Vec<AssemblerWarning>,
 }
 
+impl AssemblerOutput {
+    /// Look up a symbol by name
+    pub fn lookup_symbol(&self, name: &str) -> Option<&Symbol> {
+        self.symbol_table.iter().find(|s| s.name == name)
+    }
+
+    /// Get source location for a given instruction address
+    pub fn get_source_location(&self, address: u16) -> Option<source_map::SourceLocation> {
+        self.source_map.get_source_location(address)
+    }
+
+    /// Get address range for a given source line
+    pub fn get_address_range(&self, line: usize) -> Option<source_map::AddressRange> {
+        self.source_map.get_address_range(line)
+    }
+}
+
 /// A symbol table entry mapping a label to an address
 #[derive(Debug, Clone, PartialEq)]
 pub struct Symbol {
@@ -95,6 +112,28 @@ pub enum ErrorType {
     InvalidDirective,
 }
 
+impl std::fmt::Display for AssemblerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Line {}, Column {}: {} - {}",
+            self.line,
+            self.column,
+            match self.error_type {
+                ErrorType::SyntaxError => "Syntax Error",
+                ErrorType::UndefinedLabel => "Undefined Label",
+                ErrorType::DuplicateLabel => "Duplicate Label",
+                ErrorType::InvalidLabel => "Invalid Label",
+                ErrorType::InvalidMnemonic => "Invalid Mnemonic",
+                ErrorType::InvalidOperand => "Invalid Operand",
+                ErrorType::RangeError => "Range Error",
+                ErrorType::InvalidDirective => "Invalid Directive",
+            },
+            self.message
+        )
+    }
+}
+
 /// Assembler directive types
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssemblerDirective {
@@ -130,6 +169,8 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     // Pass 1: Just encode without labels (for now - labels will be Phase 6)
     // For now, we only handle instructions without labels
     let mut bytes = Vec::new();
+    let mut source_map = source_map::SourceMap::new();
+    let mut current_address = 0u16;
 
     for line in &parsed_lines {
         // Skip lines with only labels or comments
@@ -138,6 +179,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         }
 
         let mnemonic = line.mnemonic.as_ref().unwrap();
+        let instruction_start_address = current_address;
 
         // Detect addressing mode and operand value
         let (mode, value) = if let Some(ref operand) = line.operand {
@@ -161,7 +203,29 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         // Encode the instruction
         match encoder::encode_instruction(mnemonic, mode, value) {
             Ok(instruction_bytes) => {
+                let instruction_size = instruction_bytes.len() as u16;
+
+                // Add to source map (address → source location)
+                source_map.add_mapping(
+                    instruction_start_address,
+                    source_map::SourceLocation {
+                        line: line.line_number,
+                        column: 0,
+                        length: line.span.1 - line.span.0,
+                    },
+                );
+
+                // Add to source map (line → address range)
+                source_map.add_line_mapping(
+                    line.line_number,
+                    source_map::AddressRange {
+                        start: instruction_start_address,
+                        end: instruction_start_address + instruction_size,
+                    },
+                );
+
                 bytes.extend(instruction_bytes);
+                current_address += instruction_size;
             }
             Err(mut e) => {
                 // Update error with correct line info
@@ -188,10 +252,13 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         return Err(errors);
     }
 
+    // Finalize source map (sort for binary search)
+    source_map.finalize();
+
     Ok(AssemblerOutput {
         bytes,
         symbol_table: Vec::new(),
-        source_map: source_map::SourceMap::new(),
+        source_map,
         warnings: Vec::new(),
     })
 }
