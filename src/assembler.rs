@@ -199,6 +199,22 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
             }
         }
 
+        // Handle directives
+        if let Some(ref directive) = line.directive {
+            match directive {
+                AssemblerDirective::Origin { address } => {
+                    current_address = *address;
+                }
+                AssemblerDirective::Byte { values } => {
+                    current_address += values.len() as u16;
+                }
+                AssemblerDirective::Word { values } => {
+                    current_address += (values.len() * 2) as u16;
+                }
+            }
+            continue;
+        }
+
         // Skip lines with only labels or comments
         if line.mnemonic.is_none() {
             continue;
@@ -240,12 +256,88 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     current_address = 0u16;
 
     for line in &parsed_lines {
+        // Handle directives
+        if let Some(ref directive) = line.directive {
+            match directive {
+                AssemblerDirective::Origin { address } => {
+                    current_address = *address;
+                }
+                AssemblerDirective::Byte { values } => {
+                    let instruction_start_address = current_address;
+
+                    // Add bytes directly to output
+                    bytes.extend(values);
+
+                    // Add to source map
+                    source_map.add_mapping(
+                        instruction_start_address,
+                        source_map::SourceLocation {
+                            line: line.line_number,
+                            column: 0,
+                            length: line.span.1 - line.span.0,
+                        },
+                    );
+                    source_map.add_line_mapping(
+                        line.line_number,
+                        source_map::AddressRange {
+                            start: instruction_start_address,
+                            end: instruction_start_address + values.len() as u16,
+                        },
+                    );
+
+                    current_address += values.len() as u16;
+                }
+                AssemblerDirective::Word { values } => {
+                    let instruction_start_address = current_address;
+
+                    // Add words in little-endian format
+                    for word in values {
+                        bytes.push((word & 0xFF) as u8);         // Low byte
+                        bytes.push(((word >> 8) & 0xFF) as u8); // High byte
+                    }
+
+                    // Add to source map
+                    source_map.add_mapping(
+                        instruction_start_address,
+                        source_map::SourceLocation {
+                            line: line.line_number,
+                            column: 0,
+                            length: line.span.1 - line.span.0,
+                        },
+                    );
+                    source_map.add_line_mapping(
+                        line.line_number,
+                        source_map::AddressRange {
+                            start: instruction_start_address,
+                            end: instruction_start_address + (values.len() * 2) as u16,
+                        },
+                    );
+
+                    current_address += (values.len() * 2) as u16;
+                }
+            }
+            continue;
+        }
+
         // Skip lines with only labels or comments
         if line.mnemonic.is_none() {
             continue;
         }
 
         let mnemonic = line.mnemonic.as_ref().unwrap();
+
+        // Check for invalid directive (mnemonic starts with .)
+        if mnemonic.starts_with('.') {
+            errors.push(AssemblerError {
+                error_type: ErrorType::InvalidDirective,
+                line: line.line_number,
+                column: 0,
+                span: line.span,
+                message: format!("Invalid or unknown directive: {}", mnemonic),
+            });
+            continue;
+        }
+
         let instruction_start_address = current_address;
 
         // Detect addressing mode and resolve operand value (including labels)

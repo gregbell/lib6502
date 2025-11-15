@@ -73,6 +73,7 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
             label: None,
             mnemonic: None,
             operand: None,
+            directive: None,
             comment: Some(trimmed[1..].trim().to_string()),
             span: (0, line.len()),
         });
@@ -93,6 +94,7 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
             label: None,
             mnemonic: None,
             operand: None,
+            directive: None,
             comment: comment_part,
             span: (0, line.len()),
         });
@@ -107,18 +109,38 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
         (None, code_part)
     };
 
-    // Parse mnemonic and operand
-    let (mnemonic, operand) = if !rest.is_empty() {
-        let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
-        let mnemonic = parts[0].trim().to_uppercase();
-        let operand = if parts.len() > 1 {
-            Some(parts[1].trim().to_string())
+    // Parse mnemonic and operand, or directive
+    let (mnemonic, operand, directive) = if !rest.is_empty() {
+        // Check if this is a directive (starts with .)
+        if rest.starts_with('.') {
+            // Parse directive
+            match parse_directive(rest) {
+                Ok(dir) => (None, None, Some(dir)),
+                Err(_) => {
+                    // Invalid directive - will be caught as error later
+                    let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
+                    let directive_name = parts[0].trim().to_uppercase();
+                    let operand = if parts.len() > 1 {
+                        Some(parts[1].trim().to_string())
+                    } else {
+                        None
+                    };
+                    (Some(directive_name), operand, None)
+                }
+            }
         } else {
-            None
-        };
-        (Some(mnemonic), operand)
+            // Parse as mnemonic + operand
+            let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
+            let mnemonic = parts[0].trim().to_uppercase();
+            let operand = if parts.len() > 1 {
+                Some(parts[1].trim().to_string())
+            } else {
+                None
+            };
+            (Some(mnemonic), operand, None)
+        }
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     Some(AssemblyLine {
@@ -126,9 +148,85 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
         label,
         mnemonic,
         operand,
+        directive,
         comment: comment_part,
         span: (0, line.len()),
     })
+}
+
+/// Parse a directive line (e.g., ".org $8000", ".byte $42, $43")
+pub fn parse_directive(line: &str) -> Result<crate::assembler::AssemblerDirective, String> {
+    let line = line.trim();
+
+    if !line.starts_with('.') {
+        return Err("Directive must start with '.'".to_string());
+    }
+
+    let parts: Vec<&str> = line.splitn(2, char::is_whitespace).collect();
+    let directive_name = parts[0].trim().to_lowercase();
+    let args = if parts.len() > 1 {
+        parts[1].trim()
+    } else {
+        ""
+    };
+
+    match directive_name.as_str() {
+        ".org" => parse_org_directive(args),
+        ".byte" => parse_byte_directive(args),
+        ".word" => parse_word_directive(args),
+        _ => Err(format!("Unknown directive: {}", directive_name)),
+    }
+}
+
+/// Parse .org directive
+pub fn parse_org_directive(args: &str) -> Result<crate::assembler::AssemblerDirective, String> {
+    if args.is_empty() {
+        return Err(".org directive requires an address argument".to_string());
+    }
+
+    let address = parse_number(args)?;
+    Ok(crate::assembler::AssemblerDirective::Origin { address })
+}
+
+/// Parse .byte directive
+pub fn parse_byte_directive(args: &str) -> Result<crate::assembler::AssemblerDirective, String> {
+    if args.is_empty() {
+        return Err(".byte directive requires at least one value".to_string());
+    }
+
+    let mut values = Vec::new();
+    for arg in args.split(',') {
+        let val = parse_number(arg.trim())?;
+        if val > 0xFF {
+            return Err(format!("Byte value ${:04X} is too large (must be 0-255)", val));
+        }
+        values.push(val as u8);
+    }
+
+    if values.is_empty() {
+        return Err(".byte directive requires at least one value".to_string());
+    }
+
+    Ok(crate::assembler::AssemblerDirective::Byte { values })
+}
+
+/// Parse .word directive
+pub fn parse_word_directive(args: &str) -> Result<crate::assembler::AssemblerDirective, String> {
+    if args.is_empty() {
+        return Err(".word directive requires at least one value".to_string());
+    }
+
+    let mut values = Vec::new();
+    for arg in args.split(',') {
+        let val = parse_number(arg.trim())?;
+        values.push(val);
+    }
+
+    if values.is_empty() {
+        return Err(".word directive requires at least one value".to_string());
+    }
+
+    Ok(crate::assembler::AssemblerDirective::Word { values })
 }
 
 /// Detect the addressing mode from operand syntax (for labels, assume Absolute/Relative)
@@ -326,5 +424,150 @@ mod tests {
         assert!(parse_number("%202").is_err());
         assert!(parse_number("ABC").is_err());
         assert!(parse_number("").is_err());
+    }
+
+    // T102: Unit tests for comment stripping
+
+    #[test]
+    fn test_comment_only_line() {
+        let line = parse_line("; This is a comment", 1).unwrap();
+        assert_eq!(line.comment, Some("This is a comment".to_string()));
+        assert_eq!(line.mnemonic, None);
+        assert_eq!(line.label, None);
+    }
+
+    #[test]
+    fn test_inline_comment_stripping() {
+        let line = parse_line("LDA #$42 ; Load value", 1).unwrap();
+        assert_eq!(line.mnemonic, Some("LDA".to_string()));
+        assert_eq!(line.operand, Some("#$42".to_string()));
+        assert_eq!(line.comment, Some("Load value".to_string()));
+    }
+
+    #[test]
+    fn test_no_comment() {
+        let line = parse_line("LDA #$42", 1).unwrap();
+        assert_eq!(line.mnemonic, Some("LDA".to_string()));
+        assert_eq!(line.operand, Some("#$42".to_string()));
+        assert_eq!(line.comment, None);
+    }
+
+    // T103: Unit tests for directive parsing
+
+    #[test]
+    fn test_parse_org_directive() {
+        let result = parse_org_directive("$8000").unwrap();
+        match result {
+            crate::assembler::AssemblerDirective::Origin { address } => {
+                assert_eq!(address, 0x8000);
+            }
+            _ => panic!("Expected Origin directive"),
+        }
+    }
+
+    #[test]
+    fn test_parse_org_directive_missing_arg() {
+        let result = parse_org_directive("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires an address"));
+    }
+
+    #[test]
+    fn test_parse_byte_directive() {
+        let result = parse_byte_directive("$42, $43, $44").unwrap();
+        match result {
+            crate::assembler::AssemblerDirective::Byte { values } => {
+                assert_eq!(values, vec![0x42, 0x43, 0x44]);
+            }
+            _ => panic!("Expected Byte directive"),
+        }
+    }
+
+    #[test]
+    fn test_parse_byte_directive_single() {
+        let result = parse_byte_directive("$FF").unwrap();
+        match result {
+            crate::assembler::AssemblerDirective::Byte { values } => {
+                assert_eq!(values, vec![0xFF]);
+            }
+            _ => panic!("Expected Byte directive"),
+        }
+    }
+
+    #[test]
+    fn test_parse_byte_directive_range_error() {
+        let result = parse_byte_directive("$1234");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too large"));
+    }
+
+    #[test]
+    fn test_parse_byte_directive_missing_arg() {
+        let result = parse_byte_directive("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires at least one value"));
+    }
+
+    #[test]
+    fn test_parse_word_directive() {
+        let result = parse_word_directive("$1234, $5678").unwrap();
+        match result {
+            crate::assembler::AssemblerDirective::Word { values } => {
+                assert_eq!(values, vec![0x1234, 0x5678]);
+            }
+            _ => panic!("Expected Word directive"),
+        }
+    }
+
+    #[test]
+    fn test_parse_word_directive_single() {
+        let result = parse_word_directive("$ABCD").unwrap();
+        match result {
+            crate::assembler::AssemblerDirective::Word { values } => {
+                assert_eq!(values, vec![0xABCD]);
+            }
+            _ => panic!("Expected Word directive"),
+        }
+    }
+
+    #[test]
+    fn test_parse_word_directive_missing_arg() {
+        let result = parse_word_directive("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires at least one value"));
+    }
+
+    #[test]
+    fn test_parse_directive_unknown() {
+        let result = parse_directive(".unknown $1234");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown directive"));
+    }
+
+    #[test]
+    fn test_parse_directive_integration() {
+        let result = parse_directive(".org $8000").unwrap();
+        match result {
+            crate::assembler::AssemblerDirective::Origin { address } => {
+                assert_eq!(address, 0x8000);
+            }
+            _ => panic!("Expected Origin directive"),
+        }
+
+        let result = parse_directive(".byte $42, $43").unwrap();
+        match result {
+            crate::assembler::AssemblerDirective::Byte { values } => {
+                assert_eq!(values, vec![0x42, 0x43]);
+            }
+            _ => panic!("Expected Byte directive"),
+        }
+
+        let result = parse_directive(".word $1234").unwrap();
+        match result {
+            crate::assembler::AssemblerDirective::Word { values } => {
+                assert_eq!(values, vec![0x1234]);
+            }
+            _ => panic!("Expected Word directive"),
+        }
     }
 }
