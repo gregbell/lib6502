@@ -6,7 +6,7 @@
 //! - JSR: Jump to Subroutine
 //! - NOP: No Operation
 //! - RTI: Return from Interrupt
-//! - (Future: RTS)
+//! - RTS: Return from Subroutine
 //!
 //! BRK is a software interrupt that:
 //! 1. Pushes PC+2 to the stack (high byte first, then low byte)
@@ -368,6 +368,87 @@ pub(crate) fn execute_rti<M: MemoryBus>(
     cpu.pc = (pc_high << 8) | pc_low;
 
     // Update cycle count (6 cycles for RTI)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
+/// Executes the RTS (Return from Subroutine) instruction.
+///
+/// RTS returns from a subroutine by:
+/// 1. Pulling the program counter (minus one) from the stack
+/// 2. Incrementing the pulled address by 1 to get the next instruction
+///
+/// This is the complementary instruction to JSR (Jump to Subroutine).
+/// JSR pushes PC+2 (the address of the last byte of the JSR instruction) to the stack,
+/// so RTS needs to pull this value and add 1 to get the address of the next instruction.
+///
+/// Stack operations (in order):
+/// 1. Increment SP (pull operation)
+/// 2. Pull low byte of PC from stack
+/// 3. Increment SP (pull operation)
+/// 4. Pull high byte of PC from stack
+/// 5. Set PC from pulled values
+/// 6. Increment PC by 1
+///
+/// Addressing Mode: Implicit (opcode 0x60)
+/// Bytes: 1
+/// Cycles: 6
+///
+/// Flags affected: None
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this RTS instruction (0x60)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0x60); // RTS
+///
+/// let mut cpu = CPU::new(memory);
+///
+/// // Setup: Simulate JSR by pushing return address onto stack
+/// // JSR pushes PC+2, so if we want to return to 0x8003, we push 0x8002
+/// cpu.memory_mut().write(0x01FD, 0x80); // PC high byte
+/// cpu.memory_mut().write(0x01FC, 0x02); // PC low byte -> 0x8002
+/// cpu.set_sp(0xFB); // SP points below the pushed values
+///
+/// cpu.step().unwrap();
+///
+/// // CPU state should be restored from stack
+/// assert_eq!(cpu.pc(), 0x8003); // 0x8002 + 1
+/// assert_eq!(cpu.sp(), 0xFD); // SP incremented 2 times
+/// assert_eq!(cpu.cycles(), 6);
+/// ```
+pub(crate) fn execute_rts<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Pull low byte of PC from stack
+    cpu.sp = cpu.sp.wrapping_add(1);
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    let pc_low = cpu.memory.read(stack_addr) as u16;
+
+    // Pull high byte of PC from stack
+    cpu.sp = cpu.sp.wrapping_add(1);
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    let pc_high = cpu.memory.read(stack_addr) as u16;
+
+    // Restore PC from pulled values and add 1
+    // JSR pushes PC+2 (address of last byte of JSR), so we need to add 1
+    // to get the address of the next instruction
+    cpu.pc = ((pc_high << 8) | pc_low).wrapping_add(1);
+
+    // Update cycle count (6 cycles for RTS)
     cpu.cycles += metadata.base_cycles as u64;
 
     Ok(())
