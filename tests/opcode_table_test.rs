@@ -136,6 +136,8 @@ fn test_implemented_opcodes() {
     let jsr_opcodes = [0x20];
     // LDA opcodes should be marked as implemented
     let lda_opcodes = [0xA1, 0xA5, 0xA9, 0xAD, 0xB1, 0xB5, 0xB9, 0xBD];
+    // LDX opcodes should be marked as implemented
+    let ldx_opcodes = [0xA2, 0xA6, 0xAE, 0xB6, 0xBE];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -468,10 +470,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be LDA mnemonic",
                 opcode
             );
+        } else if ldx_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "LDX opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "LDX",
+                "Opcode 0x{:02X} should be LDX mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, and LDA opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, and LDX opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }

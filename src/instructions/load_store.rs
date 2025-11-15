@@ -57,3 +57,51 @@ pub(crate) fn execute_lda<M: MemoryBus>(
 
     Ok(())
 }
+
+/// Executes the LDX (Load X Register) instruction.
+///
+/// Loads a byte of memory into the X register, setting the zero and negative
+/// flags as appropriate.
+///
+/// # Flag Behavior
+///
+/// - Zero (Z): Set if X = 0
+/// - Negative (N): Set if bit 7 of X is set
+/// - Other flags: Not affected
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this LDX instruction
+pub(crate) fn execute_ldx<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Get the operand value and check for page crossing
+    let (value, page_crossed) = cpu.get_operand_value(metadata.addressing_mode)?;
+
+    // Load value into X register
+    cpu.x = value;
+
+    // Update flags
+
+    // Zero flag: Set if X = 0
+    cpu.flag_z = value == 0;
+
+    // Negative flag: Set if bit 7 of X is set
+    cpu.flag_n = (value & 0x80) != 0;
+
+    // Update cycle count (add extra cycle for page crossing if applicable)
+    let mut cycles = metadata.base_cycles as u64;
+    if page_crossed {
+        cycles += 1;
+    }
+    cpu.cycles += cycles;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
