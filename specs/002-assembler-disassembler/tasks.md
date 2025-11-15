@@ -26,11 +26,11 @@ All paths are relative to repository root:
 
 **Purpose**: Project initialization and basic structure for assembler/disassembler modules
 
-- [ ] T001 Create disassembler module directory structure in src/disassembler/
-- [ ] T002 Create assembler module directory structure in src/assembler/
-- [ ] T003 [P] Create integration test directories in tests/ (assembler_tests.rs, disassembler_tests.rs, roundtrip_tests.rs)
-- [ ] T004 [P] Create examples directory structure in examples/ (simple_disasm.rs, simple_asm.rs)
-- [ ] T005 Update src/lib.rs to export disassembler and assembler modules
+- [X] T001 Create disassembler module directory structure in src/disassembler/
+- [X] T002 Create assembler module directory structure in src/assembler/
+- [X] T003 [P] Create integration test directories in tests/ (assembler_tests.rs, disassembler_tests.rs, roundtrip_tests.rs)
+- [X] T004 [P] Create examples directory structure in examples/ (simple_disasm.rs, simple_asm.rs)
+- [X] T005 Update src/lib.rs to export disassembler and assembler modules
 
 ---
 
@@ -40,15 +40,15 @@ All paths are relative to repository root:
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 Define Instruction struct in src/disassembler.rs with all metadata fields (address, opcode, mnemonic, addressing_mode, operand_bytes, size_bytes, base_cycles)
-- [ ] T007 [P] Define DisassemblyOptions struct in src/disassembler.rs (start_address, hex_dump, show_offsets)
-- [ ] T008 [P] Define AssemblyLine struct in src/assembler/parser.rs (line_number, label, mnemonic, operand, comment, span)
-- [ ] T009 [P] Define Symbol struct in src/assembler/symbol_table.rs (name, address, defined_at)
-- [ ] T010 [P] Define AssemblerError and ErrorType enums in src/assembler.rs (syntax, undefined_label, duplicate_label, invalid_label, invalid_mnemonic, invalid_operand, range_error, invalid_directive)
-- [ ] T011 [P] Define SourceLocation and AddressRange structs in src/assembler/source_map.rs
-- [ ] T012 [P] Define SourceMap struct with bidirectional mappings in src/assembler/source_map.rs
-- [ ] T013 [P] Define AssemblerOutput struct in src/assembler.rs (bytes, symbol_table, source_map, warnings)
-- [ ] T014 [P] Define AssemblerDirective enum in src/assembler.rs (Origin, Byte, Word)
+- [X] T006 Define Instruction struct in src/disassembler.rs with all metadata fields (address, opcode, mnemonic, addressing_mode, operand_bytes, size_bytes, base_cycles)
+- [X] T007 [P] Define DisassemblyOptions struct in src/disassembler.rs (start_address, hex_dump, show_offsets)
+- [X] T008 [P] Define AssemblyLine struct in src/assembler/parser.rs (line_number, label, mnemonic, operand, comment, span)
+- [X] T009 [P] Define Symbol struct in src/assembler/symbol_table.rs (name, address, defined_at)
+- [X] T010 [P] Define AssemblerError and ErrorType enums in src/assembler.rs (syntax, undefined_label, duplicate_label, invalid_label, invalid_mnemonic, invalid_operand, range_error, invalid_directive)
+- [X] T011 [P] Define SourceLocation and AddressRange structs in src/assembler/source_map.rs
+- [X] T012 [P] Define SourceMap struct with bidirectional mappings in src/assembler/source_map.rs
+- [X] T013 [P] Define AssemblerOutput struct in src/assembler.rs (bytes, symbol_table, source_map, warnings)
+- [X] T014 [P] Define AssemblerDirective enum in src/assembler.rs (Origin, Byte, Word)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 

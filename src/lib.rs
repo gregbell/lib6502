@@ -49,7 +49,9 @@
 //! [quickstart guide](../specs/001-cpu-core-foundation/quickstart.md).
 
 pub mod addressing;
+pub mod assembler;
 pub mod cpu;
+pub mod disassembler;
 pub mod memory;
 pub mod opcodes;
 
@@ -58,7 +60,9 @@ mod instructions;
 
 // Re-export public API
 pub use addressing::AddressingMode;
+pub use assembler::{assemble, AssemblerError, AssemblerOutput, ErrorType, Symbol};
 pub use cpu::CPU;
+pub use disassembler::{disassemble, Instruction, DisassemblyOptions};
 pub use memory::{FlatMemory, MemoryBus};
 pub use opcodes::{OpcodeMetadata, OPCODE_TABLE};
 
