@@ -4,7 +4,7 @@
 //! - PHA: Push Accumulator on Stack
 //! - PHP: Push Processor Status on Stack
 //! - PLA: Pull Accumulator from Stack
-//! - (Future: PLP)
+//! - PLP: Pull Processor Status from Stack
 //!
 //! The 6502 stack is located at memory addresses 0x0100-0x01FF and grows downward.
 //! The stack pointer (SP) is an 8-bit register that serves as an offset into this
@@ -219,6 +219,106 @@ pub(crate) fn execute_pla<M: MemoryBus>(
     cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
 
     // Add cycles (4 cycles for PLA)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
+/// Executes the PLP (Pull Processor Status) instruction.
+///
+/// PLP pulls an 8-bit value from the stack and restores all processor status flags.
+/// The stack pointer is incremented before the pull operation.
+///
+/// **Important**: Unlike PHP which forces certain bits when pushing, PLP restores
+/// all flag bits from the pulled byte (except bit 5, which is always ignored as
+/// it is unused on the 6502).
+///
+/// Stack operation:
+/// 1. Increment SP (wraps from 0xFF to 0x00)
+/// 2. Read value from 0x0100 | SP
+/// 3. Restore all flags from value
+///
+/// Addressing Mode: Implicit (opcode 0x28)
+/// Bytes: 1
+/// Cycles: 4
+///
+/// Flags affected:
+/// - C: Set from bit 0 of pulled value
+/// - Z: Set from bit 1 of pulled value
+/// - I: Set from bit 2 of pulled value
+/// - D: Set from bit 3 of pulled value
+/// - B: Set from bit 4 of pulled value
+/// - V: Set from bit 6 of pulled value
+/// - N: Set from bit 7 of pulled value
+///
+/// (Bit 5 is always ignored)
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this PLP instruction (0x28)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0x28); // PLP
+///
+/// let mut cpu = CPU::new(memory);
+///
+/// // Setup: Push a status value onto stack first
+/// cpu.memory_mut().write(0x01FD, 0b11000011); // N, V, C, Z set
+/// cpu.set_sp(0xFC); // SP points below the value
+///
+/// cpu.step().unwrap();
+///
+/// // Flags should be restored from stack
+/// assert!(cpu.flag_n()); // Bit 7 set
+/// assert!(cpu.flag_v()); // Bit 6 set
+/// assert!(cpu.flag_z()); // Bit 1 set
+/// assert!(cpu.flag_c()); // Bit 0 set
+/// assert_eq!(cpu.sp(), 0xFD); // SP incremented
+/// assert_eq!(cpu.pc(), 0x8001);
+/// assert_eq!(cpu.cycles(), 4);
+/// ```
+pub(crate) fn execute_plp<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Increment stack pointer first (pull operation)
+    cpu.sp = cpu.sp.wrapping_add(1);
+
+    // Pull value from stack
+    let stack_addr = 0x0100 | (cpu.sp as u16);
+    let status = cpu.memory.read(stack_addr);
+
+    // Restore all flags from the status byte
+    // Bit 7: N (Negative)
+    cpu.flag_n = (status & 0b10000000) != 0;
+    // Bit 6: V (Overflow)
+    cpu.flag_v = (status & 0b01000000) != 0;
+    // Bit 5: Always ignored (unused bit)
+    // Bit 4: B (Break)
+    cpu.flag_b = (status & 0b00010000) != 0;
+    // Bit 3: D (Decimal mode)
+    cpu.flag_d = (status & 0b00001000) != 0;
+    // Bit 2: I (Interrupt disable)
+    cpu.flag_i = (status & 0b00000100) != 0;
+    // Bit 1: Z (Zero)
+    cpu.flag_z = (status & 0b00000010) != 0;
+    // Bit 0: C (Carry)
+    cpu.flag_c = (status & 0b00000001) != 0;
+
+    // Advance PC by instruction size (1 byte for implicit addressing)
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    // Add cycles (4 cycles for PLP)
     cpu.cycles += metadata.base_cycles as u64;
 
     Ok(())
