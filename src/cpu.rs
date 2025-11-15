@@ -294,6 +294,9 @@ impl<M: MemoryBus> CPU<M> {
             "LDX" => {
                 crate::instructions::load_store::execute_ldx(self, opcode)?;
             }
+            "LDY" => {
+                crate::instructions::load_store::execute_ldy(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
