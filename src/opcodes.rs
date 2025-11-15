@@ -40,7 +40,7 @@ use crate::addressing::AddressingMode;
 /// assert_eq!(lda_imm.addressing_mode, AddressingMode::Immediate);
 /// assert_eq!(lda_imm.base_cycles, 2);
 /// assert_eq!(lda_imm.size_bytes, 2);
-/// assert_eq!(lda_imm.implemented, false); // Not implemented in this feature
+/// assert_eq!(lda_imm.implemented, true); // LDA is now implemented
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OpcodeMetadata {
@@ -1398,7 +1398,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::IndirectX,
         base_cycles: 6,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0xA2
     OpcodeMetadata {
@@ -1430,7 +1430,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::ZeroPage,
         base_cycles: 3,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0xA6
     OpcodeMetadata {
@@ -1462,7 +1462,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Immediate,
         base_cycles: 2,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0xAA
     OpcodeMetadata {
@@ -1494,7 +1494,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Absolute,
         base_cycles: 4,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0xAE
     OpcodeMetadata {
@@ -1526,7 +1526,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::IndirectY,
         base_cycles: 5,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0xB2 - Illegal/Undocumented opcode
     OpcodeMetadata {
@@ -1558,7 +1558,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::ZeroPageX,
         base_cycles: 4,
         size_bytes: 2,
-        implemented: false,
+        implemented: true,
     },
     // 0xB6
     OpcodeMetadata {
@@ -1590,7 +1590,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::AbsoluteY,
         base_cycles: 4,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0xBA
     OpcodeMetadata {
@@ -1622,7 +1622,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::AbsoluteX,
         base_cycles: 4,
         size_bytes: 3,
-        implemented: false,
+        implemented: true,
     },
     // 0xBE
     OpcodeMetadata {

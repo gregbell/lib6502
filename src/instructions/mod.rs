@@ -21,9 +21,9 @@ pub mod branches;
 pub mod control;
 pub mod flags;
 pub mod inc_dec;
+pub mod load_store;
 pub mod shifts;
 
 // Future modules (to be implemented):
-// pub mod load_store;
 // pub mod stack;
 // pub mod transfer;
