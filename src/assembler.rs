@@ -166,11 +166,78 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         .filter_map(|(idx, line)| parser::parse_line(line, idx + 1))
         .collect();
 
-    // Pass 1: Just encode without labels (for now - labels will be Phase 6)
-    // For now, we only handle instructions without labels
+    // Pass 1: Build symbol table
+    let mut symbol_table = symbol_table::SymbolTable::new();
+    let mut current_address = 0u16;
+
+    for line in &parsed_lines {
+        // Check for label definition
+        if let Some(ref label) = line.label {
+            // Validate label name
+            if let Err(e) = validate_label(label) {
+                errors.push(AssemblerError {
+                    error_type: ErrorType::InvalidLabel,
+                    line: line.line_number,
+                    column: 0,
+                    span: line.span,
+                    message: e,
+                });
+            } else {
+                // Add to symbol table
+                if let Err(existing) = symbol_table.add_symbol(label.clone(), current_address, line.line_number) {
+                    errors.push(AssemblerError {
+                        error_type: ErrorType::DuplicateLabel,
+                        line: line.line_number,
+                        column: 0,
+                        span: line.span,
+                        message: format!(
+                            "Duplicate label '{}' (previously defined at line {})",
+                            label, existing.defined_at
+                        ),
+                    });
+                }
+            }
+        }
+
+        // Skip lines with only labels or comments
+        if line.mnemonic.is_none() {
+            continue;
+        }
+
+        // Calculate instruction size to advance address
+        let mnemonic = line.mnemonic.as_ref().unwrap();
+
+        // Determine addressing mode (without resolving labels yet)
+        let mode = if let Some(ref operand) = line.operand {
+            match parser::detect_addressing_mode_or_label(operand) {
+                Ok(m) => m,
+                Err(_) => {
+                    // Error will be caught in Pass 2
+                    crate::addressing::AddressingMode::Implicit
+                }
+            }
+        } else {
+            crate::addressing::AddressingMode::Implicit
+        };
+
+        // Look up instruction size
+        if let Ok(opcode_meta) = encoder::find_opcode_metadata(mnemonic, mode) {
+            current_address += opcode_meta.size_bytes as u16;
+        } else {
+            // Error will be caught in Pass 2
+            current_address += 1;
+        }
+    }
+
+    // Return early if there were label validation errors
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    // Pass 2: Encode instructions with label resolution
     let mut bytes = Vec::new();
     let mut source_map = source_map::SourceMap::new();
-    let mut current_address = 0u16;
+    current_address = 0u16;
 
     for line in &parsed_lines {
         // Skip lines with only labels or comments
@@ -181,17 +248,17 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         let mnemonic = line.mnemonic.as_ref().unwrap();
         let instruction_start_address = current_address;
 
-        // Detect addressing mode and operand value
+        // Detect addressing mode and resolve operand value (including labels)
         let (mode, value) = if let Some(ref operand) = line.operand {
-            match parser::detect_addressing_mode(operand) {
+            match resolve_operand(operand, &symbol_table, instruction_start_address, mnemonic) {
                 Ok((m, v)) => (m, v),
                 Err(e) => {
                     errors.push(AssemblerError {
-                        error_type: ErrorType::InvalidOperand,
+                        error_type: e.error_type,
                         line: line.line_number,
                         column: 0,
                         span: line.span,
-                        message: format!("Invalid operand '{}': {}", operand, e),
+                        message: e.message,
                     });
                     continue; // Error recovery: skip this line
                 }
@@ -257,10 +324,86 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 
     Ok(AssemblerOutput {
         bytes,
-        symbol_table: Vec::new(),
+        symbol_table: symbol_table.symbols().to_vec(),
         source_map,
         warnings: Vec::new(),
     })
+}
+
+/// Resolve an operand, handling both numeric values and label references
+fn resolve_operand(
+    operand: &str,
+    symbol_table: &symbol_table::SymbolTable,
+    current_address: u16,
+    mnemonic: &str,
+) -> Result<(crate::addressing::AddressingMode, u16), AssemblerError> {
+    // Check if operand is a label reference (no prefix like $, #, (, etc.)
+    let operand_trimmed = operand.trim();
+
+    // If it starts with a special character, it's not a plain label
+    if operand_trimmed.starts_with('$')
+        || operand_trimmed.starts_with('#')
+        || operand_trimmed.starts_with('(')
+        || operand_trimmed.starts_with('%')
+        || operand_trimmed.chars().next().map_or(false, |c| c.is_ascii_digit())
+    {
+        // Parse as normal addressing mode
+        return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
+            error_type: ErrorType::InvalidOperand,
+            line: 0,
+            column: 0,
+            span: (0, 0),
+            message: format!("Invalid operand '{}': {}", operand, e),
+        });
+    }
+
+    // Must be a label reference - look it up
+    if let Some(symbol) = symbol_table.lookup_symbol(operand_trimmed) {
+        let target_address = symbol.address;
+
+        // Determine if this is a branch instruction (needs relative addressing)
+        let is_branch = matches!(
+            mnemonic,
+            "BCC" | "BCS" | "BEQ" | "BMI" | "BNE" | "BPL" | "BVC" | "BVS"
+        );
+
+        if is_branch {
+            // Calculate relative offset
+            // Branch offset is relative to the address of the next instruction
+            let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes
+            let offset = target_address as i32 - next_instruction_address as i32;
+
+            // Check if offset is in range (-128 to +127)
+            if offset < -128 || offset > 127 {
+                return Err(AssemblerError {
+                    error_type: ErrorType::RangeError,
+                    line: 0,
+                    column: 0,
+                    span: (0, 0),
+                    message: format!(
+                        "Branch to '{}' is out of range (offset: {}, must be -128 to +127)",
+                        operand_trimmed, offset
+                    ),
+                });
+            }
+
+            // Convert to unsigned byte (two's complement)
+            let offset_byte = (offset as i8) as u8;
+            Ok((crate::addressing::AddressingMode::Relative, offset_byte as u16))
+        } else {
+            // Absolute addressing for JMP, JSR, etc.
+            Ok((crate::addressing::AddressingMode::Absolute, target_address))
+        }
+    } else {
+        // Undefined label
+        Err(AssemblerError {
+            error_type: ErrorType::UndefinedLabel,
+            line: 0,
+            column: 0,
+            span: (0, 0),
+            message: format!("Undefined label '{}'", operand_trimmed),
+        })
+    }
 }
 
 /// Validate a label name according to 6502 conventions

@@ -128,6 +128,88 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
     })
 }
 
+/// Detect the addressing mode from operand syntax (for labels, assume Absolute/Relative)
+///
+/// Returns addressing mode without resolving values (for Pass 1 size calculation)
+pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, String> {
+    let operand = operand.trim();
+
+    if operand.is_empty() {
+        return Ok(AddressingMode::Implicit);
+    }
+
+    // Accumulator mode: just "A"
+    if operand.eq_ignore_ascii_case("A") {
+        return Ok(AddressingMode::Accumulator);
+    }
+
+    // Immediate: #$XX or #value
+    if operand.starts_with('#') {
+        return Ok(AddressingMode::Immediate);
+    }
+
+    // Indirect: ($XXXX)
+    if operand.starts_with('(') && operand.ends_with(')') && !operand.contains(',') {
+        return Ok(AddressingMode::Indirect);
+    }
+
+    // Indexed Indirect: ($XX,X)
+    if operand.starts_with('(') && operand.contains(",X)") {
+        return Ok(AddressingMode::IndirectX);
+    }
+
+    // Indirect Indexed: ($XX),Y
+    if operand.starts_with('(') && operand.contains("),Y") {
+        return Ok(AddressingMode::IndirectY);
+    }
+
+    // Indexed modes: $XXXX,X or $XXXX,Y
+    if operand.contains(",X") {
+        let comma_pos = operand.find(',').unwrap();
+        let addr_str = &operand[..comma_pos];
+
+        // Try to parse the value to determine zero-page vs absolute
+        if let Ok(addr) = parse_number(addr_str) {
+            if addr <= 0xFF {
+                return Ok(AddressingMode::ZeroPageX);
+            } else {
+                return Ok(AddressingMode::AbsoluteX);
+            }
+        }
+        // If it's a label, assume absolute
+        return Ok(AddressingMode::AbsoluteX);
+    }
+
+    if operand.contains(",Y") {
+        let comma_pos = operand.find(',').unwrap();
+        let addr_str = &operand[..comma_pos];
+
+        // Try to parse the value to determine zero-page vs absolute
+        if let Ok(addr) = parse_number(addr_str) {
+            if addr <= 0xFF {
+                return Ok(AddressingMode::ZeroPageY);
+            } else {
+                return Ok(AddressingMode::AbsoluteY);
+            }
+        }
+        // If it's a label, assume absolute
+        return Ok(AddressingMode::AbsoluteY);
+    }
+
+    // Plain value or label
+    if let Ok(value) = parse_number(operand) {
+        // Choose zero-page or absolute based on value
+        if value <= 0xFF {
+            Ok(AddressingMode::ZeroPage)
+        } else {
+            Ok(AddressingMode::Absolute)
+        }
+    } else {
+        // Must be a label - assume absolute (branches will be detected later)
+        Ok(AddressingMode::Absolute)
+    }
+}
+
 /// Detect the addressing mode from operand syntax
 ///
 /// Returns (addressing_mode, operand_value) where operand_value is the parsed number

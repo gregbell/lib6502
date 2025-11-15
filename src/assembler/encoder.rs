@@ -4,6 +4,31 @@ use crate::addressing::AddressingMode;
 use crate::assembler::{AssemblerError, ErrorType};
 use crate::opcodes::OPCODE_TABLE;
 
+/// Find the opcode metadata for a given mnemonic and addressing mode
+///
+/// Returns the opcode metadata or an error if the combination is invalid
+pub fn find_opcode_metadata(
+    mnemonic: &str,
+    mode: AddressingMode,
+) -> Result<&'static crate::opcodes::OpcodeMetadata, AssemblerError> {
+    for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
+        if metadata.mnemonic == mnemonic && metadata.addressing_mode == mode {
+            return Ok(&OPCODE_TABLE[opcode]);
+        }
+    }
+
+    Err(AssemblerError {
+        error_type: ErrorType::InvalidOperand,
+        line: 0,
+        column: 0,
+        span: (0, 0),
+        message: format!(
+            "No opcode found for {} with addressing mode {:?}",
+            mnemonic, mode
+        ),
+    })
+}
+
 /// Find the opcode for a given mnemonic and addressing mode
 ///
 /// Returns the opcode byte or an error if the combination is invalid
@@ -135,5 +160,52 @@ mod tests {
         let result = encode_instruction("LDA", AddressingMode::Immediate, 0x1234);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().error_type, ErrorType::RangeError);
+    }
+
+    // T080: Unit tests for branch offset calculation
+    #[test]
+    fn test_branch_offset_forward() {
+        // BEQ with offset +5 (branch forward)
+        // Offset is stored as signed byte
+        let bytes = encode_instruction("BEQ", AddressingMode::Relative, 5).unwrap();
+        assert_eq!(bytes, vec![0xF0, 0x05]);
+    }
+
+    #[test]
+    fn test_branch_offset_backward() {
+        // BEQ with offset -4 (branch backward)
+        // -4 in two's complement = 0xFC
+        let bytes = encode_instruction("BEQ", AddressingMode::Relative, 0xFC).unwrap();
+        assert_eq!(bytes, vec![0xF0, 0xFC]);
+    }
+
+    #[test]
+    fn test_branch_offset_zero() {
+        // BEQ with offset 0 (infinite loop)
+        let bytes = encode_instruction("BEQ", AddressingMode::Relative, 0).unwrap();
+        assert_eq!(bytes, vec![0xF0, 0x00]);
+    }
+
+    #[test]
+    fn test_branch_offset_max_forward() {
+        // BEQ with offset +127 (maximum forward branch)
+        let bytes = encode_instruction("BEQ", AddressingMode::Relative, 127).unwrap();
+        assert_eq!(bytes, vec![0xF0, 0x7F]);
+    }
+
+    #[test]
+    fn test_branch_offset_max_backward() {
+        // BEQ with offset -128 (maximum backward branch)
+        // -128 in two's complement = 0x80
+        let bytes = encode_instruction("BEQ", AddressingMode::Relative, 0x80).unwrap();
+        assert_eq!(bytes, vec![0xF0, 0x80]);
+    }
+
+    #[test]
+    fn test_find_opcode_metadata() {
+        let metadata = find_opcode_metadata("LDA", AddressingMode::Immediate).unwrap();
+        assert_eq!(metadata.mnemonic, "LDA");
+        assert_eq!(metadata.addressing_mode, AddressingMode::Immediate);
+        assert_eq!(metadata.size_bytes, 2);
     }
 }

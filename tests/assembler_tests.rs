@@ -209,3 +209,156 @@ fn test_symbol_table_access() {
 
 // T050: Integration test for structured Instruction data (already tested in disassembler_tests.rs)
 // The Instruction struct is already being validated in disassembler tests
+
+// ========== Phase 6: User Story 3 - Labels ==========
+
+// T062: Integration test for simple label definition and reference (JMP START)
+#[test]
+fn test_simple_label_definition_and_reference() {
+    let source = r#"
+START:
+    LDA #$42
+    JMP START
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Should successfully assemble with label");
+
+    let output = result.unwrap();
+
+    // Verify symbol table contains START label
+    assert_eq!(output.symbol_table.len(), 1, "Should have 1 label");
+    let symbol = output.lookup_symbol("START");
+    assert!(symbol.is_some(), "Should find START label");
+    let symbol = symbol.unwrap();
+    assert_eq!(symbol.name, "START");
+    assert_eq!(symbol.address, 0, "START should be at address 0");
+
+    // Verify bytes: LDA #$42 (A9 42) + JMP $0000 (4C 00 00)
+    assert_eq!(output.bytes, vec![0xA9, 0x42, 0x4C, 0x00, 0x00]);
+}
+
+// T063: Integration test for forward label reference
+#[test]
+fn test_forward_label_reference() {
+    let source = r#"
+    JMP END
+    LDA #$42
+END:
+    NOP
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Should successfully assemble with forward reference");
+
+    let output = result.unwrap();
+
+    // Verify symbol table contains END label
+    let symbol = output.lookup_symbol("END");
+    assert!(symbol.is_some(), "Should find END label");
+    let symbol = symbol.unwrap();
+    assert_eq!(symbol.address, 5, "END should be at address 5 (after JMP + LDA)");
+
+    // Verify JMP instruction targets correct address (0x0005)
+    // JMP $0005 = 4C 05 00 (little endian)
+    assert_eq!(output.bytes[0], 0x4C); // JMP opcode
+    assert_eq!(output.bytes[1], 0x05); // Low byte of address
+    assert_eq!(output.bytes[2], 0x00); // High byte of address
+}
+
+// T064: Integration test for relative branch to label (BEQ LOOP)
+#[test]
+fn test_relative_branch_to_label() {
+    let source = r#"
+LOOP:
+    LDA #$42
+    BEQ LOOP
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Should successfully assemble with branch to label");
+
+    let output = result.unwrap();
+
+    // Verify symbol table
+    let symbol = output.lookup_symbol("LOOP");
+    assert!(symbol.is_some());
+    assert_eq!(symbol.unwrap().address, 0);
+
+    // BEQ LOOP should branch back
+    // From address 2 (after LDA #$42), branch to address 0
+    // Offset = 0 - (2 + 2) = -4 = 0xFC in two's complement
+    assert_eq!(output.bytes[0], 0xA9); // LDA #$42
+    assert_eq!(output.bytes[1], 0x42);
+    assert_eq!(output.bytes[2], 0xF0); // BEQ opcode
+    assert_eq!(output.bytes[3], 0xFC); // Offset -4
+}
+
+// T065: Integration test for undefined label error
+#[test]
+fn test_undefined_label_error() {
+    let source = r#"
+    JMP UNDEFINED
+    LDA #$42
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail on undefined label");
+
+    let errors = result.unwrap_err();
+    assert!(errors.len() > 0);
+
+    // Should have an undefined label error
+    let undefined_errors = errors.iter()
+        .filter(|e| e.error_type == ErrorType::UndefinedLabel)
+        .count();
+    assert!(undefined_errors >= 1, "Should have undefined label error");
+}
+
+// T066: Integration test for duplicate label error
+#[test]
+fn test_duplicate_label_error() {
+    let source = r#"
+START:
+    LDA #$42
+START:
+    NOP
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail on duplicate label");
+
+    let errors = result.unwrap_err();
+    assert!(errors.len() > 0);
+
+    // Should have a duplicate label error
+    let duplicate_errors = errors.iter()
+        .filter(|e| e.error_type == ErrorType::DuplicateLabel)
+        .count();
+    assert!(duplicate_errors >= 1, "Should have duplicate label error");
+}
+
+// T067: Integration test for invalid label validation
+#[test]
+fn test_invalid_label_validation() {
+    // Test label starting with digit
+    let source1 = r#"
+1START:
+    LDA #$42
+"#;
+    let result = assemble(source1);
+    assert!(result.is_err(), "Should fail on label starting with digit");
+
+    // Test label that's too long (>32 chars)
+    let source2 = format!("{}:\n    LDA #$42", "A".repeat(33));
+    let result = assemble(&source2);
+    assert!(result.is_err(), "Should fail on label that's too long");
+
+    // Test label with invalid characters
+    let source3 = r#"
+MY-LABEL:
+    LDA #$42
+"#;
+    let result = assemble(source3);
+    assert!(result.is_err(), "Should fail on label with invalid characters");
+}
