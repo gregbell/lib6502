@@ -140,6 +140,8 @@ fn test_implemented_opcodes() {
     let ldx_opcodes = [0xA2, 0xA6, 0xAE, 0xB6, 0xBE];
     // LDY opcodes should be marked as implemented
     let ldy_opcodes = [0xA0, 0xA4, 0xAC, 0xB4, 0xBC];
+    // LSR opcodes should be marked as implemented
+    let lsr_opcodes = [0x46, 0x4A, 0x4E, 0x56, 0x5E];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -494,10 +496,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be LDY mnemonic",
                 opcode
             );
+        } else if lsr_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "LSR opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "LSR",
+                "Opcode 0x{:02X} should be LSR mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, and LDY opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, and LSR opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }
