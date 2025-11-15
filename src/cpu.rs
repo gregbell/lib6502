@@ -315,6 +315,9 @@ impl<M: MemoryBus> CPU<M> {
             "PLA" => {
                 crate::instructions::stack::execute_pla(self, opcode)?;
             }
+            "PLP" => {
+                crate::instructions::stack::execute_plp(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
