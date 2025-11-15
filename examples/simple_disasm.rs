@@ -1,12 +1,12 @@
 //! Basic disassembler usage example
 
-use cpu6502::disassembler::{disassemble, DisassemblyOptions};
 use cpu6502::disassembler::formatter::format_instruction;
+use cpu6502::disassembler::{disassemble, DisassemblyOptions};
 
 fn main() {
     // Example machine code bytes
     let code = &[
-        0xA9, 0x42,       // LDA #$42
+        0xA9, 0x42, // LDA #$42
         0x8D, 0x00, 0x80, // STA $8000
         0x4C, 0x00, 0x80, // JMP $8000
     ];

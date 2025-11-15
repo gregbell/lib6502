@@ -72,8 +72,7 @@ impl SourceMap {
 
     /// Finalize the source map (sort for binary search)
     pub fn finalize(&mut self) {
-        self.address_to_source
-            .sort_by_key(|(addr, _)| *addr);
+        self.address_to_source.sort_by_key(|(addr, _)| *addr);
         self.source_to_address.sort_by_key(|(line, _)| *line);
     }
 }
@@ -126,9 +125,27 @@ mod tests {
     fn test_source_map_reverse_lookup() {
         let mut map = SourceMap::new();
 
-        map.add_line_mapping(1, AddressRange { start: 0x8000, end: 0x8002 });
-        map.add_line_mapping(2, AddressRange { start: 0x8002, end: 0x8005 });
-        map.add_line_mapping(3, AddressRange { start: 0x8005, end: 0x8006 });
+        map.add_line_mapping(
+            1,
+            AddressRange {
+                start: 0x8000,
+                end: 0x8002,
+            },
+        );
+        map.add_line_mapping(
+            2,
+            AddressRange {
+                start: 0x8002,
+                end: 0x8005,
+            },
+        );
+        map.add_line_mapping(
+            3,
+            AddressRange {
+                start: 0x8005,
+                end: 0x8006,
+            },
+        );
 
         map.finalize();
 
@@ -156,7 +173,13 @@ mod tests {
                 length: 10,
             },
         );
-        map.add_line_mapping(1, AddressRange { start: 0x8000, end: 0x8002 });
+        map.add_line_mapping(
+            1,
+            AddressRange {
+                start: 0x8000,
+                end: 0x8002,
+            },
+        );
 
         map.add_mapping(
             0x8002,
@@ -166,7 +189,13 @@ mod tests {
                 length: 12,
             },
         );
-        map.add_line_mapping(2, AddressRange { start: 0x8002, end: 0x8005 });
+        map.add_line_mapping(
+            2,
+            AddressRange {
+                start: 0x8002,
+                end: 0x8005,
+            },
+        );
 
         map.finalize();
 
@@ -250,9 +279,18 @@ mod tests {
 
     #[test]
     fn test_address_range_equality() {
-        let range1 = AddressRange { start: 0x8000, end: 0x8002 };
-        let range2 = AddressRange { start: 0x8000, end: 0x8002 };
-        let range3 = AddressRange { start: 0x8000, end: 0x8005 };
+        let range1 = AddressRange {
+            start: 0x8000,
+            end: 0x8002,
+        };
+        let range2 = AddressRange {
+            start: 0x8000,
+            end: 0x8002,
+        };
+        let range3 = AddressRange {
+            start: 0x8000,
+            end: 0x8005,
+        };
 
         assert_eq!(range1, range2);
         assert_ne!(range1, range3);

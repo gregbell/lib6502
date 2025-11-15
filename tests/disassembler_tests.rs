@@ -1,8 +1,8 @@
 //! Integration tests for the 6502 disassembler
 
 use cpu6502::addressing::AddressingMode;
-use cpu6502::disassembler::{disassemble, DisassemblyOptions};
 use cpu6502::disassembler::formatter::format_instruction;
+use cpu6502::disassembler::{disassemble, DisassemblyOptions};
 
 // T015: Integration test for single instruction disassembly (LDA #$42)
 #[test]
@@ -28,7 +28,7 @@ fn test_single_instruction_disassembly() {
 #[test]
 fn test_multi_instruction_disassembly() {
     let bytes = &[
-        0xA9, 0x42,       // LDA #$42
+        0xA9, 0x42, // LDA #$42
         0x8D, 0x00, 0x80, // STA $8000
         0x4C, 0x00, 0x80, // JMP $8000
     ];
@@ -64,8 +64,8 @@ fn test_multi_instruction_disassembly() {
 fn test_illegal_opcode_handling() {
     let bytes = &[
         0xA9, 0x42, // LDA #$42 (valid)
-        0xFF,       // Illegal opcode
-        0xEA,       // NOP (valid)
+        0xFF, // Illegal opcode
+        0xEA, // NOP (valid)
     ];
 
     let instructions = disassemble(bytes, DisassemblyOptions::default());
@@ -90,7 +90,7 @@ fn test_illegal_opcode_handling() {
 #[test]
 fn test_starting_address_offset() {
     let bytes = &[
-        0xA9, 0x42,       // LDA #$42
+        0xA9, 0x42, // LDA #$42
         0x8D, 0x00, 0x80, // STA $8000
     ];
 
@@ -146,8 +146,8 @@ fn test_hex_dump_varying_lengths() {
     use cpu6502::disassembler::formatter::format_hex_dump;
 
     let bytes = &[
-        0xEA,             // NOP (1 byte)
-        0xA9, 0x42,       // LDA #$42 (2 bytes)
+        0xEA, // NOP (1 byte)
+        0xA9, 0x42, // LDA #$42 (2 bytes)
         0x8D, 0x00, 0x80, // STA $8000 (3 bytes)
     ];
 
@@ -165,20 +165,56 @@ fn test_hex_dump_varying_lengths() {
     assert_eq!(lines.len(), 3, "Should have 3 lines of output");
 
     // Check first line (1-byte instruction)
-    assert!(lines[0].contains("C000:"), "Line 1 should have address C000: {}", lines[0]);
-    assert!(lines[0].contains("EA"), "Line 1 should have NOP opcode: {}", lines[0]);
-    assert!(lines[0].contains("NOP"), "Line 1 should have NOP mnemonic: {}", lines[0]);
+    assert!(
+        lines[0].contains("C000:"),
+        "Line 1 should have address C000: {}",
+        lines[0]
+    );
+    assert!(
+        lines[0].contains("EA"),
+        "Line 1 should have NOP opcode: {}",
+        lines[0]
+    );
+    assert!(
+        lines[0].contains("NOP"),
+        "Line 1 should have NOP mnemonic: {}",
+        lines[0]
+    );
 
     // Check second line (2-byte instruction)
-    assert!(lines[1].contains("C001:"), "Line 2 should have address C001: {}", lines[1]);
-    assert!(lines[1].contains("A9 42"), "Line 2 should have LDA bytes: {}", lines[1]);
-    assert!(lines[1].contains("LDA #$42"), "Line 2 should have LDA mnemonic: {}", lines[1]);
+    assert!(
+        lines[1].contains("C001:"),
+        "Line 2 should have address C001: {}",
+        lines[1]
+    );
+    assert!(
+        lines[1].contains("A9 42"),
+        "Line 2 should have LDA bytes: {}",
+        lines[1]
+    );
+    assert!(
+        lines[1].contains("LDA #$42"),
+        "Line 2 should have LDA mnemonic: {}",
+        lines[1]
+    );
 
     // Check third line (3-byte instruction)
     // Address should be C003 (C000 + 1 byte NOP + 2 byte LDA = C003), not C004!
-    assert!(lines[2].contains("C003:"), "Line 3 should have address C003: {}", lines[2]);
-    assert!(lines[2].contains("8D 00 80"), "Line 3 should have STA bytes: {}", lines[2]);
-    assert!(lines[2].contains("STA $8000"), "Line 3 should have STA mnemonic: {}", lines[2]);
+    assert!(
+        lines[2].contains("C003:"),
+        "Line 3 should have address C003: {}",
+        lines[2]
+    );
+    assert!(
+        lines[2].contains("8D 00 80"),
+        "Line 3 should have STA bytes: {}",
+        lines[2]
+    );
+    assert!(
+        lines[2].contains("STA $8000"),
+        "Line 3 should have STA mnemonic: {}",
+        lines[2]
+    );
 }
 
 // T083: Integration test for hex dump with multi-line output and address increments
@@ -187,10 +223,10 @@ fn test_hex_dump_multiline_addresses() {
     use cpu6502::disassembler::formatter::format_hex_dump;
 
     let bytes = &[
-        0xA9, 0x01,       // LDA #$01 at 0x0000
-        0xA9, 0x02,       // LDA #$02 at 0x0002
-        0xA9, 0x03,       // LDA #$03 at 0x0004
-        0xA9, 0x04,       // LDA #$04 at 0x0006
+        0xA9, 0x01, // LDA #$01 at 0x0000
+        0xA9, 0x02, // LDA #$02 at 0x0002
+        0xA9, 0x03, // LDA #$03 at 0x0004
+        0xA9, 0x04, // LDA #$04 at 0x0006
     ];
 
     let options = DisassemblyOptions {

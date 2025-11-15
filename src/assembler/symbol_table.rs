@@ -19,7 +19,12 @@ impl SymbolTable {
     /// Add a symbol to the table
     ///
     /// Returns Ok(()) on success, Err with duplicate symbol if name already exists
-    pub fn add_symbol(&mut self, name: String, address: u16, defined_at: usize) -> Result<(), Symbol> {
+    pub fn add_symbol(
+        &mut self,
+        name: String,
+        address: u16,
+        defined_at: usize,
+    ) -> Result<(), Symbol> {
         // Check for duplicates
         if let Some(existing) = self.lookup_symbol(&name) {
             return Err(existing.clone());

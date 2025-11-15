@@ -184,7 +184,9 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                 });
             } else {
                 // Add to symbol table
-                if let Err(existing) = symbol_table.add_symbol(label.clone(), current_address, line.line_number) {
+                if let Err(existing) =
+                    symbol_table.add_symbol(label.clone(), current_address, line.line_number)
+                {
                     errors.push(AssemblerError {
                         error_type: ErrorType::DuplicateLabel,
                         line: line.line_number,
@@ -292,7 +294,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 
                     // Add words in little-endian format
                     for word in values {
-                        bytes.push((word & 0xFF) as u8);         // Low byte
+                        bytes.push((word & 0xFF) as u8); // Low byte
                         bytes.push(((word >> 8) & 0xFF) as u8); // High byte
                     }
 
@@ -437,7 +439,10 @@ fn resolve_operand(
         || operand_trimmed.starts_with('#')
         || operand_trimmed.starts_with('(')
         || operand_trimmed.starts_with('%')
-        || operand_trimmed.chars().next().map_or(false, |c| c.is_ascii_digit())
+        || operand_trimmed
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit())
     {
         // Parse as normal addressing mode
         return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
@@ -466,7 +471,7 @@ fn resolve_operand(
             let offset = target_address as i32 - next_instruction_address as i32;
 
             // Check if offset is in range (-128 to +127)
-            if offset < -128 || offset > 127 {
+            if !(-128..=127).contains(&offset) {
                 return Err(AssemblerError {
                     error_type: ErrorType::RangeError,
                     line: 0,
@@ -481,7 +486,10 @@ fn resolve_operand(
 
             // Convert to unsigned byte (two's complement)
             let offset_byte = (offset as i8) as u8;
-            Ok((crate::addressing::AddressingMode::Relative, offset_byte as u16))
+            Ok((
+                crate::addressing::AddressingMode::Relative,
+                offset_byte as u16,
+            ))
         } else {
             // Absolute addressing for JMP, JSR, etc.
             Ok((crate::addressing::AddressingMode::Absolute, target_address))
@@ -517,10 +525,7 @@ fn validate_label(name: &str) -> Result<(), String> {
     let first = chars.next().unwrap();
 
     if !first.is_ascii_alphabetic() {
-        return Err(format!(
-            "label must start with a letter, not '{}'",
-            first
-        ));
+        return Err(format!("label must start with a letter, not '{}'", first));
     }
 
     for ch in chars {

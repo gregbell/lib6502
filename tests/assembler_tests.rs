@@ -11,7 +11,11 @@ fn test_single_instruction_assembly() {
     assert!(result.is_ok(), "Assembly should succeed");
 
     let output = result.unwrap();
-    assert_eq!(output.bytes, vec![0xA9, 0x42], "Should assemble to LDA immediate");
+    assert_eq!(
+        output.bytes,
+        vec![0xA9, 0x42],
+        "Should assemble to LDA immediate"
+    );
 }
 
 // T029: Integration test for multi-line assembly
@@ -64,7 +68,11 @@ fn test_case_insensitive_and_whitespace() {
 
     for source in variations {
         let result = assemble(source);
-        assert!(result.is_ok(), "Should handle case and whitespace: '{}'", source);
+        assert!(
+            result.is_ok(),
+            "Should handle case and whitespace: '{}'",
+            source
+        );
         assert_eq!(result.unwrap().bytes, vec![0xA9, 0x42]);
     }
 }
@@ -105,13 +113,21 @@ fn test_multiple_error_collection() {
     assert!(result.is_err(), "Should fail on invalid mnemonics");
 
     let errors = result.unwrap_err();
-    assert!(errors.len() >= 2, "Should collect multiple errors, got {}", errors.len());
+    assert!(
+        errors.len() >= 2,
+        "Should collect multiple errors, got {}",
+        errors.len()
+    );
 
     // Should have at least the two invalid mnemonics
-    let invalid_mnemonics = errors.iter()
+    let invalid_mnemonics = errors
+        .iter()
         .filter(|e| e.error_type == ErrorType::InvalidMnemonic)
         .count();
-    assert!(invalid_mnemonics >= 2, "Should detect at least 2 invalid mnemonics");
+    assert!(
+        invalid_mnemonics >= 2,
+        "Should detect at least 2 invalid mnemonics"
+    );
 }
 
 // T046: Integration test for error reporting with line/column/span
@@ -249,7 +265,10 @@ END:
 "#;
 
     let result = assemble(source);
-    assert!(result.is_ok(), "Should successfully assemble with forward reference");
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble with forward reference"
+    );
 
     let output = result.unwrap();
 
@@ -257,7 +276,10 @@ END:
     let symbol = output.lookup_symbol("END");
     assert!(symbol.is_some(), "Should find END label");
     let symbol = symbol.unwrap();
-    assert_eq!(symbol.address, 5, "END should be at address 5 (after JMP + LDA)");
+    assert_eq!(
+        symbol.address, 5,
+        "END should be at address 5 (after JMP + LDA)"
+    );
 
     // Verify JMP instruction targets correct address (0x0005)
     // JMP $0005 = 4C 05 00 (little endian)
@@ -276,7 +298,10 @@ LOOP:
 "#;
 
     let result = assemble(source);
-    assert!(result.is_ok(), "Should successfully assemble with branch to label");
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble with branch to label"
+    );
 
     let output = result.unwrap();
 
@@ -309,7 +334,8 @@ fn test_undefined_label_error() {
     assert!(errors.len() > 0);
 
     // Should have an undefined label error
-    let undefined_errors = errors.iter()
+    let undefined_errors = errors
+        .iter()
         .filter(|e| e.error_type == ErrorType::UndefinedLabel)
         .count();
     assert!(undefined_errors >= 1, "Should have undefined label error");
@@ -332,7 +358,8 @@ START:
     assert!(errors.len() > 0);
 
     // Should have a duplicate label error
-    let duplicate_errors = errors.iter()
+    let duplicate_errors = errors
+        .iter()
         .filter(|e| e.error_type == ErrorType::DuplicateLabel)
         .count();
     assert!(duplicate_errors >= 1, "Should have duplicate label error");
@@ -360,7 +387,10 @@ MY-LABEL:
     LDA #$42
 "#;
     let result = assemble(source3);
-    assert!(result.is_err(), "Should fail on label with invalid characters");
+    assert!(
+        result.is_err(),
+        "Should fail on label with invalid characters"
+    );
 }
 
 // ========== Phase 8: User Story 5 - Comments and Directives ==========
@@ -377,7 +407,10 @@ NOP       ; No operation
 "#;
 
     let result = assemble(source);
-    assert!(result.is_ok(), "Should successfully assemble code with comments");
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble code with comments"
+    );
 
     let output = result.unwrap();
 
@@ -399,7 +432,10 @@ STA $8005
 "#;
 
     let result = assemble(source);
-    assert!(result.is_ok(), "Should successfully assemble with .org directive");
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble with .org directive"
+    );
 
     let output = result.unwrap();
 
@@ -408,7 +444,10 @@ STA $8005
 
     // Check source map reflects the org address
     let loc = output.get_source_location(0x8000);
-    assert!(loc.is_some(), "First instruction should be at $8000 due to .org");
+    assert!(
+        loc.is_some(),
+        "First instruction should be at $8000 due to .org"
+    );
 }
 
 // T091: Integration test for .byte directive inserting literal bytes
@@ -420,7 +459,10 @@ LDA #$FF
 "#;
 
     let result = assemble(source);
-    assert!(result.is_ok(), "Should successfully assemble with .byte directive");
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble with .byte directive"
+    );
 
     let output = result.unwrap();
 
@@ -442,7 +484,10 @@ LDA #$FF
 "#;
 
     let result = assemble(source);
-    assert!(result.is_ok(), "Should successfully assemble with .word directive");
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble with .word directive"
+    );
 
     let output = result.unwrap();
 
@@ -477,8 +522,12 @@ LDA #$42
     assert!(errors.len() > 0);
 
     // Should have an invalid directive error
-    let invalid_directive_errors = errors.iter()
+    let invalid_directive_errors = errors
+        .iter()
         .filter(|e| e.error_type == ErrorType::InvalidDirective)
         .count();
-    assert!(invalid_directive_errors >= 1, "Should have invalid directive error");
+    assert!(
+        invalid_directive_errors >= 1,
+        "Should have invalid directive error"
+    );
 }

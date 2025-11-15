@@ -164,11 +164,7 @@ pub fn parse_directive(line: &str) -> Result<crate::assembler::AssemblerDirectiv
 
     let parts: Vec<&str> = line.splitn(2, char::is_whitespace).collect();
     let directive_name = parts[0].trim().to_lowercase();
-    let args = if parts.len() > 1 {
-        parts[1].trim()
-    } else {
-        ""
-    };
+    let args = if parts.len() > 1 { parts[1].trim() } else { "" };
 
     match directive_name.as_str() {
         ".org" => parse_org_directive(args),
@@ -198,7 +194,10 @@ pub fn parse_byte_directive(args: &str) -> Result<crate::assembler::AssemblerDir
     for arg in args.split(',') {
         let val = parse_number(arg.trim())?;
         if val > 0xFF {
-            return Err(format!("Byte value ${:04X} is too large (must be 0-255)", val));
+            return Err(format!(
+                "Byte value ${:04X} is too large (must be 0-255)",
+                val
+            ));
         }
         values.push(val as u8);
     }

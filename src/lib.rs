@@ -62,7 +62,7 @@ mod instructions;
 pub use addressing::AddressingMode;
 pub use assembler::{assemble, AssemblerError, AssemblerOutput, ErrorType, Symbol};
 pub use cpu::CPU;
-pub use disassembler::{disassemble, Instruction, DisassemblyOptions};
+pub use disassembler::{disassemble, DisassemblyOptions, Instruction};
 pub use memory::{FlatMemory, MemoryBus};
 pub use opcodes::{OpcodeMetadata, OPCODE_TABLE};
 

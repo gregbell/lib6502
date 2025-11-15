@@ -33,7 +33,7 @@ pub struct Instruction {
 }
 
 /// Options controlling disassembly output
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DisassemblyOptions {
     /// Starting address for disassembly (affects address display)
     pub start_address: u16,
@@ -43,16 +43,6 @@ pub struct DisassemblyOptions {
 
     /// Whether to include byte offsets in output
     pub show_offsets: bool,
-}
-
-impl Default for DisassemblyOptions {
-    fn default() -> Self {
-        Self {
-            start_address: 0x0000,
-            hex_dump: false,
-            show_offsets: false,
-        }
-    }
 }
 
 /// Disassemble a byte slice into a vector of instructions
