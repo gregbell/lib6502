@@ -178,6 +178,61 @@ pub(crate) fn execute_cli<M: MemoryBus>(
     Ok(())
 }
 
+/// Executes the SEI (Set Interrupt Disable) instruction.
+///
+/// Sets the interrupt disable flag to 1, preventing the CPU from responding to IRQ interrupts.
+///
+/// Addressing Mode: Implied
+/// Opcode: 0x78
+/// Bytes: 1
+/// Cycles: 2
+///
+/// Flags affected:
+/// - I: Set to 1
+/// - All other flags: Unchanged
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this SEI instruction (0x78)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0x78); // SEI
+///
+/// let mut cpu = CPU::new(memory);
+/// cpu.set_flag_i(false); // Clear interrupt disable flag
+///
+/// cpu.step().unwrap();
+///
+/// assert_eq!(cpu.flag_i(), true); // Interrupt disable flag set
+/// assert_eq!(cpu.pc(), 0x8001);
+/// assert_eq!(cpu.cycles(), 2);
+/// ```
+pub(crate) fn execute_sei<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Set the interrupt disable flag
+    cpu.flag_i = true;
+
+    // Advance PC by instruction size (1 byte for implicit addressing)
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    // Add cycles (2 cycles for SEI)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
 /// Executes the CLD (Clear Decimal Mode) instruction.
 ///
 /// Sets the decimal mode flag to 0.
