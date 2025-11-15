@@ -233,6 +233,61 @@ pub(crate) fn execute_cld<M: MemoryBus>(
     Ok(())
 }
 
+/// Executes the SED (Set Decimal Mode) instruction.
+///
+/// Sets the decimal mode flag to 1.
+///
+/// Addressing Mode: Implied
+/// Opcode: 0xF8
+/// Bytes: 1
+/// Cycles: 2
+///
+/// Flags affected:
+/// - D: Set to 1
+/// - All other flags: Unchanged
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this SED instruction (0xF8)
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+///
+/// let mut memory = FlatMemory::new();
+/// memory.write(0xFFFC, 0x00);
+/// memory.write(0xFFFD, 0x80);
+/// memory.write(0x8000, 0xF8); // SED
+///
+/// let mut cpu = CPU::new(memory);
+/// cpu.set_flag_d(false); // Clear decimal mode flag
+///
+/// cpu.step().unwrap();
+///
+/// assert_eq!(cpu.flag_d(), true); // Decimal mode flag set
+/// assert_eq!(cpu.pc(), 0x8001);
+/// assert_eq!(cpu.cycles(), 2);
+/// ```
+pub(crate) fn execute_sed<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Set the decimal mode flag
+    cpu.flag_d = true;
+
+    // Advance PC by instruction size (1 byte for implicit addressing)
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    // Add cycles (2 cycles for SED)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    Ok(())
+}
+
 /// Executes the CLV (Clear Overflow Flag) instruction.
 ///
 /// Sets the overflow flag to 0.
