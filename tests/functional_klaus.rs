@@ -66,7 +66,7 @@ fn load_test_binary(path: &str) -> FlatMemory {
     // but we'll verify the reset vector points to our expected entry point
     let reset_low = memory.read(RESET_VECTOR_LOW);
     let reset_high = memory.read(RESET_VECTOR_HIGH);
-    let reset_vector = (reset_high as u16) << 8 | (reset_low as u16);
+    let reset_vector = ((reset_high as u16) << 8) | (reset_low as u16);
 
     // If the binary doesn't have the reset vector set correctly, set it manually
     if reset_vector != ENTRY_POINT {
@@ -129,7 +129,7 @@ fn run_until_loop(
             return Ok(current_pc);
         }
 
-        if verbose && (cpu.cycles() - start_cycles).is_multiple_of(100000) {
+        if verbose && (cpu.cycles() - start_cycles) % 100000 == 0 {
             println!(
                 "Progress: {} cycles, PC: ${:04X}",
                 cpu.cycles() - start_cycles,
