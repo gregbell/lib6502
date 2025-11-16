@@ -342,6 +342,9 @@ impl<M: MemoryBus> CPU<M> {
             "SEI" => {
                 crate::instructions::flags::execute_sei(self, opcode)?;
             }
+            "STA" => {
+                crate::instructions::load_store::execute_sta(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
@@ -757,7 +760,7 @@ impl<M: MemoryBus> CPU<M> {
 
     /// Gets the effective address for an instruction based on its addressing mode.
     ///
-    /// Used for instructions that need to write to memory (like ASL, ROL, etc.).
+    /// Used for instructions that need to write to memory (like ASL, ROL, STA, etc.).
     ///
     /// # Arguments
     ///
@@ -797,6 +800,40 @@ impl<M: MemoryBus> CPU<M> {
                 let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
                 let base_addr = (addr_hi << 8) | addr_lo;
                 let effective_addr = base_addr.wrapping_add(self.x as u16);
+                Ok(effective_addr)
+            }
+            AddressingMode::AbsoluteY => {
+                // 16-bit address + Y register
+                let addr_lo = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
+                let base_addr = (addr_hi << 8) | addr_lo;
+                let effective_addr = base_addr.wrapping_add(self.y as u16);
+                Ok(effective_addr)
+            }
+            AddressingMode::IndirectX => {
+                // (Zero page + X), then dereference
+                let base = self.memory.read(self.pc.wrapping_add(1));
+                let zp_addr = base.wrapping_add(self.x);
+
+                // Read 16-bit address from zero page (with wraparound)
+                let addr_lo = self.memory.read(zp_addr as u16) as u16;
+                let addr_hi = self.memory.read(zp_addr.wrapping_add(1) as u16) as u16;
+                let addr = (addr_hi << 8) | addr_lo;
+
+                Ok(addr)
+            }
+            AddressingMode::IndirectY => {
+                // Zero page dereference, then + Y
+                let zp_addr = self.memory.read(self.pc.wrapping_add(1));
+
+                // Read 16-bit base address from zero page
+                let addr_lo = self.memory.read(zp_addr as u16) as u16;
+                let addr_hi = self.memory.read(zp_addr.wrapping_add(1) as u16) as u16;
+                let base_addr = (addr_hi << 8) | addr_lo;
+
+                // Add Y register
+                let effective_addr = base_addr.wrapping_add(self.y as u16);
+
                 Ok(effective_addr)
             }
             _ => {
