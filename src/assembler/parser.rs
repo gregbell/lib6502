@@ -287,7 +287,16 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
 
         // Try to parse the value to determine zero-page vs absolute
         if let Ok(addr) = parse_number(addr_str) {
-            if addr <= 0xFF {
+            // Check the number of hex digits to distinguish zero-page from absolute
+            // This handles cases like $0013 (4 digits = absolute) vs $13 (2 digits = zero-page)
+            if addr_str.starts_with('$') {
+                let hex_part = &addr_str[1..];
+                if hex_part.len() <= 2 && addr <= 0xFF {
+                    return Ok(AddressingMode::ZeroPageX);
+                } else {
+                    return Ok(AddressingMode::AbsoluteX);
+                }
+            } else if addr <= 0xFF {
                 return Ok(AddressingMode::ZeroPageX);
             } else {
                 return Ok(AddressingMode::AbsoluteX);
@@ -303,7 +312,16 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
 
         // Try to parse the value to determine zero-page vs absolute
         if let Ok(addr) = parse_number(addr_str) {
-            if addr <= 0xFF {
+            // Check the number of hex digits to distinguish zero-page from absolute
+            // This handles cases like $0013 (4 digits = absolute) vs $13 (2 digits = zero-page)
+            if addr_str.starts_with('$') {
+                let hex_part = &addr_str[1..];
+                if hex_part.len() <= 2 && addr <= 0xFF {
+                    return Ok(AddressingMode::ZeroPageY);
+                } else {
+                    return Ok(AddressingMode::AbsoluteY);
+                }
+            } else if addr <= 0xFF {
                 return Ok(AddressingMode::ZeroPageY);
             } else {
                 return Ok(AddressingMode::AbsoluteY);
@@ -315,8 +333,16 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
 
     // Plain value or label
     if let Ok(value) = parse_number(&normalized) {
-        // Choose zero-page or absolute based on value
-        if value <= 0xFF {
+        // Choose zero-page or absolute based on value and hex digit count
+        // $0013 (4 digits) = absolute, $13 (2 digits) = zero-page
+        if normalized.starts_with('$') {
+            let hex_part = &normalized[1..];
+            if hex_part.len() <= 2 && value <= 0xFF {
+                return Ok(AddressingMode::ZeroPage);
+            } else {
+                return Ok(AddressingMode::Absolute);
+            }
+        } else if value <= 0xFF {
             Ok(AddressingMode::ZeroPage)
         } else {
             Ok(AddressingMode::Absolute)
@@ -378,8 +404,16 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
         let addr_str = &normalized[..comma_pos];
         let addr = parse_number(addr_str)?;
 
-        // Choose zero-page or absolute based on value
-        if addr <= 0xFF {
+        // Choose zero-page or absolute based on value and hex digit count
+        // $0013,X (4 digits) = absolute, $13,X (2 digits) = zero-page
+        if addr_str.starts_with('$') {
+            let hex_part = &addr_str[1..];
+            if hex_part.len() <= 2 && addr <= 0xFF {
+                return Ok((AddressingMode::ZeroPageX, addr));
+            } else {
+                return Ok((AddressingMode::AbsoluteX, addr));
+            }
+        } else if addr <= 0xFF {
             return Ok((AddressingMode::ZeroPageX, addr));
         } else {
             return Ok((AddressingMode::AbsoluteX, addr));
@@ -391,8 +425,16 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
         let addr_str = &normalized[..comma_pos];
         let addr = parse_number(addr_str)?;
 
-        // Choose zero-page or absolute based on value
-        if addr <= 0xFF {
+        // Choose zero-page or absolute based on value and hex digit count
+        // $0013,Y (4 digits) = absolute, $13,Y (2 digits) = zero-page
+        if addr_str.starts_with('$') {
+            let hex_part = &addr_str[1..];
+            if hex_part.len() <= 2 && addr <= 0xFF {
+                return Ok((AddressingMode::ZeroPageY, addr));
+            } else {
+                return Ok((AddressingMode::AbsoluteY, addr));
+            }
+        } else if addr <= 0xFF {
             return Ok((AddressingMode::ZeroPageY, addr));
         } else {
             return Ok((AddressingMode::AbsoluteY, addr));
@@ -402,8 +444,16 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
     // Plain address: $XXXX or value (could be zero-page, absolute, or relative)
     let value = parse_number(&normalized)?;
 
-    // Choose zero-page or absolute based on value
-    if value <= 0xFF {
+    // Choose zero-page or absolute based on value and hex digit count
+    // $0013 (4 digits) = absolute, $13 (2 digits) = zero-page
+    if normalized.starts_with('$') {
+        let hex_part = &normalized[1..];
+        if hex_part.len() <= 2 && value <= 0xFF {
+            Ok((AddressingMode::ZeroPage, value))
+        } else {
+            Ok((AddressingMode::Absolute, value))
+        }
+    } else if value <= 0xFF {
         Ok((AddressingMode::ZeroPage, value))
     } else {
         Ok((AddressingMode::Absolute, value))
