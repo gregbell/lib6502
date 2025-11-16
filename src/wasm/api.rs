@@ -3,8 +3,8 @@
 //! Provides JavaScript-callable interfaces for CPU control, state inspection,
 //! and assembly/disassembly operations.
 
+use crate::{assemble, disassemble, DisassemblyOptions, FlatMemory, MemoryBus, CPU};
 use wasm_bindgen::prelude::*;
-use crate::{CPU, FlatMemory, MemoryBus, assemble, disassemble, DisassemblyOptions};
 
 /// JavaScript-compatible error wrapper
 #[wasm_bindgen]
@@ -137,13 +137,15 @@ impl Emulator6502 {
 
     /// Execute a single instruction
     pub fn step(&mut self) -> Result<(), JsError> {
-        self.cpu.step()
+        self.cpu
+            .step()
             .map_err(|e| JsError::new(&format!("{:?}", e)))
     }
 
     /// Execute multiple cycles and return actual cycles executed
     pub fn run_for_cycles(&mut self, cycles: u32) -> Result<u32, JsError> {
-        self.cpu.run_for_cycles(cycles as u64)
+        self.cpu
+            .run_for_cycles(cycles as u64)
             .map(|c| c as u32)
             .map_err(|e| JsError::new(&format!("{:?}", e)))
     }
@@ -191,7 +193,7 @@ impl Emulator6502 {
 
     #[wasm_bindgen(getter)]
     pub fn cycles(&self) -> f64 {
-        self.cpu.cycles() as f64  // Convert u64 to f64 for JavaScript
+        self.cpu.cycles() as f64 // Convert u64 to f64 for JavaScript
     }
 
     // Flag getters
@@ -294,7 +296,9 @@ impl Emulator6502 {
 
     /// Disassemble memory starting at an address
     pub fn disassemble(&self, start_addr: u16, num_instructions: u32) -> Vec<JsValue> {
-        let memory_vec: Vec<u8> = (0..=0xFFFF).map(|addr| self.cpu.memory.read(addr)).collect();
+        let memory_vec: Vec<u8> = (0..=0xFFFF)
+            .map(|addr| self.cpu.memory.read(addr))
+            .collect();
 
         let opts = DisassemblyOptions {
             start_address: start_addr,
@@ -305,21 +309,27 @@ impl Emulator6502 {
         let instructions = disassemble(&memory_vec, opts);
 
         // Take only the requested number of instructions
-        instructions.iter().take(num_instructions as usize).map(|instr| {
-            let mut bytes = vec![instr.opcode];
-            bytes.extend_from_slice(&instr.operand_bytes);
+        instructions
+            .iter()
+            .take(num_instructions as usize)
+            .map(|instr| {
+                let mut bytes = vec![instr.opcode];
+                bytes.extend_from_slice(&instr.operand_bytes);
 
-            let line = DisassemblyLine {
-                address: instr.address,
-                bytes,
-                mnemonic: instr.mnemonic.to_string(),
-                operand: instr.operand_bytes.iter()
-                    .map(|b| format!("{:02X}", b))
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            };
-            JsValue::from(line)
-        }).collect()
+                let line = DisassemblyLine {
+                    address: instr.address,
+                    bytes,
+                    mnemonic: instr.mnemonic.to_string(),
+                    operand: instr
+                        .operand_bytes
+                        .iter()
+                        .map(|b| format!("{:02X}", b))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                };
+                JsValue::from(line)
+            })
+            .collect()
     }
 
     /// Get the program start address
