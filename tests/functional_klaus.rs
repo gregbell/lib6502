@@ -129,7 +129,7 @@ fn run_until_loop(
             return Ok(current_pc);
         }
 
-        if verbose && (cpu.cycles() - start_cycles) % 100000 == 0 {
+        if verbose && (cpu.cycles() - start_cycles).is_multiple_of(100000) {
             println!(
                 "Progress: {} cycles, PC: ${:04X}",
                 cpu.cycles() - start_cycles,
