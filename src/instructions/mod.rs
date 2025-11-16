@@ -24,6 +24,4 @@ pub mod inc_dec;
 pub mod load_store;
 pub mod shifts;
 pub mod stack;
-
-// Future modules (to be implemented):
-// pub mod transfer;
+pub mod transfer;
