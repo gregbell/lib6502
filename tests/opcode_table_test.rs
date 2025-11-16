@@ -174,6 +174,8 @@ fn test_implemented_opcodes() {
     let sta_opcodes = [0x81, 0x85, 0x8D, 0x91, 0x95, 0x99, 0x9D];
     // STX opcodes should be marked as implemented
     let stx_opcodes = [0x86, 0x8E, 0x96];
+    // STY opcodes should be marked as implemented
+    let sty_opcodes = [0x84, 0x8C, 0x94];
 
     for (opcode, metadata) in OPCODE_TABLE.iter().enumerate() {
         if adc_opcodes.contains(&(opcode as u8)) {
@@ -715,10 +717,21 @@ fn test_implemented_opcodes() {
                 "Opcode 0x{:02X} should be STX mnemonic",
                 opcode
             );
+        } else if sty_opcodes.contains(&(opcode as u8)) {
+            assert!(
+                metadata.implemented,
+                "STY opcode 0x{:02X} should be marked as implemented",
+                opcode
+            );
+            assert_eq!(
+                metadata.mnemonic, "STY",
+                "Opcode 0x{:02X} should be STY mnemonic",
+                opcode
+            );
         } else {
             assert!(
                 !metadata.implemented,
-                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, PHA, PHP, PLA, PLP, ROL, ROR, RTI, RTS, SBC, SEC, SED, SEI, STA, and STX opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
+                "Only ADC, AND, ASL, BCC, BCS, BEQ, BMI, BNE, BIT, BPL, BRK, BVC, BVS, CLC, CLD, CLI, CLV, CMP, CPX, CPY, DEC, DEX, DEY, EOR, INC, INX, INY, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, PHA, PHP, PLA, PLP, ROL, ROR, RTI, RTS, SBC, SEC, SED, SEI, STA, STX, and STY opcodes should be marked as implemented, but 0x{:02X} ({}) is marked",
                 opcode, metadata.mnemonic
             );
         }

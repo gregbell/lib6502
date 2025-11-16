@@ -348,6 +348,9 @@ impl<M: MemoryBus> CPU<M> {
             "STX" => {
                 crate::instructions::load_store::execute_stx(self, opcode)?;
             }
+            "STY" => {
+                crate::instructions::load_store::execute_sty(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
