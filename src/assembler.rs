@@ -266,10 +266,10 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                     current_address = *address;
                 }
                 AssemblerDirective::Byte { values } => {
-                    current_address += values.len() as u16;
+                    current_address = current_address.wrapping_add(values.len() as u16);
                 }
                 AssemblerDirective::Word { values } => {
-                    current_address += (values.len() * 2) as u16;
+                    current_address = current_address.wrapping_add((values.len() * 2) as u16);
                 }
             }
             continue;
@@ -298,14 +298,14 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 
         // Look up instruction size
         if let Ok(opcode_meta) = encoder::find_opcode_metadata(mnemonic, mode) {
-            current_address += opcode_meta.size_bytes as u16;
+            current_address = current_address.wrapping_add(opcode_meta.size_bytes as u16);
         } else {
             // Error will be caught in Pass 2
             // Branch instructions are always 2 bytes (opcode + relative offset)
             if is_branch_mnemonic(mnemonic) {
-                current_address += 2;
+                current_address = current_address.wrapping_add(2);
             } else {
-                current_address += 1;
+                current_address = current_address.wrapping_add(1);
             }
         }
     }
@@ -346,11 +346,11 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                         line.line_number,
                         source_map::AddressRange {
                             start: instruction_start_address,
-                            end: instruction_start_address + values.len() as u16,
+                            end: instruction_start_address.wrapping_add(values.len() as u16),
                         },
                     );
 
-                    current_address += values.len() as u16;
+                    current_address = current_address.wrapping_add(values.len() as u16);
                 }
                 AssemblerDirective::Word { values } => {
                     let instruction_start_address = current_address;
@@ -374,11 +374,11 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                         line.line_number,
                         source_map::AddressRange {
                             start: instruction_start_address,
-                            end: instruction_start_address + (values.len() * 2) as u16,
+                            end: instruction_start_address.wrapping_add((values.len() * 2) as u16),
                         },
                     );
 
-                    current_address += (values.len() * 2) as u16;
+                    current_address = current_address.wrapping_add((values.len() * 2) as u16);
                 }
             }
             continue;
@@ -444,12 +444,12 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                     line.line_number,
                     source_map::AddressRange {
                         start: instruction_start_address,
-                        end: instruction_start_address + instruction_size,
+                        end: instruction_start_address.wrapping_add(instruction_size),
                     },
                 );
 
                 bytes.extend(instruction_bytes);
-                current_address += instruction_size;
+                current_address = current_address.wrapping_add(instruction_size);
             }
             Err(mut e) => {
                 // Update error with correct line info
@@ -534,6 +534,9 @@ fn resolve_operand(
         return Ok((crate::addressing::AddressingMode::Accumulator, 0));
     }
 
+    // Check if this is a branch instruction
+    let is_branch = is_branch_mnemonic(mnemonic);
+
     // If it starts with a special character, it's not a plain label
     if operand_trimmed.starts_with('$')
         || operand_trimmed.starts_with('#')
@@ -544,7 +547,47 @@ fn resolve_operand(
             .next()
             .is_some_and(|c| c.is_ascii_digit())
     {
-        // Parse as normal addressing mode
+        // Special handling for branch instructions with numeric addresses
+        // Branch instructions only support relative addressing, so we need to
+        // calculate the offset from a numeric target address
+        if is_branch && !operand_trimmed.starts_with('#') && !operand_trimmed.starts_with('(') {
+            // Parse the target address (supports $hex, %binary, or decimal)
+            let target_address =
+                parser::parse_number(operand_trimmed).map_err(|e| AssemblerError {
+                    error_type: ErrorType::InvalidOperand,
+                    line: 0,
+                    column: 0,
+                    span: (0, 0),
+                    message: format!("Invalid branch target '{}': {}", operand, e),
+                })?;
+
+            // Calculate relative offset
+            let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes
+            let offset = target_address as i32 - next_instruction_address as i32;
+
+            // Check if offset is in range (-128 to +127)
+            if !(-128..=127).contains(&offset) {
+                return Err(AssemblerError {
+                    error_type: ErrorType::RangeError,
+                    line: 0,
+                    column: 0,
+                    span: (0, 0),
+                    message: format!(
+                        "Branch to ${:04X} is out of range (offset: {}, must be -128 to +127)",
+                        target_address, offset
+                    ),
+                });
+            }
+
+            // Convert to unsigned byte (two's complement)
+            let offset_byte = (offset as i8) as u8;
+            return Ok((
+                crate::addressing::AddressingMode::Relative,
+                offset_byte as u16,
+            ));
+        }
+
+        // Parse as normal addressing mode (non-branch instructions or immediate/indirect modes)
         return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
             error_type: ErrorType::InvalidOperand,
             line: 0,

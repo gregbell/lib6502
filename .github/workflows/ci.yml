@@ -47,6 +47,9 @@ jobs:
       - name: Run Klaus functional test
         run: cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture
 
+      - name: Run assembler/disassembler round-trip test
+        run: cargo test --test functional_assembler_disassembler klaus_assembler_disassembler_roundtrip -- --ignored --nocapture
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest

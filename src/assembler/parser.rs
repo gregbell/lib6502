@@ -287,7 +287,15 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
 
         // Try to parse the value to determine zero-page vs absolute
         if let Ok(addr) = parse_number(addr_str) {
-            if addr <= 0xFF {
+            // Check the number of hex digits to distinguish zero-page from absolute
+            // This handles cases like $0013 (4 digits = absolute) vs $13 (2 digits = zero-page)
+            if let Some(hex_part) = addr_str.strip_prefix('$') {
+                if hex_part.len() <= 2 && addr <= 0xFF {
+                    return Ok(AddressingMode::ZeroPageX);
+                } else {
+                    return Ok(AddressingMode::AbsoluteX);
+                }
+            } else if addr <= 0xFF {
                 return Ok(AddressingMode::ZeroPageX);
             } else {
                 return Ok(AddressingMode::AbsoluteX);
@@ -303,7 +311,15 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
 
         // Try to parse the value to determine zero-page vs absolute
         if let Ok(addr) = parse_number(addr_str) {
-            if addr <= 0xFF {
+            // Check the number of hex digits to distinguish zero-page from absolute
+            // This handles cases like $0013 (4 digits = absolute) vs $13 (2 digits = zero-page)
+            if let Some(hex_part) = addr_str.strip_prefix('$') {
+                if hex_part.len() <= 2 && addr <= 0xFF {
+                    return Ok(AddressingMode::ZeroPageY);
+                } else {
+                    return Ok(AddressingMode::AbsoluteY);
+                }
+            } else if addr <= 0xFF {
                 return Ok(AddressingMode::ZeroPageY);
             } else {
                 return Ok(AddressingMode::AbsoluteY);
@@ -315,8 +331,15 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
 
     // Plain value or label
     if let Ok(value) = parse_number(&normalized) {
-        // Choose zero-page or absolute based on value
-        if value <= 0xFF {
+        // Choose zero-page or absolute based on value and hex digit count
+        // $0013 (4 digits) = absolute, $13 (2 digits) = zero-page
+        if let Some(hex_part) = normalized.strip_prefix('$') {
+            if hex_part.len() <= 2 && value <= 0xFF {
+                Ok(AddressingMode::ZeroPage)
+            } else {
+                Ok(AddressingMode::Absolute)
+            }
+        } else if value <= 0xFF {
             Ok(AddressingMode::ZeroPage)
         } else {
             Ok(AddressingMode::Absolute)
@@ -378,8 +401,15 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
         let addr_str = &normalized[..comma_pos];
         let addr = parse_number(addr_str)?;
 
-        // Choose zero-page or absolute based on value
-        if addr <= 0xFF {
+        // Choose zero-page or absolute based on value and hex digit count
+        // $0013,X (4 digits) = absolute, $13,X (2 digits) = zero-page
+        if let Some(hex_part) = addr_str.strip_prefix('$') {
+            if hex_part.len() <= 2 && addr <= 0xFF {
+                return Ok((AddressingMode::ZeroPageX, addr));
+            } else {
+                return Ok((AddressingMode::AbsoluteX, addr));
+            }
+        } else if addr <= 0xFF {
             return Ok((AddressingMode::ZeroPageX, addr));
         } else {
             return Ok((AddressingMode::AbsoluteX, addr));
@@ -391,8 +421,15 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
         let addr_str = &normalized[..comma_pos];
         let addr = parse_number(addr_str)?;
 
-        // Choose zero-page or absolute based on value
-        if addr <= 0xFF {
+        // Choose zero-page or absolute based on value and hex digit count
+        // $0013,Y (4 digits) = absolute, $13,Y (2 digits) = zero-page
+        if let Some(hex_part) = addr_str.strip_prefix('$') {
+            if hex_part.len() <= 2 && addr <= 0xFF {
+                return Ok((AddressingMode::ZeroPageY, addr));
+            } else {
+                return Ok((AddressingMode::AbsoluteY, addr));
+            }
+        } else if addr <= 0xFF {
             return Ok((AddressingMode::ZeroPageY, addr));
         } else {
             return Ok((AddressingMode::AbsoluteY, addr));
@@ -402,8 +439,15 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
     // Plain address: $XXXX or value (could be zero-page, absolute, or relative)
     let value = parse_number(&normalized)?;
 
-    // Choose zero-page or absolute based on value
-    if value <= 0xFF {
+    // Choose zero-page or absolute based on value and hex digit count
+    // $0013 (4 digits) = absolute, $13 (2 digits) = zero-page
+    if let Some(hex_part) = normalized.strip_prefix('$') {
+        if hex_part.len() <= 2 && value <= 0xFF {
+            Ok((AddressingMode::ZeroPage, value))
+        } else {
+            Ok((AddressingMode::Absolute, value))
+        }
+    } else if value <= 0xFF {
         Ok((AddressingMode::ZeroPage, value))
     } else {
         Ok((AddressingMode::Absolute, value))
@@ -586,5 +630,82 @@ mod tests {
             }
             _ => panic!("Expected Word directive"),
         }
+    }
+
+    // Tests for hex digit count logic (discovered via Klaus round-trip test)
+    // This ensures that $13 (2 digits) is treated as zero page, while
+    // $0013 (4 digits) is treated as absolute, even when the value is the same.
+
+    #[test]
+    fn test_hex_digit_count_zero_page_x() {
+        // 2 hex digits → Zero Page,X
+        let (mode, value) = detect_addressing_mode("$13,X").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPageX);
+        assert_eq!(value, 0x13);
+    }
+
+    #[test]
+    fn test_hex_digit_count_absolute_x() {
+        // 4 hex digits → Absolute,X (even though value could fit in zero page)
+        let (mode, value) = detect_addressing_mode("$0013,X").unwrap();
+        assert_eq!(mode, AddressingMode::AbsoluteX);
+        assert_eq!(value, 0x0013);
+    }
+
+    #[test]
+    fn test_hex_digit_count_zero_page_y() {
+        // 2 hex digits → Zero Page,Y
+        let (mode, value) = detect_addressing_mode("$13,Y").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPageY);
+        assert_eq!(value, 0x13);
+    }
+
+    #[test]
+    fn test_hex_digit_count_absolute_y() {
+        // 4 hex digits → Absolute,Y (even though value could fit in zero page)
+        let (mode, value) = detect_addressing_mode("$0013,Y").unwrap();
+        assert_eq!(mode, AddressingMode::AbsoluteY);
+        assert_eq!(value, 0x0013);
+    }
+
+    #[test]
+    fn test_hex_digit_count_zero_page() {
+        // 2 hex digits → Zero Page
+        let (mode, value) = detect_addressing_mode("$13").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPage);
+        assert_eq!(value, 0x13);
+    }
+
+    #[test]
+    fn test_hex_digit_count_absolute() {
+        // 4 hex digits → Absolute (even though value could fit in zero page)
+        let (mode, value) = detect_addressing_mode("$0013").unwrap();
+        assert_eq!(mode, AddressingMode::Absolute);
+        assert_eq!(value, 0x0013);
+    }
+
+    #[test]
+    fn test_decimal_values_still_use_value_based_detection() {
+        // Decimal values still use value-based detection (no hex prefix)
+        let (mode, value) = detect_addressing_mode("19,X").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPageX); // 19 < 256 → zero page
+        assert_eq!(value, 19);
+
+        let (mode, value) = detect_addressing_mode("256,X").unwrap();
+        assert_eq!(mode, AddressingMode::AbsoluteX); // 256 >= 256 → absolute
+        assert_eq!(value, 256);
+    }
+
+    #[test]
+    fn test_hex_digit_count_with_leading_zeros() {
+        // 4 digits with leading zeros → Absolute
+        let (mode, value) = detect_addressing_mode("$0001").unwrap();
+        assert_eq!(mode, AddressingMode::Absolute);
+        assert_eq!(value, 0x0001);
+
+        // 2 digits → Zero Page
+        let (mode, value) = detect_addressing_mode("$01").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPage);
+        assert_eq!(value, 0x01);
     }
 }
