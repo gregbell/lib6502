@@ -44,7 +44,7 @@ impl AssemblerOutput {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::assembler::assemble;
+    /// use lib6502::assembler::assemble;
     ///
     /// let source = "START:\n    LDA #$42";
     /// let output = assemble(source).unwrap();
@@ -504,7 +504,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 /// # Examples
 ///
 /// ```
-/// use cpu6502::assembler::assemble_with_origin;
+/// use lib6502::assembler::assemble_with_origin;
 ///
 /// let source = "START:\n    LDA #$42";
 /// let output = assemble_with_origin(source, 0x8000).unwrap();
@@ -621,7 +621,7 @@ fn resolve_operand(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::assembler::validate_label;
+/// use lib6502::assembler::validate_label;
 ///
 /// assert!(validate_label("START").is_ok());
 /// assert!(validate_label("loop_1").is_ok());

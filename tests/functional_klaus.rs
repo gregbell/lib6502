@@ -21,7 +21,7 @@
 //! The listing file (`6502_functional_test.lst`) can be used to identify which
 //! specific test failed based on the final PC value.
 
-use cpu6502::{FlatMemory, MemoryBus, CPU};
+use lib6502::{FlatMemory, MemoryBus, CPU};
 use std::fs::File;
 use std::io::Read;
 

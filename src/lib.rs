@@ -10,7 +10,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use cpu6502::{CPU, FlatMemory, MemoryBus};
+//! use lib6502::{CPU, FlatMemory, MemoryBus};
 //!
 //! // Create 64KB flat memory
 //! let mut memory = FlatMemory::new();

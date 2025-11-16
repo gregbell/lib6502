@@ -228,7 +228,7 @@ pub(crate) fn execute_jsr<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -300,7 +300,7 @@ pub(crate) fn execute_nop<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -405,7 +405,7 @@ pub(crate) fn execute_rti<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);

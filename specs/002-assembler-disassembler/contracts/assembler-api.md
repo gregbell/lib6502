@@ -1,6 +1,6 @@
 # Assembler API Contract
 
-**Module**: `cpu6502::assembler`
+**Module**: `lib6502::assembler`
 **Version**: 0.1.0
 
 ## Public API
@@ -39,7 +39,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>>
 
 **Example**:
 ```rust
-use cpu6502::assembler::assemble;
+use lib6502::assembler::assemble;
 
 let source = r#"
 START:
@@ -325,7 +325,7 @@ All functions are thread-safe (no shared mutable state). Multiple threads can as
 ## Example: Full Assembly Flow
 
 ```rust
-use cpu6502::assembler::{assemble, AssemblerOutput};
+use lib6502::assembler::{assemble, AssemblerOutput};
 
 let source = r#"
 ; Simple loop example

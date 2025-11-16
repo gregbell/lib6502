@@ -1,6 +1,6 @@
 //! Integration tests for the 6502 assembler
 
-use cpu6502::assembler::{assemble, ErrorType};
+use lib6502::assembler::{assemble, ErrorType};
 
 // T028: Integration test for single instruction assembly (LDA #$42)
 #[test]

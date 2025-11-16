@@ -2,7 +2,7 @@
 //!
 //! Verifies that the opcode metadata table is complete and accurate.
 
-use cpu6502::{AddressingMode, OPCODE_TABLE};
+use lib6502::{AddressingMode, OPCODE_TABLE};
 
 #[test]
 fn test_opcode_table_completeness() {

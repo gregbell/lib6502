@@ -35,7 +35,7 @@ use crate::{ExecutionError, MemoryBus, OPCODE_TABLE};
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// // Create memory and set reset vector
 /// let mut memory = FlatMemory::new();
@@ -112,7 +112,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{CPU, FlatMemory, MemoryBus};
+    /// use lib6502::{CPU, FlatMemory, MemoryBus};
     ///
     /// let mut mem = FlatMemory::new();
     /// mem.write(0xFFFC, 0x00);
@@ -165,7 +165,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{CPU, FlatMemory, MemoryBus, ExecutionError};
+    /// use lib6502::{CPU, FlatMemory, MemoryBus, ExecutionError};
     ///
     /// let mut mem = FlatMemory::new();
     /// mem.write(0xFFFC, 0x00);
@@ -401,7 +401,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{CPU, FlatMemory, MemoryBus};
+    /// use lib6502::{CPU, FlatMemory, MemoryBus};
     ///
     /// let mut mem = FlatMemory::new();
     /// mem.write(0xFFFC, 0x00);
@@ -435,7 +435,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{CPU, FlatMemory, MemoryBus};
+    /// use lib6502::{CPU, FlatMemory, MemoryBus};
     ///
     /// let mut mem = FlatMemory::new();
     /// mem.write(0xFFFC, 0x00);
@@ -485,7 +485,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{CPU, FlatMemory, MemoryBus};
+    /// use lib6502::{CPU, FlatMemory, MemoryBus};
     ///
     /// let mut mem = FlatMemory::new();
     /// mem.write(0xFFFC, 0x00);
@@ -574,7 +574,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{CPU, FlatMemory, MemoryBus};
+    /// use lib6502::{CPU, FlatMemory, MemoryBus};
     ///
     /// let mut mem = FlatMemory::new();
     /// mem.write(0xFFFC, 0x00);
@@ -650,7 +650,7 @@ impl<M: MemoryBus> CPU<M> {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{CPU, FlatMemory, MemoryBus};
+    /// use lib6502::{CPU, FlatMemory, MemoryBus};
     ///
     /// let mut mem = FlatMemory::new();
     /// mem.write(0xFFFC, 0x00);

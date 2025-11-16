@@ -1,7 +1,7 @@
 //! Basic disassembler usage example
 
-use cpu6502::disassembler::formatter::format_instruction;
-use cpu6502::disassembler::{disassemble, DisassemblyOptions};
+use lib6502::disassembler::formatter::format_instruction;
+use lib6502::disassembler::{disassemble, DisassemblyOptions};
 
 fn main() {
     // Example machine code bytes

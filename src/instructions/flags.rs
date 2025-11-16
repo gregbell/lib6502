@@ -34,7 +34,7 @@ use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -89,7 +89,7 @@ pub(crate) fn execute_clc<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -144,7 +144,7 @@ pub(crate) fn execute_sec<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -199,7 +199,7 @@ pub(crate) fn execute_cli<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -254,7 +254,7 @@ pub(crate) fn execute_sei<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -309,7 +309,7 @@ pub(crate) fn execute_cld<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -364,7 +364,7 @@ pub(crate) fn execute_sed<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);

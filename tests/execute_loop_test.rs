@@ -2,7 +2,7 @@
 //!
 //! Verifies fetch-decode-execute cycle, error handling, and cycle counting.
 
-use cpu6502::{ExecutionError, FlatMemory, MemoryBus, CPU};
+use lib6502::{ExecutionError, FlatMemory, MemoryBus, CPU};
 
 #[test]
 fn test_step_returns_unimplemented_error() {

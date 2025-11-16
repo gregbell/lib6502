@@ -399,7 +399,7 @@ pub implemented: bool,
 ### Basic CPU Initialization and Execution
 
 ```rust
-use cpu6502::{CPU, FlatMemory, ExecutionError};
+use lib6502::{CPU, FlatMemory, ExecutionError};
 
 fn main() -> Result<(), ExecutionError> {
     // Create 64KB flat memory
@@ -436,7 +436,7 @@ fn main() -> Result<(), ExecutionError> {
 ### Frame-Locked Execution
 
 ```rust
-use cpu6502::{CPU, FlatMemory};
+use lib6502::{CPU, FlatMemory};
 
 fn emulate_ntsc_frame(cpu: &mut CPU<FlatMemory>) {
     const CYCLES_PER_FRAME: u64 = 29780; // ~1.79 MHz / 60 Hz
@@ -455,7 +455,7 @@ fn emulate_ntsc_frame(cpu: &mut CPU<FlatMemory>) {
 ### Custom Memory Bus Implementation
 
 ```rust
-use cpu6502::MemoryBus;
+use lib6502::MemoryBus;
 
 /// Memory bus with mirrored zero page (0x0000-0x00FF mirrored to 0x0100-0x01FF).
 struct MirroredMemory {
