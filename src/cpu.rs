@@ -345,6 +345,9 @@ impl<M: MemoryBus> CPU<M> {
             "STA" => {
                 crate::instructions::load_store::execute_sta(self, opcode)?;
             }
+            "STX" => {
+                crate::instructions::load_store::execute_stx(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
@@ -785,6 +788,12 @@ impl<M: MemoryBus> CPU<M> {
                 // Address is (zero page + X register) mod 256
                 let base = self.memory.read(self.pc.wrapping_add(1));
                 let addr = base.wrapping_add(self.x) as u16;
+                Ok(addr)
+            }
+            AddressingMode::ZeroPageY => {
+                // Address is (zero page + Y register) mod 256
+                let base = self.memory.read(self.pc.wrapping_add(1));
+                let addr = base.wrapping_add(self.y) as u16;
                 Ok(addr)
             }
             AddressingMode::Absolute => {
