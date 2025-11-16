@@ -18,8 +18,9 @@ A developer or 6502 enthusiast visits the demo site to write simple 6502 assembl
 **Acceptance Scenarios**:
 
 1. **Given** the demo page is loaded, **When** user types valid assembly code in the left editor, **Then** the code is displayed with syntax highlighting
-2. **Given** valid assembly code is entered, **When** user clicks the "Run" button, **Then** the code executes and registers update in real-time
-3. **Given** code is executing, **When** the program completes, **Then** the final CPU state is visible in the register display
+2. **Given** valid assembly code is entered, **When** user clicks "Assemble", **Then** the program is assembled and loaded into memory without executing
+3. **Given** an assembled program is loaded, **When** user clicks "Run", **Then** the code executes and registers update in real-time
+4. **Given** code is executing, **When** the program completes, **Then** the final CPU state is visible in the register display
 
 ---
 
@@ -105,7 +106,7 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 
 ### Edge Cases
 
-- What happens when user enters invalid assembly syntax (e.g., `LDA #$XYZ`)? System should display a clear error message without crashing.
+- What happens when user enters invalid assembly syntax (e.g., `LDA #$XYZ`)? System displays error in dedicated error panel; editor remains editable; any previously assembled program stays in memory and can still be run.
 - What happens when a program enters an infinite loop? System should provide a "Stop" button to halt execution and a cycle counter to detect runaway programs.
 - What happens when user tries to execute an empty program? System should either prevent execution or display a message indicating no code to run.
 - What happens when user rapidly clicks "Step" many times? System should queue or debounce inputs to prevent UI freezing.
@@ -122,11 +123,13 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 
 - **FR-001**: System MUST compile the lib6502 Rust library to WebAssembly and expose a JavaScript API for CPU control (step, run, reset, read registers)
 - **FR-002**: System MUST provide a text editor on the left side of the interface where users can type 6502 assembly code
-- **FR-003**: System MUST assemble user-provided assembly code into 6502 machine code before execution
+- **FR-003**: System MUST provide an explicit "Assemble" button that converts user assembly code to machine code and loads it into emulator memory
+- **FR-003a**: Assembled program MUST persist across Step and Run operations until user modifies the source code or clicks Reset
 - **FR-004**: System MUST display all CPU registers (A, X, Y, PC, SP) with their current hexadecimal values
 - **FR-005**: System MUST display all processor status flags (N, V, D, I, Z, C) as binary or boolean indicators
 - **FR-006**: System MUST display the current cycle count during program execution
 - **FR-007**: System MUST provide a "Run" button that executes the entire program until completion or halt
+- **FR-007a**: Program completion is detected when PC reaches the end of assembled code range or executes an explicit halt instruction (BRK)
 - **FR-008**: System MUST provide a "Step" button that executes exactly one instruction and updates display
 - **FR-009**: System MUST provide a "Reset" button that restores CPU to initial state and reloads the program
 - **FR-010**: System MUST provide a "Stop" button to halt a running program mid-execution
@@ -136,15 +139,18 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 
 #### User Interface Requirements
 
-- **FR-011**: Interface MUST use a split-panel layout with assembly editor on the left and CPU state display on the right
+- **FR-011**: Interface MUST use a split-panel layout with assembly editor on the left and CPU state (registers, flags, memory viewer) on the right
+- **FR-011a**: Right panel layout is flexible: registers and memory can be stacked vertically, placed in a scrollable area, or split horizontally as appropriate for design
 - **FR-012**: Assembly editor MUST provide basic syntax highlighting for 6502 mnemonics and operands
 - **FR-013**: CPU register display MUST update in real-time as instructions execute
 - **FR-014**: Interface MUST be responsive and functional on desktop browsers (mobile support optional)
 - **FR-015**: Design MUST be minimal and clean, prioritizing readability and ease of use over visual complexity
 - **FR-016**: System MUST provide 2-3 example programs that users can load with one click
 - **FR-017**: System MUST provide a memory viewer that displays memory contents in hexadecimal format
+- **FR-017a**: Memory viewer MUST use virtual scrolling/windowing to render only visible rows for performance with 64KB address space
 - **FR-018**: Memory viewer MUST allow users to navigate to specific memory addresses
 - **FR-019**: Memory viewer MUST update in real-time when memory contents change during execution
+- **FR-019a**: Memory viewer updates MUST only re-render changed bytes per frame to maintain performance during rapid execution
 - **FR-020**: Memory viewer SHOULD highlight or indicate recently modified memory locations
 
 #### Deployment Requirements
@@ -157,6 +163,7 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 #### Error Handling
 
 - **FR-025**: System MUST validate assembly code syntax before execution and display clear error messages for invalid syntax
+- **FR-025a**: When assembly fails, system MUST display error in a dedicated error panel while keeping editor editable and preserving any previously assembled program in memory
 - **FR-026**: System MUST handle and display errors gracefully without crashing the browser tab
 - **FR-027**: System MUST detect and handle infinite loops (e.g., via iteration limit or stop button)
 
@@ -232,6 +239,18 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 - GitHub Pages enabled on the repository
 - Modern text editor component for assembly code input (could be textarea or lightweight library)
 
+## Clarifications
+
+### Session 2025-11-16
+
+- Q: The spec mentions assembly code needs to be "assembled into 6502 machine code" but doesn't specify what happens to the assembled program between assembly and execution, especially for reset/step scenarios. → A: Assemble is explicit and separate; assembled program persists until code changes or reset
+- Q: The spec mentions a memory viewer (FR-017 to FR-020, User Story 5) but doesn't clarify whether it's always visible alongside registers or accessed separately (tab/panel/toggle). → A: Memory viewer is always visible, but layout flexible (registers and memory can share space via stacking, scrolling, or horizontal split within the right panel)
+- Q: The spec mentions "System MUST validate assembly code syntax before execution and display clear error messages for invalid syntax" (FR-025), but doesn't specify what happens to the UI state when assembly fails. → A: Show error in dedicated error panel; editor remains editable; previously assembled program (if any) stays in memory
+- Q: The spec requires real-time memory viewer updates (FR-019) for a 64KB address space, but doesn't specify performance constraints or rendering strategy for displaying all 65,536 bytes. → A: Virtual scrolling/windowing (render only visible rows); update only changed bytes per frame
+- Q: The spec mentions programs execute "until completion or halt" (FR-007) but doesn't specify how the system detects completion for programs without an explicit halt instruction. → A: Detect when PC reaches end of assembled code range; treat as implicit completion
+
+---
+
 ## Resolved Questions
 
 ### Execution Speed (RESOLVED)
@@ -263,4 +282,3 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 ## Open Questions
 
 - Program size limits: What is the maximum reasonable program size for the editor? (Assumption: limit to ~200 lines to maintain simplicity)
-- Memory viewer format: Should memory be displayed as a scrollable hex dump, paged view, or with configurable address ranges? (Current plan: scrollable hex dump with virtual scrolling)
