@@ -60,8 +60,14 @@ The `get_operand_value()` helper handles all addressing modes and returns `(valu
 # Build the library
 cargo build
 
-# Run all tests (unit + integration)
+# Run fast tests (TDD workflow - skips slow functional test)
 cargo test
+
+# Run all tests including slow functional test
+cargo test -- --include-ignored
+
+# Run only the Klaus functional test
+cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture
 
 # Run a specific test
 cargo test test_name
@@ -78,6 +84,25 @@ cargo fmt
 # Run examples
 cargo run --example simple_ram
 ```
+
+## Test Suites
+
+The project has two test categories:
+
+**Fast Tests** (default: `cargo test`)
+- 1,470+ unit and integration tests
+- Complete in ~2 seconds
+- Perfect for TDD workflow
+- Run automatically on every `cargo test`
+
+**Functional Tests** (run with `--ignored`)
+- Klaus Dormann's 6502 functional test (~6 seconds)
+- Validates all 151 opcodes with 96M+ instruction cycles
+- Marked as `#[ignore]` to skip during TDD
+- Run explicitly with: `cargo test -- --ignored`
+- CI runs both test suites separately
+
+See [docs/KLAUS_FUNCTIONAL_TEST.md](docs/KLAUS_FUNCTIONAL_TEST.md) for details.
 
 ## Testing Patterns
 
