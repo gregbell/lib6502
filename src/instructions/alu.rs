@@ -486,21 +486,21 @@ pub(crate) fn execute_sbc<M: MemoryBus>(
         // Each nibble represents a decimal digit (0-9)
         // Need to adjust when borrowing occurs
 
-        let borrow_in = 1 - carry_in;  // SBC uses inverted carry as borrow
+        let borrow_in = 1 - carry_in; // SBC uses inverted carry as borrow
 
         // Subtract low nibbles (ones digit)
         let mut al = (a & 0x0F) as i16 - (value & 0x0F) as i16 - borrow_in as i16;
         if al < 0 {
-            al -= 6;  // Adjust for decimal borrow (difference between binary and decimal)
+            al -= 6; // Adjust for decimal borrow (difference between binary and decimal)
         }
 
         // Subtract high nibbles (tens digit)
         let mut ah = (a >> 4) as i16 - (value >> 4) as i16;
         if al < 0 {
-            ah -= 1;  // Borrow from high nibble
+            ah -= 1; // Borrow from high nibble
         }
         if ah < 0 {
-            ah -= 6;  // Adjust for decimal borrow
+            ah -= 6; // Adjust for decimal borrow
         }
 
         // Set carry flag: true if no borrow, false if borrow
