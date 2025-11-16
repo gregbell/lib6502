@@ -360,6 +360,9 @@ impl<M: MemoryBus> CPU<M> {
             "TSX" => {
                 crate::instructions::transfer::execute_tsx(self, opcode)?;
             }
+            "TXA" => {
+                crate::instructions::transfer::execute_txa(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
