@@ -447,6 +447,11 @@ fn resolve_operand(
     // Check if operand is a label reference (no prefix like $, #, (, etc.)
     let operand_trimmed = operand.trim();
 
+    // Check for accumulator mode first (case-insensitive "A")
+    if operand_trimmed.eq_ignore_ascii_case("A") {
+        return Ok((crate::addressing::AddressingMode::Accumulator, 0));
+    }
+
     // If it starts with a special character, it's not a plain label
     if operand_trimmed.starts_with('$')
         || operand_trimmed.starts_with('#')

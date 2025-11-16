@@ -339,7 +339,10 @@ FORWARD:
 
     // Verify symbol table - FORWARD should be at address 3
     let symbol = output.lookup_symbol("FORWARD");
-    assert!(symbol.is_some(), "FORWARD label should exist in symbol table");
+    assert!(
+        symbol.is_some(),
+        "FORWARD label should exist in symbol table"
+    );
     assert_eq!(
         symbol.unwrap().address,
         3,
@@ -348,8 +351,8 @@ FORWARD:
 
     // Verify assembled bytes
     assert_eq!(output.bytes[0], 0xF0); // BEQ opcode
-    // From address 0, branch to address 3
-    // Offset = 3 - (0 + 2) = 1
+                                       // From address 0, branch to address 3
+                                       // Offset = 3 - (0 + 2) = 1
     assert_eq!(output.bytes[1], 0x01); // Offset +1
     assert_eq!(output.bytes[2], 0xEA); // NOP opcode
     assert_eq!(output.bytes[3], 0xA9); // LDA #$42
@@ -566,5 +569,165 @@ LDA #$42
     assert!(
         invalid_directive_errors >= 1,
         "Should have invalid directive error"
+    );
+}
+
+// ========== Tests for Case-Insensitive Operands and Whitespace Tolerance ==========
+
+// Test lowercase register names in indexed modes
+#[test]
+fn test_lowercase_register_indexed_modes() {
+    // ZeroPageX with lowercase
+    let source1 = "lda $10,x";
+    let result1 = assemble(source1);
+    assert!(result1.is_ok(), "Should handle lowercase ,x: {:?}", result1);
+    let output1 = result1.unwrap();
+    assert_eq!(output1.bytes[0], 0xB5); // LDA ZeroPageX opcode
+    assert_eq!(output1.bytes[1], 0x10);
+
+    // AbsoluteX with lowercase
+    let source2 = "lda $1234,x";
+    let result2 = assemble(source2);
+    assert!(
+        result2.is_ok(),
+        "Should handle lowercase ,x in absolute: {:?}",
+        result2
+    );
+    let output2 = result2.unwrap();
+    assert_eq!(output2.bytes[0], 0xBD); // LDA AbsoluteX opcode
+
+    // ZeroPageY with lowercase
+    let source3 = "ldx $10,y";
+    let result3 = assemble(source3);
+    assert!(result3.is_ok(), "Should handle lowercase ,y: {:?}", result3);
+    let output3 = result3.unwrap();
+    assert_eq!(output3.bytes[0], 0xB6); // LDX ZeroPageY opcode
+}
+
+#[test]
+fn test_lowercase_register_indirect_modes() {
+    // IndirectX with lowercase
+    let source1 = "lda ($20,x)";
+    let result1 = assemble(source1);
+    assert!(
+        result1.is_ok(),
+        "Should handle lowercase ($20,x): {:?}",
+        result1
+    );
+    let output1 = result1.unwrap();
+    assert_eq!(output1.bytes[0], 0xA1); // LDA IndirectX opcode
+    assert_eq!(output1.bytes[1], 0x20);
+
+    // IndirectY with lowercase
+    let source2 = "lda ($20),y";
+    let result2 = assemble(source2);
+    assert!(
+        result2.is_ok(),
+        "Should handle lowercase ($20),y: {:?}",
+        result2
+    );
+    let output2 = result2.unwrap();
+    assert_eq!(output2.bytes[0], 0xB1); // LDA IndirectY opcode
+    assert_eq!(output2.bytes[1], 0x20);
+}
+
+#[test]
+fn test_lowercase_accumulator_mode() {
+    // Accumulator mode with lowercase 'a'
+    let source = "asl a";
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Should handle lowercase 'a' for accumulator: {:?}",
+        result
+    );
+    let output = result.unwrap();
+    assert_eq!(output.bytes[0], 0x0A); // ASL Accumulator opcode
+}
+
+// Test whitespace tolerance around commas and parentheses
+#[test]
+fn test_whitespace_around_comma_indexed() {
+    // Space before comma
+    let source1 = "lda $10 ,x";
+    let result1 = assemble(source1);
+    assert!(
+        result1.is_ok(),
+        "Should handle space before comma: {:?}",
+        result1
+    );
+
+    // Space after comma
+    let source2 = "lda $10, x";
+    let result2 = assemble(source2);
+    assert!(
+        result2.is_ok(),
+        "Should handle space after comma: {:?}",
+        result2
+    );
+
+    // Spaces both sides
+    let source3 = "lda $10 , x";
+    let result3 = assemble(source3);
+    assert!(
+        result3.is_ok(),
+        "Should handle spaces around comma: {:?}",
+        result3
+    );
+}
+
+#[test]
+fn test_whitespace_in_indirect_modes() {
+    // IndirectX with spaces
+    let source1 = "lda ( $20 , x )";
+    let result1 = assemble(source1);
+    assert!(
+        result1.is_ok(),
+        "Should handle spaces in ($20,x): {:?}",
+        result1
+    );
+    let output1 = result1.unwrap();
+    assert_eq!(output1.bytes[0], 0xA1); // LDA IndirectX opcode
+
+    // IndirectY with spaces
+    let source2 = "lda ( $20 ) , y";
+    let result2 = assemble(source2);
+    assert!(
+        result2.is_ok(),
+        "Should handle spaces in ($20),y: {:?}",
+        result2
+    );
+    let output2 = result2.unwrap();
+    assert_eq!(output2.bytes[0], 0xB1); // LDA IndirectY opcode
+}
+
+// Test mixed case scenarios
+#[test]
+fn test_mixed_case_mnemonic_and_register() {
+    // Uppercase mnemonic, lowercase register
+    let source1 = "LDA $10,x";
+    let result1 = assemble(source1);
+    assert!(
+        result1.is_ok(),
+        "Should handle mixed case LDA $10,x: {:?}",
+        result1
+    );
+
+    // Lowercase mnemonic, uppercase register
+    let source2 = "lda $10,X";
+    let result2 = assemble(source2);
+    assert!(
+        result2.is_ok(),
+        "Should handle mixed case lda $10,X: {:?}",
+        result2
+    );
+
+    // Mixed everything
+    let source3 = "LdA $10,x";
+    let result3 = assemble(source3);
+    assert!(
+        result3.is_ok(),
+        "Should handle mixed case LdA $10,x: {:?}",
+        result3
     );
 }

@@ -228,45 +228,62 @@ pub fn parse_word_directive(args: &str) -> Result<crate::assembler::AssemblerDir
     Ok(crate::assembler::AssemblerDirective::Word { values })
 }
 
+/// Normalize operand for matching: remove internal whitespace and convert to uppercase
+///
+/// This allows case-insensitive matching and tolerance for spaces around commas and parentheses.
+/// Examples:
+/// - "$10 , x" -> "$10,X"
+/// - "( $20 ),y" -> "($20),Y"
+/// - "lda" -> "LDA"
+fn normalize_operand(operand: &str) -> String {
+    // Remove all whitespace and convert to uppercase
+    operand
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_uppercase()
+}
+
 /// Detect the addressing mode from operand syntax (for labels, assume Absolute/Relative)
 ///
 /// Returns addressing mode without resolving values (for Pass 1 size calculation)
 pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, String> {
     let operand = operand.trim();
+    let normalized = normalize_operand(operand);
 
-    if operand.is_empty() {
+    if normalized.is_empty() {
         return Ok(AddressingMode::Implicit);
     }
 
     // Accumulator mode: just "A"
-    if operand.eq_ignore_ascii_case("A") {
+    if normalized == "A" {
         return Ok(AddressingMode::Accumulator);
     }
 
     // Immediate: #$XX or #value
-    if operand.starts_with('#') {
+    if normalized.starts_with('#') {
         return Ok(AddressingMode::Immediate);
     }
 
     // Indirect: ($XXXX)
-    if operand.starts_with('(') && operand.ends_with(')') && !operand.contains(',') {
+    if normalized.starts_with('(') && normalized.ends_with(')') && !normalized.contains(',') {
         return Ok(AddressingMode::Indirect);
     }
 
     // Indexed Indirect: ($XX,X)
-    if operand.starts_with('(') && operand.contains(",X)") {
+    if normalized.starts_with('(') && normalized.contains(",X)") {
         return Ok(AddressingMode::IndirectX);
     }
 
     // Indirect Indexed: ($XX),Y
-    if operand.starts_with('(') && operand.contains("),Y") {
+    if normalized.starts_with('(') && normalized.contains("),Y") {
         return Ok(AddressingMode::IndirectY);
     }
 
     // Indexed modes: $XXXX,X or $XXXX,Y
-    if operand.contains(",X") {
-        let comma_pos = operand.find(',').unwrap();
-        let addr_str = &operand[..comma_pos];
+    if normalized.contains(",X") {
+        let comma_pos = normalized.find(',').unwrap();
+        let addr_str = &normalized[..comma_pos];
 
         // Try to parse the value to determine zero-page vs absolute
         if let Ok(addr) = parse_number(addr_str) {
@@ -280,9 +297,9 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
         return Ok(AddressingMode::AbsoluteX);
     }
 
-    if operand.contains(",Y") {
-        let comma_pos = operand.find(',').unwrap();
-        let addr_str = &operand[..comma_pos];
+    if normalized.contains(",Y") {
+        let comma_pos = normalized.find(',').unwrap();
+        let addr_str = &normalized[..comma_pos];
 
         // Try to parse the value to determine zero-page vs absolute
         if let Ok(addr) = parse_number(addr_str) {
@@ -297,7 +314,7 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
     }
 
     // Plain value or label
-    if let Ok(value) = parse_number(operand) {
+    if let Ok(value) = parse_number(&normalized) {
         // Choose zero-page or absolute based on value
         if value <= 0xFF {
             Ok(AddressingMode::ZeroPage)
@@ -315,49 +332,50 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
 /// Returns (addressing_mode, operand_value) where operand_value is the parsed number
 pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), String> {
     let operand = operand.trim();
+    let normalized = normalize_operand(operand);
 
-    if operand.is_empty() {
+    if normalized.is_empty() {
         return Ok((AddressingMode::Implicit, 0));
     }
 
     // Accumulator mode: just "A"
-    if operand.eq_ignore_ascii_case("A") {
+    if normalized == "A" {
         return Ok((AddressingMode::Accumulator, 0));
     }
 
     // Immediate: #$XX or #value
-    if let Some(stripped) = operand.strip_prefix('#') {
+    if let Some(stripped) = normalized.strip_prefix('#') {
         let value = parse_number(stripped)?;
         return Ok((AddressingMode::Immediate, value));
     }
 
     // Indirect: ($XXXX)
-    if operand.starts_with('(') && operand.ends_with(')') && !operand.contains(',') {
-        let addr_str = &operand[1..operand.len() - 1];
+    if normalized.starts_with('(') && normalized.ends_with(')') && !normalized.contains(',') {
+        let addr_str = &normalized[1..normalized.len() - 1];
         let addr = parse_number(addr_str)?;
         return Ok((AddressingMode::Indirect, addr));
     }
 
     // Indexed Indirect: ($XX,X)
-    if operand.starts_with('(') && operand.contains(",X)") {
-        let comma_pos = operand.find(',').unwrap();
-        let addr_str = &operand[1..comma_pos];
+    if normalized.starts_with('(') && normalized.contains(",X)") {
+        let comma_pos = normalized.find(',').unwrap();
+        let addr_str = &normalized[1..comma_pos];
         let addr = parse_number(addr_str)?;
         return Ok((AddressingMode::IndirectX, addr));
     }
 
     // Indirect Indexed: ($XX),Y
-    if operand.starts_with('(') && operand.contains("),Y") {
-        let paren_pos = operand.find(')').unwrap();
-        let addr_str = &operand[1..paren_pos];
+    if normalized.starts_with('(') && normalized.contains("),Y") {
+        let paren_pos = normalized.find(')').unwrap();
+        let addr_str = &normalized[1..paren_pos];
         let addr = parse_number(addr_str)?;
         return Ok((AddressingMode::IndirectY, addr));
     }
 
     // Indexed modes: $XXXX,X or $XXXX,Y
-    if operand.contains(",X") {
-        let comma_pos = operand.find(',').unwrap();
-        let addr_str = &operand[..comma_pos];
+    if normalized.contains(",X") {
+        let comma_pos = normalized.find(',').unwrap();
+        let addr_str = &normalized[..comma_pos];
         let addr = parse_number(addr_str)?;
 
         // Choose zero-page or absolute based on value
@@ -368,9 +386,9 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
         }
     }
 
-    if operand.contains(",Y") {
-        let comma_pos = operand.find(',').unwrap();
-        let addr_str = &operand[..comma_pos];
+    if normalized.contains(",Y") {
+        let comma_pos = normalized.find(',').unwrap();
+        let addr_str = &normalized[..comma_pos];
         let addr = parse_number(addr_str)?;
 
         // Choose zero-page or absolute based on value
@@ -382,7 +400,7 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
     }
 
     // Plain address: $XXXX or value (could be zero-page, absolute, or relative)
-    let value = parse_number(operand)?;
+    let value = parse_number(&normalized)?;
 
     // Choose zero-page or absolute based on value
     if value <= 0xFF {
