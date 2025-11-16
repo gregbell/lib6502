@@ -354,6 +354,9 @@ impl<M: MemoryBus> CPU<M> {
             "TAX" => {
                 crate::instructions::transfer::execute_tax(self, opcode)?;
             }
+            "TAY" => {
+                crate::instructions::transfer::execute_tay(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
