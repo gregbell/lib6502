@@ -540,3 +540,187 @@ fn test_adc_carry_chain() {
     assert!(!cpu.flag_c());
     assert!(!cpu.flag_z());
 }
+
+// ========== Decimal Mode (BCD) Tests ==========
+
+#[test]
+fn test_adc_decimal_mode_basic() {
+    let mut cpu = setup_cpu();
+
+    // ADC #$09 in decimal mode: 09 + 01 = 10 (BCD)
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x01);
+
+    cpu.set_a(0x09);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(true); // Enable decimal mode
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x10); // BCD result: 09 + 01 = 10
+    assert!(!cpu.flag_c());
+    assert!(!cpu.flag_z());
+}
+
+#[test]
+fn test_adc_decimal_mode_with_carry_out() {
+    let mut cpu = setup_cpu();
+
+    // ADC #$47 in decimal mode: 58 + 47 = 105 (BCD)
+    // Result should be 05 with carry set
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x47);
+
+    cpu.set_a(0x58);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x05); // Low two BCD digits: 05
+    assert!(cpu.flag_c()); // Carry out (result > 99)
+    assert!(!cpu.flag_z());
+}
+
+#[test]
+fn test_adc_decimal_mode_with_carry_in() {
+    let mut cpu = setup_cpu();
+
+    // ADC #$01 in decimal mode with carry: 09 + 01 + 1 = 11 (BCD)
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x01);
+
+    cpu.set_a(0x09);
+    cpu.set_flag_c(true); // Carry in
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x11); // BCD result: 09 + 01 + 1 = 11
+    assert!(!cpu.flag_c());
+}
+
+#[test]
+fn test_adc_decimal_mode_low_nibble_adjust() {
+    let mut cpu = setup_cpu();
+
+    // ADC #$05 in decimal mode: 08 + 05 = 13 (BCD)
+    // Tests low nibble adjustment
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x05);
+
+    cpu.set_a(0x08);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x13); // BCD result: 08 + 05 = 13
+    assert!(!cpu.flag_c());
+}
+
+#[test]
+fn test_adc_decimal_mode_high_nibble_adjust() {
+    let mut cpu = setup_cpu();
+
+    // ADC #$15 in decimal mode: 85 + 15 = 100 (BCD)
+    // Tests high nibble adjustment and carry
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x15);
+
+    cpu.set_a(0x85);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x00); // BCD result: 100 mod 100 = 00
+    assert!(cpu.flag_c()); // Carry set (result >= 100)
+    assert!(cpu.flag_z()); // Zero flag should be set
+}
+
+#[test]
+fn test_adc_decimal_mode_max_bcd() {
+    let mut cpu = setup_cpu();
+
+    // ADC #$99 in decimal mode: 00 + 99 = 99 (BCD)
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x99);
+
+    cpu.set_a(0x00);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x99); // BCD result: 99
+    assert!(!cpu.flag_c());
+    assert!(!cpu.flag_z());
+}
+
+#[test]
+fn test_adc_decimal_mode_99_plus_1() {
+    let mut cpu = setup_cpu();
+
+    // ADC #$01 in decimal mode: 99 + 01 = 100 (BCD)
+    // Result should be 00 with carry
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x01);
+
+    cpu.set_a(0x99);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x00); // BCD result: 100 mod 100 = 00
+    assert!(cpu.flag_c()); // Carry set
+    assert!(cpu.flag_z()); // Zero flag set
+}
+
+#[test]
+fn test_adc_decimal_mode_zero_result() {
+    let mut cpu = setup_cpu();
+
+    // ADC #$00 in decimal mode: 00 + 00 = 00 (BCD)
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x00);
+
+    cpu.set_a(0x00);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x00);
+    assert!(!cpu.flag_c());
+    assert!(cpu.flag_z());
+}
+
+#[test]
+fn test_adc_decimal_vs_binary_mode() {
+    let mut cpu = setup_cpu();
+
+    // Compare binary vs decimal mode for same inputs
+    // Binary: 0x09 + 0x09 = 0x12
+    // Decimal: 09 + 09 = 18 (BCD)
+
+    // Test in binary mode first
+    cpu.memory_mut().write(0x8000, 0x69);
+    cpu.memory_mut().write(0x8001, 0x09);
+    cpu.set_a(0x09);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(false); // Binary mode
+
+    cpu.step().unwrap();
+    assert_eq!(cpu.a(), 0x12); // Binary result
+
+    // Reset and test in decimal mode
+    cpu.set_pc(0x8000);
+    cpu.set_a(0x09);
+    cpu.set_flag_c(false);
+    cpu.set_flag_d(true); // Decimal mode
+
+    cpu.step().unwrap();
+    assert_eq!(cpu.a(), 0x18); // BCD result: 09 + 09 = 18
+}
