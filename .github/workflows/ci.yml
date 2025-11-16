@@ -41,8 +41,11 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run tests
+      - name: Run fast tests
         run: cargo test --verbose
+
+      - name: Run Klaus functional test
+        run: cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture
 
   clippy:
     name: Clippy

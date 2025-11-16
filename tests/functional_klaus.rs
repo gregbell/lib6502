@@ -160,6 +160,7 @@ fn format_cpu_state(cpu: &CPU<FlatMemory>) -> String {
 }
 
 #[test]
+#[ignore = "slow functional test (~6 seconds) - run with --ignored or --include-ignored"]
 fn klaus_6502_functional_test() {
     // Load the test binary (includes setting reset vector to entry point)
     let memory = load_test_binary("tests/fixtures/6502_functional_test.bin");

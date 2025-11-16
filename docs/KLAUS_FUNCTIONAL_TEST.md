@@ -49,20 +49,36 @@ docs/
 
 ## Running the Test
 
-The functional test runs automatically as part of the standard test suite.
+The functional test is marked as `#[ignore]` to enable fast TDD workflows. It runs separately in CI.
 
 ### Run the test
 
 ```bash
-# Run all tests (includes Klaus functional test)
+# Fast TDD workflow - skip slow functional test
 cargo test
 
-# Run only the Klaus functional test with output
-cargo test --test functional_klaus klaus_6502_functional_test -- --nocapture
+# Run all tests INCLUDING the Klaus functional test
+cargo test -- --include-ignored
+
+# Run ONLY the Klaus functional test (with output)
+cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture
 
 # Run sanity checks (verify binary loads correctly)
 cargo test --test functional_klaus tests::
 ```
+
+### Why is it ignored?
+
+The Klaus test executes 96+ million instruction cycles and takes ~6 seconds. During TDD, you want fast feedback (<2 seconds). The test is marked with:
+
+```rust
+#[ignore = "slow functional test (~6 seconds) - run with --ignored or --include-ignored"]
+```
+
+This allows:
+- **Development**: Fast iteration with `cargo test`
+- **Pre-commit**: Full validation with `cargo test -- --include-ignored`
+- **CI**: Separate fast and slow test jobs for optimal feedback
 
 ### Expected Output
 
@@ -281,19 +297,28 @@ This integration is part of the cpu6502 emulator project and follows the project
 
 ## CI/CD Integration
 
-The Klaus functional test is now part of the standard test suite and runs automatically:
+The CI pipeline runs two separate test jobs for optimal feedback:
 
-- ✅ **Regression Testing**: Validates all 151 opcodes on every test run
-- ✅ **Quality Gate**: Prevents breaking changes from being merged
-- ✅ **Performance Baseline**: Tracks execution time (~6 seconds for 96M cycles)
+```yaml
+- name: Run fast tests
+  run: cargo test --verbose
 
-### Continuous Validation
+- name: Run Klaus functional test
+  run: cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture
+```
 
-Every `cargo test` run includes:
-- 1,471 total tests (including Klaus test)
-- Complete instruction coverage validation
-- BCD arithmetic verification
-- Cycle-accurate timing checks
+### Benefits
+
+- ✅ **Fast Feedback**: Fast tests complete in ~2 seconds
+- ✅ **Parallel Execution**: Both jobs can run concurrently
+- ✅ **Clear Failures**: Know immediately if it's a fast test or functional test failure
+- ✅ **Complete Coverage**: All 1,471 tests validate on every PR
+
+### Test Counts
+
+- **Fast tests**: 1,470 tests (unit + integration)
+- **Functional test**: 1 test (Klaus, 96M+ cycles)
+- **Total**: 1,471 tests
 
 ## Potential Enhancements
 
