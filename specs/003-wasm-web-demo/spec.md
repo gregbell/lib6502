@@ -130,6 +130,9 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 - **FR-008**: System MUST provide a "Step" button that executes exactly one instruction and updates display
 - **FR-009**: System MUST provide a "Reset" button that restores CPU to initial state and reloads the program
 - **FR-010**: System MUST provide a "Stop" button to halt a running program mid-execution
+- **FR-010a**: System MUST provide selectable execution speeds including authentic 6502 clock rates (0.5 MHz, 1 MHz, 1.79 MHz, 2 MHz, and unlimited)
+- **FR-010b**: System MUST default to 1 MHz execution speed (authentic 6502 timing)
+- **FR-010c**: System MUST maintain accurate timing for selected clock speed using cycle-accurate execution
 
 #### User Interface Requirements
 
@@ -178,6 +181,8 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 - **SC-008**: The demo provides a clear, understandable view of CPU state that requires no additional documentation to interpret
 - **SC-009**: Users can navigate to any memory address and view its contents within 2 seconds
 - **SC-010**: Memory changes during execution are visible in the memory viewer with clear indication of modified locations
+- **SC-011**: At 1 MHz speed setting, the emulator executes 1,000,000 cycles per second with less than 5% timing variance
+- **SC-012**: Users can switch between speed presets during execution without disrupting program state
 
 ## Scope
 
@@ -227,8 +232,35 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 - GitHub Pages enabled on the repository
 - Modern text editor component for assembly code input (could be textarea or lightweight library)
 
+## Resolved Questions
+
+### Execution Speed (RESOLVED)
+
+**Decision**: Run mode executes at authentic 6502 clock speeds with user-selectable speed presets.
+
+**Default Speed**: 1 MHz (1,000,000 cycles/second)
+- Matches original Apple II, Commodore 64, Atari 2600
+- Provides authentic retro computing experience
+- At 60fps: ~16,667 cycles per frame
+
+**Selectable Speed Presets**:
+1. **0.5 MHz** - "Slow" (educational, easier to observe)
+2. **1.0 MHz** - "1 MHz (Authentic)" (default, original 6502 speed)
+3. **1.79 MHz** - "1.79 MHz (NES/C64 PAL)" (PAL region systems)
+4. **2.0 MHz** - "2 MHz (Apple IIgs)" (faster variant)
+5. **Unlimited** - "Maximum" (run as fast as browser allows)
+
+**Implementation**: Speed selector dropdown in UI controls. JavaScript calculates cycles per frame based on selected speed and maintains timing via requestAnimationFrame.
+
+**Rationale**:
+- Authentic speeds provide educational value (experience real 6502 timing)
+- Slower speeds help users observe execution step-by-step
+- Unlimited speed useful for quickly running longer programs
+- Multiple presets accommodate different learning styles and use cases
+
+---
+
 ## Open Questions
 
-- Execution speed: Should "Run" mode execute at full speed or throttle to a visible rate for educational purposes?
 - Program size limits: What is the maximum reasonable program size for the editor? (Assumption: limit to ~200 lines to maintain simplicity)
-- Memory viewer format: Should memory be displayed as a scrollable hex dump, paged view, or with configurable address ranges?
+- Memory viewer format: Should memory be displayed as a scrollable hex dump, paged view, or with configurable address ranges? (Current plan: scrollable hex dump with virtual scrolling)

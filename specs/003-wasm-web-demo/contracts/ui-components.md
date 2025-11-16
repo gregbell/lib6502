@@ -241,7 +241,7 @@ Address   Hex Dump                                     ASCII
 
 ## ControlPanel
 
-**Purpose**: Execution control buttons
+**Purpose**: Execution control buttons and speed selector
 
 ### Constructor
 
@@ -268,19 +268,41 @@ idle:
   - Run: enabled
   - Stop: disabled
   - Reset: enabled
+  - Speed: enabled
 
 running:
   - Step: disabled
   - Run: disabled
   - Stop: enabled
   - Reset: disabled
+  - Speed: enabled (can change during execution)
 
 error:
   - Step: disabled
   - Run: disabled
   - Stop: disabled
   - Reset: enabled (to recover)
+  - Speed: enabled
 ```
+
+#### setSpeed(speedMhz)
+
+```typescript
+setSpeed(speedMhz: number | 'unlimited'): void
+```
+
+**Updates**: Speed selector value
+
+**Parameters**:
+- `speedMhz`: Clock speed in MHz (0.5, 1.0, 1.79, 2.0) or 'unlimited'
+
+#### getSpeed()
+
+```typescript
+getSpeed(): number | 'unlimited'
+```
+
+**Returns**: Current selected speed
 
 ### Events
 
@@ -304,15 +326,48 @@ error:
 **Dispatched**: When Reset button clicked
 **Detail**: none
 
+#### 'speed-changed'
+
+**Dispatched**: When user selects new speed
+**Detail**: `{ speedMhz: number | 'unlimited', cyclesPerFrame: number }`
+
 ### DOM Structure
 
 ```html
 <div id="controls">
-    <button id="btn-step">Step</button>
-    <button id="btn-run">Run</button>
-    <button id="btn-stop">Stop</button>
-    <button id="btn-reset">Reset</button>
+    <div class="button-group">
+        <button id="btn-step">Step</button>
+        <button id="btn-run">Run</button>
+        <button id="btn-stop">Stop</button>
+        <button id="btn-reset">Reset</button>
+    </div>
+    <div class="speed-control">
+        <label for="speed-select">Speed:</label>
+        <select id="speed-select">
+            <option value="0.5">0.5 MHz (Slow)</option>
+            <option value="1.0" selected>1 MHz (Authentic)</option>
+            <option value="1.79">1.79 MHz (NES/C64 PAL)</option>
+            <option value="2.0">2 MHz (Apple IIgs)</option>
+            <option value="unlimited">Maximum</option>
+        </select>
+    </div>
 </div>
+```
+
+**Speed Calculation**:
+```javascript
+// Calculate cycles per frame based on speed
+function calculateCyclesPerFrame(speedMhz, fps = 60) {
+    if (speedMhz === 'unlimited') {
+        return 100000; // Run many cycles per frame
+    }
+    const cyclesPerSecond = speedMhz * 1000000;
+    return Math.floor(cyclesPerSecond / fps);
+}
+
+// Examples:
+// 1 MHz at 60fps = 16,667 cycles/frame
+// 2 MHz at 60fps = 33,333 cycles/frame
 ```
 
 ---
