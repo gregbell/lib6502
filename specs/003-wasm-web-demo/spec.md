@@ -129,43 +129,51 @@ A potential user or contributor finds the lib6502 GitHub repository and wants to
 - **FR-005**: System MUST display all processor status flags (N, V, D, I, Z, C) as binary or boolean indicators
 - **FR-006**: System MUST display the current cycle count during program execution
 - **FR-007**: System MUST provide a "Run" button that executes the entire program until completion or halt
-- **FR-007a**: Program completion is detected when PC reaches the end of assembled code range or executes an explicit halt instruction (BRK)
+- **FR-007a**: Program completion is detected when:
+  - PC advances to the byte immediately following the last assembled instruction (assembler must record program end address), OR
+  - An explicit BRK instruction executes
+  - When completion is detected, execution halts and final CPU state is displayed
 - **FR-008**: System MUST provide a "Step" button that executes exactly one instruction and updates display
 - **FR-009**: System MUST provide a "Reset" button that restores CPU to initial state and reloads the program
 - **FR-010**: System MUST provide a "Stop" button to halt a running program mid-execution
-- **FR-010a**: System MUST provide selectable execution speeds including authentic 6502 clock rates (0.5 MHz, 1 MHz, 1.79 MHz, 2 MHz, and unlimited)
-- **FR-010b**: System MUST default to 1 MHz execution speed (authentic 6502 timing)
-- **FR-010c**: System MUST maintain accurate timing for selected clock speed using cycle-accurate execution
+- **FR-011**: System MUST provide selectable execution speeds via dropdown control with the following options:
+  - 0.5 MHz ("Slow" - educational pace)
+  - 1.0 MHz ("Authentic" - **default**, original 6502 speed)
+  - 1.79 MHz ("NES/C64 PAL")
+  - 2.0 MHz ("Apple IIgs")
+  - Unlimited ("Maximum" - run as fast as browser allows)
+  - System MUST default to 1 MHz execution speed
+  - System MUST maintain accurate timing (±5% variance) for selected clock speed using cycle-accurate execution
 
 #### User Interface Requirements
 
-- **FR-011**: Interface MUST use a split-panel layout with assembly editor on the left and CPU state (registers, flags, memory viewer) on the right
-- **FR-011a**: Right panel layout is flexible: registers and memory can be stacked vertically, placed in a scrollable area, or split horizontally as appropriate for design
-- **FR-012**: Assembly editor MUST provide basic syntax highlighting for 6502 mnemonics and operands
-- **FR-013**: CPU register display MUST update in real-time as instructions execute
-- **FR-014**: Interface MUST be responsive and functional on desktop browsers (mobile support optional)
-- **FR-015**: Design MUST be minimal and clean, prioritizing readability and ease of use over visual complexity
-- **FR-016**: System MUST provide 2-3 example programs that users can load with one click
-- **FR-017**: System MUST provide a memory viewer that displays memory contents in hexadecimal format
-- **FR-017a**: Memory viewer MUST use virtual scrolling/windowing to render only visible rows for performance with 64KB address space
-- **FR-018**: Memory viewer MUST allow users to navigate to specific memory addresses
-- **FR-019**: Memory viewer MUST update in real-time when memory contents change during execution
-- **FR-019a**: Memory viewer updates MUST only re-render changed bytes per frame to maintain performance during rapid execution
-- **FR-020**: Memory viewer SHOULD highlight or indicate recently modified memory locations
+- **FR-012**: Interface MUST use a split-panel layout with assembly editor on the left and CPU state (registers, flags, memory viewer) on the right
+- **FR-012a**: Right panel MUST display both CPU state (registers + flags) and memory viewer simultaneously. Default layout: vertical stack with CPU state above memory viewer (both in scrollable container). Alternative horizontal split layout is acceptable if it maintains readability on desktop screens (≥1280px width)
+- **FR-013**: Assembly editor MUST provide basic syntax highlighting for 6502 mnemonics and operands
+- **FR-014**: CPU register display MUST update in real-time as instructions execute
+- **FR-015**: Interface MUST be responsive and functional on desktop browsers (mobile support optional)
+- **FR-016**: Design MUST be minimal and clean, prioritizing readability and ease of use over visual complexity
+- **FR-017**: System MUST provide 2-3 example programs that users can load with one click
+- **FR-018**: System MUST provide a memory viewer that displays memory contents in hexadecimal format
+- **FR-018a**: Memory viewer MUST use virtual scrolling/windowing to render only visible rows for performance with 64KB address space
+- **FR-019**: Memory viewer MUST allow users to navigate to specific memory addresses
+- **FR-020**: Memory viewer MUST update in real-time when memory contents change during execution
+- **FR-020a**: Memory viewer updates MUST only re-render changed bytes per frame to maintain performance during rapid execution
+- **FR-021**: Memory viewer MUST highlight recently modified memory locations (e.g., 1-second fade-out animation on changed bytes) to aid visual tracking during execution
 
 #### Deployment Requirements
 
-- **FR-021**: Website MUST be deployable to GitHub Pages as static HTML/CSS/JavaScript files
-- **FR-022**: System MUST load and initialize without requiring any external server or backend services
-- **FR-023**: WebAssembly module MUST be bundled with the static site assets
-- **FR-024**: System MUST display a clear error message if the browser does not support WebAssembly
+- **FR-022**: Website MUST be deployable to GitHub Pages as static HTML/CSS/JavaScript files
+- **FR-023**: System MUST load and initialize without requiring any external server or backend services
+- **FR-024**: WebAssembly module MUST be bundled with the static site assets
+- **FR-025**: System MUST display a clear error message if the browser does not support WebAssembly
 
 #### Error Handling
 
-- **FR-025**: System MUST validate assembly code syntax before execution and display clear error messages for invalid syntax
-- **FR-025a**: When assembly fails, system MUST display error in a dedicated error panel while keeping editor editable and preserving any previously assembled program in memory
-- **FR-026**: System MUST handle and display errors gracefully without crashing the browser tab
-- **FR-027**: System MUST detect and handle infinite loops (e.g., via iteration limit or stop button)
+- **FR-026**: System MUST validate assembly code syntax before execution and display clear error messages for invalid syntax
+- **FR-026a**: When assembly fails, system MUST display error in a dedicated error panel while keeping editor editable and preserving any previously assembled program in memory
+- **FR-027**: System MUST handle and display errors gracefully without crashing the browser tab
+- **FR-028**: System MUST detect and handle infinite loops (e.g., via iteration limit or stop button)
 
 ### Key Entities
 

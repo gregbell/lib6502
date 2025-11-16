@@ -142,11 +142,25 @@ src/
 └── wasm/               # NEW: WASM bindings module
     ├── mod.rs          # WASM module exports
     ├── api.rs          # JS-facing API (step, run, reset, getters, assemble)
+    │                   # NOTE: assemble() returns (program_start: u16, program_end: u16)
+    │                   # to enable completion detection in run loop
     └── memory.rs       # WASM-compatible memory wrapper
 
 # Web demo (static site)
 demo/                   # NEW: GitHub Pages deployment directory
-├── index.html          # Main page (split-panel layout)
+├── index.html          # Main page structure:
+│                       #   ┌─────────────────┬─────────────────┐
+│                       #   │  Code Editor    │  CPU State      │
+│                       #   │  (Monaco-style) │  ┌───────────┐  │
+│                       #   │                 │  │ Registers │  │
+│                       #   │  [Assembly]     │  │ Flags     │  │
+│                       #   │  [Run] [Step]   │  └───────────┘  │
+│                       #   │  [Stop] [Reset] │  ┌───────────┐  │
+│                       #   │  [Speed: 1MHz]  │  │  Memory   │  │
+│                       #   │                 │  │  Viewer   │  │
+│                       #   │                 │  │ (scroll)  │  │
+│                       #   │                 │  └───────────┘  │
+│                       #   └─────────────────┴─────────────────┘
 ├── styles.css          # CSS with Oxide-inspired design, Sixtyfour + JetBrains Mono
 ├── app.js              # Main application logic
 ├── components/         # UI component modules
