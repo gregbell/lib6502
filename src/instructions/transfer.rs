@@ -4,7 +4,7 @@
 //! - TAX: Transfer Accumulator to X
 //! - TAY: Transfer Accumulator to Y
 //! - TXA: Transfer X to Accumulator
-//! - TYA: Transfer Y to Accumulator
+//! - TYA: Transfer Y to Accumulator (not yet implemented)
 //! - TSX: Transfer Stack Pointer to X
 //! - TXS: Transfer X to Stack Pointer
 
@@ -128,6 +128,35 @@ pub(crate) fn execute_txa<M: MemoryBus>(
     // Update Z and N flags based on result
     cpu.flag_z = cpu.a == 0;
     cpu.flag_n = (cpu.a & 0x80) != 0;
+
+    // Update cycle count
+    cpu.cycles += metadata.base_cycles as u64;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
+
+/// Executes the TXS (Transfer X to Stack Pointer) instruction.
+///
+/// Copies the current contents of the X register into the stack pointer.
+/// Note: This instruction does NOT affect any processor flags.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this TXS instruction
+pub(crate) fn execute_txs<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Transfer X register to stack pointer
+    cpu.sp = cpu.x;
+
+    // No flags affected (important: unlike most transfer instructions, TXS does NOT update Z or N)
 
     // Update cycle count
     cpu.cycles += metadata.base_cycles as u64;

@@ -1342,7 +1342,7 @@ pub const OPCODE_TABLE: [OpcodeMetadata; 256] = [
         addressing_mode: AddressingMode::Implicit,
         base_cycles: 2,
         size_bytes: 1,
-        implemented: false,
+        implemented: true,
     },
     // 0x9B - Illegal/Undocumented opcode
     OpcodeMetadata {
