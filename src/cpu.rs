@@ -357,6 +357,9 @@ impl<M: MemoryBus> CPU<M> {
             "TAY" => {
                 crate::instructions::transfer::execute_tay(self, opcode)?;
             }
+            "TSX" => {
+                crate::instructions::transfer::execute_tsx(self, opcode)?;
+            }
             _ => {
                 // Other instructions not yet implemented
                 self.cycles += metadata.base_cycles as u64;
