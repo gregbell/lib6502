@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>6502 Assembly Playground</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sixtyfour&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>6502 Assembly Playground</h1>
+        <p class="tagline">Cycle-accurate NMOS 6502 emulator in your browser</p>
+    </header>
+
+    <main class="split-panel">
+        <section class="left-panel">
+            <div class="panel editor-panel">
+                <h2>Assembly Code</h2>
+                <div id="editor-container"></div>
+                <div id="controls-container"></div>
+                <div id="error-container"></div>
+            </div>
+        </section>
+
+        <section class="right-panel">
+            <div class="panel cpu-state-panel">
+                <h2>CPU State</h2>
+                <div id="registers-container"></div>
+                <div id="flags-container"></div>
+            </div>
+
+            <div class="panel memory-panel">
+                <h2>Memory Viewer</h2>
+                <div id="memory-container"></div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Built with <a href="https://github.com/your-org/6502" target="_blank">lib6502</a> | WebAssembly powered</p>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
