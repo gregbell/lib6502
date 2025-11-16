@@ -21,7 +21,7 @@
 //! The listing file (`6502_functional_test.lst`) can be used to identify which
 //! specific test failed based on the final PC value.
 
-use cpu6502::{CPU, FlatMemory, MemoryBus};
+use cpu6502::{FlatMemory, MemoryBus, CPU};
 use std::fs::File;
 use std::io::Read;
 
@@ -47,11 +47,12 @@ const LOOP_DETECTION_THRESHOLD: usize = 3;
 
 /// Load the 64KB binary test image into memory and set reset vector
 fn load_test_binary(path: &str) -> FlatMemory {
-    let mut file = File::open(path)
-        .unwrap_or_else(|e| panic!("Failed to open test binary {}: {}", path, e));
+    let mut file =
+        File::open(path).unwrap_or_else(|e| panic!("Failed to open test binary {}: {}", path, e));
 
     let mut buffer = vec![0u8; 65536];
-    let bytes_read = file.read(&mut buffer)
+    let bytes_read = file
+        .read(&mut buffer)
         .unwrap_or_else(|e| panic!("Failed to read test binary: {}", e));
 
     assert_eq!(bytes_read, 65536, "Test binary must be exactly 64KB");
@@ -82,7 +83,11 @@ fn load_test_binary(path: &str) -> FlatMemory {
 ///
 /// An infinite loop is detected when the PC doesn't change for
 /// LOOP_DETECTION_THRESHOLD consecutive steps.
-fn run_until_loop(cpu: &mut CPU<FlatMemory>, max_cycles: u64, verbose: bool) -> Result<u16, String> {
+fn run_until_loop(
+    cpu: &mut CPU<FlatMemory>,
+    max_cycles: u64,
+    verbose: bool,
+) -> Result<u16, String> {
     let mut pc_history = [0u16; LOOP_DETECTION_THRESHOLD];
     let mut history_idx = 0;
     let start_cycles = cpu.cycles();
@@ -102,7 +107,7 @@ fn run_until_loop(cpu: &mut CPU<FlatMemory>, max_cycles: u64, verbose: bool) -> 
 
         // Execute one instruction
         match cpu.step() {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 return Err(format!(
                     "Execution error at PC ${:04X}: {}. \
@@ -124,8 +129,12 @@ fn run_until_loop(cpu: &mut CPU<FlatMemory>, max_cycles: u64, verbose: bool) -> 
             return Ok(current_pc);
         }
 
-        if verbose && (cpu.cycles() - start_cycles) % 100000 == 0 {
-            println!("Progress: {} cycles, PC: ${:04X}", cpu.cycles() - start_cycles, current_pc);
+        if verbose && (cpu.cycles() - start_cycles).is_multiple_of(100000) {
+            println!(
+                "Progress: {} cycles, PC: ${:04X}",
+                cpu.cycles() - start_cycles,
+                current_pc
+            );
         }
     }
 }
@@ -163,7 +172,11 @@ fn klaus_6502_functional_test() {
     println!("Running test...\n");
 
     // Verify we're starting at the right place
-    assert_eq!(cpu.pc(), ENTRY_POINT, "CPU should start at entry point after reset");
+    assert_eq!(
+        cpu.pc(),
+        ENTRY_POINT,
+        "CPU should start at entry point after reset"
+    );
 
     // Run until infinite loop detected
     let verbose = false; // Set to true for progress updates
@@ -189,7 +202,10 @@ fn klaus_6502_functional_test() {
         println!("Expected success address: ${:04X}", SUCCESS_ADDRESS);
         println!("\nTo identify which test failed, check the listing file:");
         println!("  tests/fixtures/6502_functional_test.lst");
-        println!("  Search for address {:04X} to see which instruction failed.", final_pc);
+        println!(
+            "  Search for address {:04X} to see which instruction failed.",
+            final_pc
+        );
 
         // Try to provide some context about nearby memory
         println!("\nMemory around failure point:");
@@ -200,7 +216,10 @@ fn klaus_6502_functional_test() {
             println!("  ${:04X}: ${:02X}{}", addr, byte, marker);
         }
 
-        panic!("Test failed at PC ${:04X} (expected ${:04X})", final_pc, SUCCESS_ADDRESS);
+        panic!(
+            "Test failed at PC ${:04X} (expected ${:04X})",
+            final_pc, SUCCESS_ADDRESS
+        );
     }
 }
 
@@ -215,7 +234,11 @@ mod tests {
         // If we got here, the binary loaded successfully
 
         // Verify the entry point has a valid instruction (CLD = 0xD8)
-        assert_eq!(memory.read(ENTRY_POINT), 0xD8, "Entry point should start with CLD instruction");
+        assert_eq!(
+            memory.read(ENTRY_POINT),
+            0xD8,
+            "Entry point should start with CLD instruction"
+        );
     }
 
     /// Verify success address contains the infinite loop instruction
@@ -224,8 +247,20 @@ mod tests {
         let memory = load_test_binary("tests/fixtures/6502_functional_test.bin");
 
         // The success address should contain JMP * (4C 69 34 = JMP $3469)
-        assert_eq!(memory.read(SUCCESS_ADDRESS), 0x4C, "Success address should have JMP opcode");
-        assert_eq!(memory.read(SUCCESS_ADDRESS + 1), 0x69, "JMP target low byte");
-        assert_eq!(memory.read(SUCCESS_ADDRESS + 2), 0x34, "JMP target high byte");
+        assert_eq!(
+            memory.read(SUCCESS_ADDRESS),
+            0x4C,
+            "Success address should have JMP opcode"
+        );
+        assert_eq!(
+            memory.read(SUCCESS_ADDRESS + 1),
+            0x69,
+            "JMP target low byte"
+        );
+        assert_eq!(
+            memory.read(SUCCESS_ADDRESS + 2),
+            0x34,
+            "JMP target high byte"
+        );
     }
 }
