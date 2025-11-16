@@ -11,9 +11,15 @@ readme = "README.md"
 [lib]
 name = "lib6502"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # No dependencies - core module is dependency-free
+wasm-bindgen = { version = "0.2", optional = true }
 
 [dev-dependencies]
 # Use standard Rust test framework
+
+[features]
+default = []
+wasm = ["wasm-bindgen"]

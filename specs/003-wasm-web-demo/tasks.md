@@ -18,14 +18,14 @@ This task list implements the interactive 6502 assembly web demo in dependency o
 
 **Goal**: Establish project structure, WASM toolchain, and deployment pipeline
 
-- [ ] T001 Install WASM toolchain: `rustup target add wasm32-unknown-unknown` and `cargo install wasm-pack`
-- [ ] T002 Add wasm-bindgen dependency to Cargo.toml: `wasm-bindgen = "0.2"` (dev-dependencies only)
-- [ ] T003 Create WASM module directory structure: `src/wasm/` with mod.rs, api.rs, memory.rs
-- [ ] T004 [P] Create demo directory structure: `demo/` with subdirectories `components/`, `examples/`, `lib6502_wasm/` (gitignore lib6502_wasm/)
-- [ ] T005 [P] Create base HTML file: `demo/index.html` with split-panel layout and component containers
-- [ ] T006 [P] Create base CSS file: `demo/styles.css` with Oxide-inspired dark theme, Sixtyfour + JetBrains Mono fonts
-- [ ] T007 [P] Create GitHub Actions workflow: `.github/workflows/deploy-demo.yml` for automated WASM build and GitHub Pages deployment
-- [ ] T008 Verify WASM build: run `wasm-pack build --target web --out-dir demo/lib6502_wasm` and check output
+- [X] T001 Install WASM toolchain: `rustup target add wasm32-unknown-unknown` and `cargo install wasm-pack`
+- [X] T002 Add wasm-bindgen dependency to Cargo.toml: `wasm-bindgen = "0.2"` (optional feature)
+- [X] T003 Create WASM module directory structure: `src/wasm/` with mod.rs and api.rs
+- [X] T004 [P] Create demo directory structure: `demo/` with subdirectories `components/`, `examples/`, `lib6502_wasm/` (gitignore lib6502_wasm/)
+- [X] T005 [P] Create base HTML file: `demo/index.html` with split-panel layout and component containers
+- [X] T006 [P] Create base CSS file: `demo/styles.css` with Oxide-inspired dark theme, Sixtyfour + JetBrains Mono fonts
+- [X] T007 [P] Create GitHub Actions workflow: `.github/workflows/deploy-demo.yml` for automated WASM build and GitHub Pages deployment
+- [X] T008 Verify WASM build: run `wasm-pack build --target web --out-dir demo/lib6502_wasm` and check output
 
 **Phase Complete When**: WASM toolchain installed, directory structure created, build pipeline verified
 
@@ -39,29 +39,29 @@ This task list implements the interactive 6502 assembly web demo in dependency o
 
 ### WASM Module Structure
 
-- [ ] T009 Implement src/wasm/mod.rs: Module exports and public re-exports
-- [ ] T010 Implement src/wasm/memory.rs: WASM-compatible memory wrapper around FlatMemory
+- [X] T009 Implement src/wasm/mod.rs: Module exports and public re-exports
+- [X] T010 WASM uses FlatMemory directly (no separate wrapper needed)
 
 ### Core WASM API (src/wasm/api.rs)
 
-- [ ] T011 Implement Emulator6502 struct with constructor wrapping CPU<FlatMemory>
-- [ ] T012 [P] Implement step() method returning Result<(), JsError>
-- [ ] T013 [P] Implement run_for_cycles(cycles: u32) returning Result<u32, JsError>
-- [ ] T014 [P] Implement reset() method
-- [ ] T015 [P] Implement register getters: get_a(), get_x(), get_y(), get_pc(), get_sp(), get_cycles()
-- [ ] T016 [P] Implement flag getters: get_flag_n(), get_flag_v(), get_flag_d(), get_flag_i(), get_flag_z(), get_flag_c()
-- [ ] T017 [P] Implement memory access methods: read_memory(addr), write_memory(addr, value), get_memory_page(page)
-- [ ] T018 [P] Implement load_program(program: &[u8], start_addr: u16)
+- [X] T011 Implement Emulator6502 struct with constructor wrapping CPU<FlatMemory>
+- [X] T012 [P] Implement step() method returning Result<(), JsError>
+- [X] T013 [P] Implement run_for_cycles(cycles: u32) returning Result<u32, JsError>
+- [X] T014 [P] Implement reset() method
+- [X] T015 [P] Implement register getters: get_a(), get_x(), get_y(), get_pc(), get_sp(), get_cycles()
+- [X] T016 [P] Implement flag getters: get_flag_n(), get_flag_v(), get_flag_d(), get_flag_i(), get_flag_z(), get_flag_c()
+- [X] T017 [P] Implement memory access methods: read_memory(addr), write_memory(addr, value), get_memory_page(page)
+- [X] T018 [P] Implement load_program(program: &[u8], start_addr: u16)
 
 ### Assembly & Disassembly Integration
 
-- [ ] T019 Implement assemble(source: String, start_addr: u16) returning AssemblyResult (uses feature 002 assembler)
-- [ ] T020 Implement assemble_and_load(source: String, start_addr: u16) convenience method
-- [ ] T021 [P] Implement disassemble(start_addr: u16, num_instructions: u32) returning Vec<DisassemblyResult>
+- [X] T019 Implement assemble(source: String, start_addr: u16) returning AssemblyResult (uses feature 002 assembler)
+- [X] T020 Implement assemble_and_load(source: String, start_addr: u16) convenience method
+- [X] T021 [P] Implement disassemble(start_addr: u16, num_instructions: u32) returning Vec<DisassemblyLine>
 
 ### Validation
 
-- [ ] T022 Build WASM module: `wasm-pack build --target web --out-dir demo/lib6502_wasm`
+- [X] T022 Build WASM module: `wasm-pack build --target web --out-dir demo/lib6502_wasm`
 - [ ] T023 Create manual test HTML: Verify WASM API from browser console (create emulator, load program, step, read registers)
 
 **Phase Complete When**: WASM API contract fully implemented, browser console testing confirms all methods work

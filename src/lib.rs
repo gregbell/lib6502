@@ -58,6 +58,10 @@ pub mod opcodes;
 // Internal instruction implementations (not part of public API)
 mod instructions;
 
+// WASM bindings (optional, enabled with "wasm" feature)
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
 // Re-export public API
 pub use addressing::AddressingMode;
 pub use assembler::{assemble, AssemblerError, AssemblerOutput, ErrorType, Symbol};
