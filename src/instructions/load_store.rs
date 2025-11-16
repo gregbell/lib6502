@@ -221,3 +221,37 @@ pub(crate) fn execute_stx<M: MemoryBus>(
 
     Ok(())
 }
+
+/// Executes the STY (Store Y Register) instruction.
+///
+/// Stores the contents of the Y register into memory at the address specified
+/// by the addressing mode.
+///
+/// # Flag Behavior
+///
+/// - No flags affected
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this STY instruction
+pub(crate) fn execute_sty<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Get the effective address where we should store the Y register
+    let addr = cpu.get_effective_address(metadata.addressing_mode)?;
+
+    // Store Y register value at the effective address
+    cpu.memory.write(addr, cpu.y);
+
+    // Update cycle count (store instructions do NOT have page crossing penalties)
+    cpu.cycles += metadata.base_cycles as u64;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
