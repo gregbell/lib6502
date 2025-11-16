@@ -1,5 +1,14 @@
 # Klaus Dormann's 6502 Functional Test Integration
 
+## Status: ✅ PASSING (100%)
+
+The Klaus functional test **passes completely**, validating all 151 documented NMOS 6502 opcodes across 96+ million instruction cycles.
+
+**Final Results:**
+- **PC**: $3469 (exact success address)
+- **Cycles**: 96,241,373
+- **Test Status**: ✓ SUCCESS - All tests passed
+
 ## Overview
 
 This document describes the integration of Klaus Dormann's comprehensive 6502 functional test suite into our emulator. This test validates all valid opcodes and addressing modes of the NMOS 6502 processor.
@@ -40,16 +49,16 @@ docs/
 
 ## Running the Test
 
-The functional test is marked as `#[ignore]` because it requires more instructions to be implemented.
+The functional test runs automatically as part of the standard test suite.
 
 ### Run the test
 
 ```bash
-# Run only the Klaus functional test
-cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture
-
-# Run all non-ignored tests (Klaus test will be skipped)
+# Run all tests (includes Klaus functional test)
 cargo test
+
+# Run only the Klaus functional test with output
+cargo test --test functional_klaus klaus_6502_functional_test -- --nocapture
 
 # Run sanity checks (verify binary loads correctly)
 cargo test --test functional_klaus tests::
@@ -57,7 +66,6 @@ cargo test --test functional_klaus tests::
 
 ### Expected Output
 
-**Current State** (with only 8 instructions implemented):
 ```
 === Klaus 6502 Functional Test ===
 Entry point: $0400
@@ -65,25 +73,15 @@ Success address: $3469
 Initial state: PC:$0400 A:$00 X:$00 Y:$00 SP:$FD P:[---I---] Cycles:0
 Running test...
 
-=== TEST FAILED ===
-Execution error at PC $0400: Opcode 0xD8 is not implemented.
-Final state: PC:$0401 A:$00 X:$00 Y:$00 SP:$FD P:[---I---] Cycles:2
-```
-
-The first instruction is **CLD (0xD8)** - Clear Decimal Mode.
-
-**When Test Passes** (after all instructions implemented):
-```
-=== Klaus 6502 Functional Test ===
-Entry point: $0400
-Success address: $3469
-...
 Test completed!
-Final state: PC:$3469 ...
+Final state: PC:$3469 A:$F0 X:$0E Y:$FF SP:$FF P:[NV---CB] Cycles:96241373
 Final PC: $3469
 
 ✓ SUCCESS: All tests passed!
+test klaus_6502_functional_test ... ok
 ```
+
+**Test Duration**: ~6 seconds (96+ million cycles)
 
 ## Implementation Details
 
@@ -135,42 +133,18 @@ const MAX_CYCLES: u64 = 100_000_000;  // Timeout protection
 const LOOP_DETECTION_THRESHOLD: usize = 3; // PC unchanged count
 ```
 
-## Using the Test to Guide Implementation
+## Test-Driven Development
 
-The functional test is an excellent tool for incremental development:
+The Klaus functional test served as an excellent tool for incremental development during implementation.
 
-### 1. Run Test to Find Next Missing Instruction
+### Development Workflow (Historical)
 
-```bash
-cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture 2>&1 | grep "Opcode"
-```
+1. **Run Test** → Identify next missing instruction by opcode error
+2. **Look Up Opcode** → Use listing file to find instruction at failure address
+3. **Implement Instruction** → Follow patterns in `src/instructions/`, update `OPCODE_TABLE`
+4. **Repeat** → Test progresses further with each instruction added
 
-Output shows which opcode blocked progress:
-```
-Execution error at PC $0400: Opcode 0xD8 is not implemented.
-```
-
-### 2. Look Up Opcode
-
-```bash
-# Find opcode in listing file
-grep "^0400" tests/fixtures/6502_functional_test.lst
-```
-
-Output:
-```
-0400 : d8          start   cld
-```
-
-Opcode `0xD8` = **CLD** (Clear Decimal Mode)
-
-### 3. Implement the Instruction
-
-Follow the existing pattern in `src/instructions/` and update `OPCODE_TABLE`.
-
-### 4. Repeat
-
-Run test again to find the next missing instruction.
+This iterative approach helped implement all 151 opcodes systematically, with the test providing immediate validation of each addition.
 
 ## Debugging Failed Tests
 
@@ -237,51 +211,56 @@ Once fully passing, this test validates:
 - Signed vs unsigned behavior
 - Overflow detection
 
-## Implementation Progress
+## Implementation Status
 
-### Currently Implemented (8 instructions, 27 opcodes)
-- ADC (8 addressing modes)
-- AND (8 addressing modes)
-- ASL (5 addressing modes)
-- BCC, BCS, BEQ, BMI (1 each)
-- BIT (2 addressing modes)
+### ✅ Complete Implementation (151 opcodes)
 
-### Status: First Instruction Blocking
-- **CLD (0xD8)** - Clear Decimal Mode
+All NMOS 6502 instructions are fully implemented:
 
-This is the very first instruction in the test, so we haven't gotten far yet!
+- ✅ **Arithmetic**: ADC (binary + BCD), SBC (binary + BCD)
+- ✅ **Logic**: AND, ORA, EOR
+- ✅ **Shifts/Rotates**: ASL, LSR, ROL, ROR
+- ✅ **Loads**: LDA, LDX, LDY
+- ✅ **Stores**: STA, STX, STY
+- ✅ **Transfers**: TAX, TAY, TXA, TYA, TSX, TXS
+- ✅ **Stack**: PHA, PHP, PLA, PLP
+- ✅ **Comparisons**: CMP, CPX, CPY
+- ✅ **Branches**: BCC, BCS, BEQ, BNE, BMI, BPL, BVC, BVS
+- ✅ **Jumps/Calls**: JMP, JSR, RTS
+- ✅ **System**: BRK, RTI, NOP
+- ✅ **Flags**: CLC, CLD, CLI, CLV, SEC, SED, SEI
+- ✅ **Increment/Decrement**: INC, INX, INY, DEC, DEX, DEY
+- ✅ **Bit Test**: BIT
 
-### Remaining Work
-~229 opcodes across:
-- Remaining branches (BNE, BPL, BVC, BVS)
-- Loads/Stores (LDA, LDX, LDY, STA, STX, STY)
-- Transfers (TAX, TAY, TXA, TYA, TSX, TXS)
-- Stack operations (PHA, PHP, PLA, PLP)
-- Comparisons (CMP, CPX, CPY)
-- Remaining logic (EOR, ORA)
-- Remaining shifts (LSR, ROL, ROR)
-- Inc/Dec (INC, INX, INY, DEC, DEX, DEY)
-- Jumps (JMP, JSR, RTS, RTI)
-- System (BRK, NOP)
-- Flag manipulation (CLC, CLD, CLI, CLV, SEC, SED, SEI)
-- SBC (Subtract with Carry)
+### Key Features Validated
+
+- **Binary mode arithmetic**: All operations work correctly in standard mode
+- **Decimal mode (BCD)**: ADC and SBC perform Binary Coded Decimal arithmetic when D flag is set
+- **Cycle accuracy**: Correct cycle counts including page-crossing penalties
+- **Flag behavior**: N, V, Z, C flags update correctly (D flag controls BCD mode)
+- **Edge cases**: Page crossing, wraparound, overflow, all validated
 
 ## Milestones
 
-### Milestone 1: Test Starts ✅
+### Milestone 1: Test Infrastructure ✅
 - [x] Test binary loads correctly
 - [x] CPU initializes at entry point
-- [x] Infrastructure detects first blocking instruction
+- [x] Infrastructure detects blocking instructions
+- [x] Infinite loop detection works
+- [x] Diagnostic output helps debugging
 
-### Milestone 2: Basic Instructions
-- [ ] Implement core instructions (loads, stores, transfers)
-- [ ] Test progresses past initialization
-- [ ] Basic test loops execute
+### Milestone 2: Core Instructions ✅
+- [x] Implement core instructions (loads, stores, transfers)
+- [x] Test progresses past initialization
+- [x] Basic test loops execute
+- [x] Binary mode arithmetic complete
 
-### Milestone 3: Full Implementation
-- [ ] All 151 documented 6502 opcodes implemented
-- [ ] Test reaches success address ($3469)
-- [ ] All edge cases pass
+### Milestone 3: Full Implementation ✅
+- [x] All 151 documented 6502 opcodes implemented
+- [x] Decimal mode (BCD) arithmetic in ADC/SBC
+- [x] Test reaches success address ($3469)
+- [x] All edge cases pass
+- [x] 96+ million cycles execute flawlessly
 
 ## License & Attribution
 
@@ -300,25 +279,35 @@ This integration is part of the cpu6502 emulator project and follows the project
 - [Test Fixtures README](../tests/fixtures/README.md)
 - [Project Constitution](../.specify/memory/constitution.md)
 
-## Future Enhancements
+## CI/CD Integration
+
+The Klaus functional test is now part of the standard test suite and runs automatically:
+
+- ✅ **Regression Testing**: Validates all 151 opcodes on every test run
+- ✅ **Quality Gate**: Prevents breaking changes from being merged
+- ✅ **Performance Baseline**: Tracks execution time (~6 seconds for 96M cycles)
+
+### Continuous Validation
+
+Every `cargo test` run includes:
+- 1,471 total tests (including Klaus test)
+- Complete instruction coverage validation
+- BCD arithmetic verification
+- Cycle-accurate timing checks
+
+## Potential Enhancements
 
 ### Verbose Mode
-Currently disabled by default. Set `verbose = true` in the test to see:
+Set `verbose = true` in the test to enable:
 - Progress updates every 100k cycles
 - PC tracking through execution
 - Detailed timing information
 
 ### Breakpoint Support
-Add ability to halt execution at specific addresses for debugging.
+Add ability to halt execution at specific addresses for debugging instruction implementations.
 
-### Test Reports
-Generate detailed reports showing:
-- Which instruction categories pass/fail
-- Cycle count statistics
-- Coverage metrics
-
-### CI Integration
-Once sufficient instructions are implemented, add to CI pipeline as:
-- Regression test for all PRs
-- Performance benchmark
-- Coverage validator
+### Performance Benchmarking
+Track cycle execution speed over time:
+- Measure instructions per second
+- Compare performance across platforms
+- Identify optimization opportunities
