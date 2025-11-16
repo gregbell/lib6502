@@ -8,20 +8,20 @@ use cpu6502::{ExecutionError, FlatMemory, MemoryBus, CPU};
 fn test_step_returns_unimplemented_error() {
     let mut memory = FlatMemory::new();
 
-    // Set reset vector and place a NOP instruction
+    // Set reset vector and place an illegal opcode
     memory.write(0xFFFC, 0x00);
     memory.write(0xFFFD, 0x80);
-    memory.write(0x8000, 0xEA); // NOP opcode
+    memory.write(0x8000, 0x02); // Illegal opcode (not implemented)
 
     let mut cpu = CPU::new(memory);
 
     // Attempting to execute should return UnimplementedOpcode
     match cpu.step() {
-        Err(ExecutionError::UnimplementedOpcode(0xEA)) => {
+        Err(ExecutionError::UnimplementedOpcode(0x02)) => {
             // Expected error
         }
         Ok(()) => panic!("Expected UnimplementedOpcode error, got Ok"),
-        Err(e) => panic!("Expected UnimplementedOpcode(0xEA), got {:?}", e),
+        Err(e) => panic!("Expected UnimplementedOpcode(0x02), got {:?}", e),
     }
 }
 
@@ -167,13 +167,13 @@ fn test_error_contains_opcode_value() {
 
     memory.write(0xFFFC, 0x00);
     memory.write(0xFFFD, 0x80);
-    memory.write(0x8000, 0xA9); // LDA immediate
+    memory.write(0x8000, 0x02); // Illegal opcode (not implemented)
 
     let mut cpu = CPU::new(memory);
 
     match cpu.step() {
         Err(ExecutionError::UnimplementedOpcode(opcode)) => {
-            assert_eq!(opcode, 0xA9, "Error should contain the opcode value");
+            assert_eq!(opcode, 0x02, "Error should contain the opcode value");
         }
         _ => panic!("Expected UnimplementedOpcode error"),
     }

@@ -219,11 +219,155 @@ impl<M: MemoryBus> CPU<M> {
             "BEQ" => {
                 crate::instructions::branches::execute_beq(self, opcode)?;
             }
+            "BIT" => {
+                crate::instructions::alu::execute_bit(self, opcode)?;
+            }
             "BMI" => {
                 crate::instructions::branches::execute_bmi(self, opcode)?;
             }
-            "BIT" => {
-                crate::instructions::alu::execute_bit(self, opcode)?;
+            "BNE" => {
+                crate::instructions::branches::execute_bne(self, opcode)?;
+            }
+            "BPL" => {
+                crate::instructions::branches::execute_bpl(self, opcode)?;
+            }
+            "BRK" => {
+                crate::instructions::control::execute_brk(self, opcode)?;
+            }
+            "BVC" => {
+                crate::instructions::branches::execute_bvc(self, opcode)?;
+            }
+            "BVS" => {
+                crate::instructions::branches::execute_bvs(self, opcode)?;
+            }
+            "CLC" => {
+                crate::instructions::flags::execute_clc(self, opcode)?;
+            }
+            "CLD" => {
+                crate::instructions::flags::execute_cld(self, opcode)?;
+            }
+            "CLI" => {
+                crate::instructions::flags::execute_cli(self, opcode)?;
+            }
+            "CLV" => {
+                crate::instructions::flags::execute_clv(self, opcode)?;
+            }
+            "CMP" => {
+                crate::instructions::alu::execute_cmp(self, opcode)?;
+            }
+            "CPX" => {
+                crate::instructions::alu::execute_cpx(self, opcode)?;
+            }
+            "CPY" => {
+                crate::instructions::alu::execute_cpy(self, opcode)?;
+            }
+            "DEC" => {
+                crate::instructions::inc_dec::execute_dec(self, opcode)?;
+            }
+            "DEX" => {
+                crate::instructions::inc_dec::execute_dex(self, opcode)?;
+            }
+            "DEY" => {
+                crate::instructions::inc_dec::execute_dey(self, opcode)?;
+            }
+            "EOR" => {
+                crate::instructions::alu::execute_eor(self, opcode)?;
+            }
+            "INC" => {
+                crate::instructions::inc_dec::execute_inc(self, opcode)?;
+            }
+            "INX" => {
+                crate::instructions::inc_dec::execute_inx(self, opcode)?;
+            }
+            "INY" => {
+                crate::instructions::inc_dec::execute_iny(self, opcode)?;
+            }
+            "JMP" => {
+                crate::instructions::control::execute_jmp(self, opcode)?;
+            }
+            "JSR" => {
+                crate::instructions::control::execute_jsr(self, opcode)?;
+            }
+            "LDA" => {
+                crate::instructions::load_store::execute_lda(self, opcode)?;
+            }
+            "LDX" => {
+                crate::instructions::load_store::execute_ldx(self, opcode)?;
+            }
+            "LDY" => {
+                crate::instructions::load_store::execute_ldy(self, opcode)?;
+            }
+            "LSR" => {
+                crate::instructions::shifts::execute_lsr(self, opcode)?;
+            }
+            "NOP" => {
+                crate::instructions::control::execute_nop(self, opcode)?;
+            }
+            "ORA" => {
+                crate::instructions::alu::execute_ora(self, opcode)?;
+            }
+            "PHA" => {
+                crate::instructions::stack::execute_pha(self, opcode)?;
+            }
+            "PHP" => {
+                crate::instructions::stack::execute_php(self, opcode)?;
+            }
+            "PLA" => {
+                crate::instructions::stack::execute_pla(self, opcode)?;
+            }
+            "PLP" => {
+                crate::instructions::stack::execute_plp(self, opcode)?;
+            }
+            "ROL" => {
+                crate::instructions::shifts::execute_rol(self, opcode)?;
+            }
+            "ROR" => {
+                crate::instructions::shifts::execute_ror(self, opcode)?;
+            }
+            "RTI" => {
+                crate::instructions::control::execute_rti(self, opcode)?;
+            }
+            "RTS" => {
+                crate::instructions::control::execute_rts(self, opcode)?;
+            }
+            "SBC" => {
+                crate::instructions::alu::execute_sbc(self, opcode)?;
+            }
+            "SEC" => {
+                crate::instructions::flags::execute_sec(self, opcode)?;
+            }
+            "SED" => {
+                crate::instructions::flags::execute_sed(self, opcode)?;
+            }
+            "SEI" => {
+                crate::instructions::flags::execute_sei(self, opcode)?;
+            }
+            "STA" => {
+                crate::instructions::load_store::execute_sta(self, opcode)?;
+            }
+            "STX" => {
+                crate::instructions::load_store::execute_stx(self, opcode)?;
+            }
+            "STY" => {
+                crate::instructions::load_store::execute_sty(self, opcode)?;
+            }
+            "TAX" => {
+                crate::instructions::transfer::execute_tax(self, opcode)?;
+            }
+            "TAY" => {
+                crate::instructions::transfer::execute_tay(self, opcode)?;
+            }
+            "TSX" => {
+                crate::instructions::transfer::execute_tsx(self, opcode)?;
+            }
+            "TXA" => {
+                crate::instructions::transfer::execute_txa(self, opcode)?;
+            }
+            "TXS" => {
+                crate::instructions::transfer::execute_txs(self, opcode)?;
+            }
+            "TYA" => {
+                crate::instructions::transfer::execute_tya(self, opcode)?;
             }
             _ => {
                 // Other instructions not yet implemented
@@ -489,6 +633,16 @@ impl<M: MemoryBus> CPU<M> {
         self.flag_n = value;
     }
 
+    /// Sets the program counter value.
+    pub fn set_pc(&mut self, value: u16) {
+        self.pc = value;
+    }
+
+    /// Sets the stack pointer value.
+    pub fn set_sp(&mut self, value: u8) {
+        self.sp = value;
+    }
+
     /// Returns a mutable reference to the memory bus.
     ///
     /// This allows tests and external code to write to memory.
@@ -546,6 +700,13 @@ impl<M: MemoryBus> CPU<M> {
                 // Address is (zero page + X register) mod 256
                 let base = self.memory.read(self.pc.wrapping_add(1));
                 let addr = base.wrapping_add(self.x) as u16;
+                let value = self.memory.read(addr);
+                Ok((value, false))
+            }
+            AddressingMode::ZeroPageY => {
+                // Address is (zero page + Y register) mod 256
+                let base = self.memory.read(self.pc.wrapping_add(1));
+                let addr = base.wrapping_add(self.y) as u16;
                 let value = self.memory.read(addr);
                 Ok((value, false))
             }
@@ -623,7 +784,7 @@ impl<M: MemoryBus> CPU<M> {
 
     /// Gets the effective address for an instruction based on its addressing mode.
     ///
-    /// Used for instructions that need to write to memory (like ASL, ROL, etc.).
+    /// Used for instructions that need to write to memory (like ASL, ROL, STA, etc.).
     ///
     /// # Arguments
     ///
@@ -650,6 +811,12 @@ impl<M: MemoryBus> CPU<M> {
                 let addr = base.wrapping_add(self.x) as u16;
                 Ok(addr)
             }
+            AddressingMode::ZeroPageY => {
+                // Address is (zero page + Y register) mod 256
+                let base = self.memory.read(self.pc.wrapping_add(1));
+                let addr = base.wrapping_add(self.y) as u16;
+                Ok(addr)
+            }
             AddressingMode::Absolute => {
                 // Full 16-bit address
                 let addr_lo = self.memory.read(self.pc.wrapping_add(1)) as u16;
@@ -663,6 +830,40 @@ impl<M: MemoryBus> CPU<M> {
                 let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
                 let base_addr = (addr_hi << 8) | addr_lo;
                 let effective_addr = base_addr.wrapping_add(self.x as u16);
+                Ok(effective_addr)
+            }
+            AddressingMode::AbsoluteY => {
+                // 16-bit address + Y register
+                let addr_lo = self.memory.read(self.pc.wrapping_add(1)) as u16;
+                let addr_hi = self.memory.read(self.pc.wrapping_add(2)) as u16;
+                let base_addr = (addr_hi << 8) | addr_lo;
+                let effective_addr = base_addr.wrapping_add(self.y as u16);
+                Ok(effective_addr)
+            }
+            AddressingMode::IndirectX => {
+                // (Zero page + X), then dereference
+                let base = self.memory.read(self.pc.wrapping_add(1));
+                let zp_addr = base.wrapping_add(self.x);
+
+                // Read 16-bit address from zero page (with wraparound)
+                let addr_lo = self.memory.read(zp_addr as u16) as u16;
+                let addr_hi = self.memory.read(zp_addr.wrapping_add(1) as u16) as u16;
+                let addr = (addr_hi << 8) | addr_lo;
+
+                Ok(addr)
+            }
+            AddressingMode::IndirectY => {
+                // Zero page dereference, then + Y
+                let zp_addr = self.memory.read(self.pc.wrapping_add(1));
+
+                // Read 16-bit base address from zero page
+                let addr_lo = self.memory.read(zp_addr as u16) as u16;
+                let addr_hi = self.memory.read(zp_addr.wrapping_add(1) as u16) as u16;
+                let base_addr = (addr_hi << 8) | addr_lo;
+
+                // Add Y register
+                let effective_addr = base_addr.wrapping_add(self.y as u16);
+
                 Ok(effective_addr)
             }
             _ => {
@@ -724,16 +925,14 @@ mod tests {
         let mut mem = FlatMemory::new();
         mem.write(0xFFFC, 0x00);
         mem.write(0xFFFD, 0x80);
-        mem.write(0x8000, 0xEA); // NOP instruction (not implemented)
+        mem.write(0x8000, 0x02); // Illegal/undocumented opcode (not implemented)
 
         let mut cpu = CPU::new(mem);
-        let initial_cycles = cpu.cycles();
 
         match cpu.step() {
-            Err(ExecutionError::UnimplementedOpcode(0xEA)) => {
+            Err(ExecutionError::UnimplementedOpcode(0x02)) => {
                 // Expected error
-                assert!(cpu.cycles() > initial_cycles); // Cycles incremented
-                assert_eq!(cpu.pc(), 0x8001); // PC advanced by instruction size
+                assert_eq!(cpu.pc(), 0x8001); // PC advanced by instruction size (1 byte for illegal opcodes)
             }
             _ => panic!("Expected UnimplementedOpcode error"),
         }
@@ -752,11 +951,12 @@ mod tests {
 
         let mut cpu = CPU::new(mem);
 
-        // Try to run for 10 cycles (should execute ~5 NOPs)
+        // Run for 10 cycles (should execute 5 NOPs)
         let result = cpu.run_for_cycles(10);
 
-        // Will fail with UnimplementedOpcode, but should have advanced
-        assert!(result.is_err());
-        assert!(cpu.cycles() >= 2); // At least one instruction executed
+        // Should succeed now that NOP is implemented
+        assert!(result.is_ok());
+        assert_eq!(cpu.cycles(), 10); // Executed exactly 10 cycles (5 NOPs)
+        assert_eq!(cpu.pc(), 0x8005); // PC advanced by 5 bytes (5 NOPs)
     }
 }

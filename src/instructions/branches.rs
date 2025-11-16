@@ -5,33 +5,44 @@
 //! - BCS: Branch if Carry Set
 //! - BEQ: Branch if Equal (Zero flag set)
 //! - BMI: Branch if Minus
-//! - (Future: BNE, BPL, BVC, BVS)
+//! - BNE: Branch if Not Equal (Zero flag clear)
+//! - BPL: Branch if Positive
+//! - BVC: Branch if Overflow Clear
+//! - BVS: Branch if Overflow Set
 //!
 //! All branch instructions use relative addressing with a signed 8-bit offset.
 //! Cycle timing varies based on whether the branch is taken and whether a page boundary is crossed.
 
 use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 
-/// Executes the BCC (Branch if Carry Clear) instruction.
+/// Generic branch instruction implementation.
 ///
-/// Branches to a new location if the carry flag is clear (C = 0).
-/// Uses relative addressing mode with a signed 8-bit offset.
-///
-/// Cycle timing:
-/// - 2 cycles if branch not taken
-/// - 3 cycles if branch taken to same page
-/// - 4 cycles if branch taken to different page
-///
-/// No flags are affected.
+/// Handles all common branch logic including:
+/// - Reading signed offset from PC+1
+/// - Calculating target address
+/// - Detecting page crossings
+/// - Updating cycle count based on branch taken and page crossing
+/// - Updating program counter
 ///
 /// # Arguments
 ///
 /// * `cpu` - Mutable reference to the CPU
-/// * `opcode` - The opcode byte for this BCC instruction (0x90)
-pub(crate) fn execute_bcc<M: MemoryBus>(
+/// * `opcode` - The opcode byte for this branch instruction
+/// * `should_branch` - Closure that evaluates the branch condition
+///
+/// # Cycle Timing
+///
+/// - 2 cycles if branch not taken
+/// - 3 cycles if branch taken to same page
+/// - 4 cycles if branch taken to different page
+fn execute_branch<M: MemoryBus, F>(
     cpu: &mut CPU<M>,
     opcode: u8,
-) -> Result<(), ExecutionError> {
+    should_branch: F,
+) -> Result<(), ExecutionError>
+where
+    F: FnOnce(&CPU<M>) -> bool,
+{
     let metadata = &OPCODE_TABLE[opcode as usize];
 
     // Read the signed 8-bit offset from PC+1
@@ -43,8 +54,8 @@ pub(crate) fn execute_bcc<M: MemoryBus>(
     // Calculate the address after the instruction (PC + 2)
     let pc_after_instruction = cpu.pc.wrapping_add(metadata.size_bytes as u16);
 
-    // Check if carry flag is clear
-    if !cpu.flag_c {
+    // Check if we should take the branch
+    if should_branch(cpu) {
         // Branch is taken
         // Calculate the target address by adding the signed offset
         // Use wrapping_add_signed to handle both positive and negative offsets correctly
@@ -73,6 +84,29 @@ pub(crate) fn execute_bcc<M: MemoryBus>(
     cpu.cycles += cycles;
 
     Ok(())
+}
+
+/// Executes the BCC (Branch if Carry Clear) instruction.
+///
+/// Branches to a new location if the carry flag is clear (C = 0).
+/// Uses relative addressing mode with a signed 8-bit offset.
+///
+/// Cycle timing:
+/// - 2 cycles if branch not taken
+/// - 3 cycles if branch taken to same page
+/// - 4 cycles if branch taken to different page
+///
+/// No flags are affected.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this BCC instruction (0x90)
+pub(crate) fn execute_bcc<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    execute_branch(cpu, opcode, |cpu| !cpu.flag_c)
 }
 
 /// Executes the BCS (Branch if Carry Set) instruction.
@@ -95,47 +129,7 @@ pub(crate) fn execute_bcs<M: MemoryBus>(
     cpu: &mut CPU<M>,
     opcode: u8,
 ) -> Result<(), ExecutionError> {
-    let metadata = &OPCODE_TABLE[opcode as usize];
-
-    // Read the signed 8-bit offset from PC+1
-    let offset = cpu.memory.read(cpu.pc.wrapping_add(1)) as i8;
-
-    // Start with base cycles
-    let mut cycles = metadata.base_cycles as u64;
-
-    // Calculate the address after the instruction (PC + 2)
-    let pc_after_instruction = cpu.pc.wrapping_add(metadata.size_bytes as u16);
-
-    // Check if carry flag is set
-    if cpu.flag_c {
-        // Branch is taken
-        // Calculate the target address by adding the signed offset
-        // Use wrapping_add_signed to handle both positive and negative offsets correctly
-        let target_pc = pc_after_instruction.wrapping_add_signed(offset as i16);
-
-        // Check if page boundary was crossed
-        // A page boundary is crossed if the high byte of the address changes
-        let page_crossed = (pc_after_instruction & 0xFF00) != (target_pc & 0xFF00);
-
-        // Add 1 cycle for branch taken
-        cycles += 1;
-
-        // Add 1 more cycle if page boundary was crossed
-        if page_crossed {
-            cycles += 1;
-        }
-
-        // Update PC to target address
-        cpu.pc = target_pc;
-    } else {
-        // Branch not taken, just advance PC normally
-        cpu.pc = pc_after_instruction;
-    }
-
-    // Update cycle count
-    cpu.cycles += cycles;
-
-    Ok(())
+    execute_branch(cpu, opcode, |cpu| cpu.flag_c)
 }
 
 /// Executes the BEQ (Branch if Equal) instruction.
@@ -158,47 +152,7 @@ pub(crate) fn execute_beq<M: MemoryBus>(
     cpu: &mut CPU<M>,
     opcode: u8,
 ) -> Result<(), ExecutionError> {
-    let metadata = &OPCODE_TABLE[opcode as usize];
-
-    // Read the signed 8-bit offset from PC+1
-    let offset = cpu.memory.read(cpu.pc.wrapping_add(1)) as i8;
-
-    // Start with base cycles
-    let mut cycles = metadata.base_cycles as u64;
-
-    // Calculate the address after the instruction (PC + 2)
-    let pc_after_instruction = cpu.pc.wrapping_add(metadata.size_bytes as u16);
-
-    // Check if zero flag is set
-    if cpu.flag_z {
-        // Branch is taken
-        // Calculate the target address by adding the signed offset
-        // Use wrapping_add_signed to handle both positive and negative offsets correctly
-        let target_pc = pc_after_instruction.wrapping_add_signed(offset as i16);
-
-        // Check if page boundary was crossed
-        // A page boundary is crossed if the high byte of the address changes
-        let page_crossed = (pc_after_instruction & 0xFF00) != (target_pc & 0xFF00);
-
-        // Add 1 cycle for branch taken
-        cycles += 1;
-
-        // Add 1 more cycle if page boundary was crossed
-        if page_crossed {
-            cycles += 1;
-        }
-
-        // Update PC to target address
-        cpu.pc = target_pc;
-    } else {
-        // Branch not taken, just advance PC normally
-        cpu.pc = pc_after_instruction;
-    }
-
-    // Update cycle count
-    cpu.cycles += cycles;
-
-    Ok(())
+    execute_branch(cpu, opcode, |cpu| cpu.flag_z)
 }
 
 /// Executes the BMI (Branch if Minus) instruction.
@@ -221,45 +175,97 @@ pub(crate) fn execute_bmi<M: MemoryBus>(
     cpu: &mut CPU<M>,
     opcode: u8,
 ) -> Result<(), ExecutionError> {
-    let metadata = &OPCODE_TABLE[opcode as usize];
+    execute_branch(cpu, opcode, |cpu| cpu.flag_n)
+}
 
-    // Read the signed 8-bit offset from PC+1
-    let offset = cpu.memory.read(cpu.pc.wrapping_add(1)) as i8;
+/// Executes the BNE (Branch if Not Equal) instruction.
+///
+/// Branches to a new location if the zero flag is clear (Z = 0).
+/// Uses relative addressing mode with a signed 8-bit offset.
+///
+/// Cycle timing:
+/// - 2 cycles if branch not taken
+/// - 3 cycles if branch taken to same page
+/// - 4 cycles if branch taken to different page
+///
+/// No flags are affected.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this BNE instruction (0xD0)
+pub(crate) fn execute_bne<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    execute_branch(cpu, opcode, |cpu| !cpu.flag_z)
+}
 
-    // Start with base cycles
-    let mut cycles = metadata.base_cycles as u64;
+/// Executes the BPL (Branch if Positive) instruction.
+///
+/// Branches to a new location if the negative flag is clear (N = 0).
+/// Uses relative addressing mode with a signed 8-bit offset.
+///
+/// Cycle timing:
+/// - 2 cycles if branch not taken
+/// - 3 cycles if branch taken to same page
+/// - 4 cycles if branch taken to different page
+///
+/// No flags are affected.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this BPL instruction (0x10)
+pub(crate) fn execute_bpl<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    execute_branch(cpu, opcode, |cpu| !cpu.flag_n)
+}
 
-    // Calculate the address after the instruction (PC + 2)
-    let pc_after_instruction = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+/// Executes the BVC (Branch if Overflow Clear) instruction.
+///
+/// Branches to a new location if the overflow flag is clear (V = 0).
+/// Uses relative addressing mode with a signed 8-bit offset.
+///
+/// Cycle timing:
+/// - 2 cycles if branch not taken
+/// - 3 cycles if branch taken to same page
+/// - 4 cycles if branch taken to different page
+///
+/// No flags are affected.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this BVC instruction (0x50)
+pub(crate) fn execute_bvc<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    execute_branch(cpu, opcode, |cpu| !cpu.flag_v)
+}
 
-    // Check if negative flag is set
-    if cpu.flag_n {
-        // Branch is taken
-        // Calculate the target address by adding the signed offset
-        // Use wrapping_add_signed to handle both positive and negative offsets correctly
-        let target_pc = pc_after_instruction.wrapping_add_signed(offset as i16);
-
-        // Check if page boundary was crossed
-        // A page boundary is crossed if the high byte of the address changes
-        let page_crossed = (pc_after_instruction & 0xFF00) != (target_pc & 0xFF00);
-
-        // Add 1 cycle for branch taken
-        cycles += 1;
-
-        // Add 1 more cycle if page boundary was crossed
-        if page_crossed {
-            cycles += 1;
-        }
-
-        // Update PC to target address
-        cpu.pc = target_pc;
-    } else {
-        // Branch not taken, just advance PC normally
-        cpu.pc = pc_after_instruction;
-    }
-
-    // Update cycle count
-    cpu.cycles += cycles;
-
-    Ok(())
+/// Executes the BVS (Branch if Overflow Set) instruction.
+///
+/// Branches to a new location if the overflow flag is set (V = 1).
+/// Uses relative addressing mode with a signed 8-bit offset.
+///
+/// Cycle timing:
+/// - 2 cycles if branch not taken
+/// - 3 cycles if branch taken to same page
+/// - 4 cycles if branch taken to different page
+///
+/// No flags are affected.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this BVS instruction (0x70)
+pub(crate) fn execute_bvs<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    execute_branch(cpu, opcode, |cpu| cpu.flag_v)
 }
