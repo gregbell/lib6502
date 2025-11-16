@@ -31,6 +31,29 @@ impl AssemblerOutput {
         self.symbol_table.iter().find(|s| s.name == name)
     }
 
+    /// Get symbol address by name
+    ///
+    /// This is a convenience method that returns just the address.
+    /// Use `lookup_symbol()` if you need the full symbol information.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(address)` if the symbol exists
+    /// * `None` if the symbol is not found
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cpu6502::assembler::assemble;
+    ///
+    /// let source = "START:\n    LDA #$42";
+    /// let output = assemble(source).unwrap();
+    /// assert_eq!(output.lookup_symbol_addr("START"), Some(0));
+    /// ```
+    pub fn lookup_symbol_addr(&self, name: &str) -> Option<u16> {
+        self.lookup_symbol(name).map(|symbol| symbol.address)
+    }
+
     /// Get source location for a given instruction address
     pub fn get_source_location(&self, address: u16) -> Option<source_map::SourceLocation> {
         self.source_map.get_source_location(address)
@@ -64,6 +87,33 @@ pub struct AssemblerWarning {
     /// Warning message
     pub message: String,
 }
+
+/// Error type for label validation failures
+#[derive(Debug, Clone, PartialEq)]
+pub enum LabelError {
+    /// Label starts with invalid character (must start with letter)
+    InvalidStart(String),
+
+    /// Label contains invalid characters (only alphanumeric and underscore allowed)
+    InvalidCharacters(String),
+
+    /// Label is too long (max 32 characters)
+    TooLong(usize),
+}
+
+impl std::fmt::Display for LabelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LabelError::InvalidStart(msg) => write!(f, "{}", msg),
+            LabelError::InvalidCharacters(msg) => write!(f, "{}", msg),
+            LabelError::TooLong(len) => {
+                write!(f, "label name too long ({} characters, max 32)", len)
+            }
+        }
+    }
+}
+
+impl std::error::Error for LabelError {}
 
 /// An error encountered during assembly
 #[derive(Debug, Clone, PartialEq)]
@@ -188,7 +238,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                     line: line.line_number,
                     column: 0,
                     span: line.span,
-                    message: e,
+                    message: e.to_string(),
                 });
             } else {
                 // Add to symbol table
@@ -437,6 +487,38 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     })
 }
 
+/// Assemble source code with a specified origin address
+///
+/// This is a convenience function equivalent to prepending `.org <origin>` to the source.
+/// Labels and code addresses will be calculated relative to this origin.
+///
+/// # Arguments
+///
+/// * `source` - The assembly source code text
+/// * `origin` - Starting address for assembled code (0x0000 to 0xFFFF)
+///
+/// # Returns
+///
+/// Ok(AssemblerOutput) on success, Err(Vec<AssemblerError>) on failure
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::assembler::assemble_with_origin;
+///
+/// let source = "START:\n    LDA #$42";
+/// let output = assemble_with_origin(source, 0x8000).unwrap();
+/// assert_eq!(output.symbol_table[0].address, 0x8000);
+/// ```
+pub fn assemble_with_origin(
+    source: &str,
+    origin: u16,
+) -> Result<AssemblerOutput, Vec<AssemblerError>> {
+    // Prepend .org directive to source
+    let source_with_origin = format!(".org ${:04X}\n{}", origin, source);
+    assemble(&source_with_origin)
+}
+
 /// Resolve an operand, handling both numeric values and label references
 fn resolve_operand(
     operand: &str,
@@ -530,28 +612,49 @@ fn resolve_operand(
 /// - Start with a letter [a-zA-Z]
 /// - Contain only alphanumeric characters and underscores
 /// - Not exceed 32 characters in length
-fn validate_label(name: &str) -> Result<(), String> {
+///
+/// # Returns
+///
+/// * `Ok(())` if the label is valid
+/// * `Err(LabelError)` with specific validation failure reason
+///
+/// # Examples
+///
+/// ```
+/// use cpu6502::assembler::validate_label;
+///
+/// assert!(validate_label("START").is_ok());
+/// assert!(validate_label("loop_1").is_ok());
+/// assert!(validate_label("_invalid").is_err()); // starts with underscore
+/// assert!(validate_label("1invalid").is_err()); // starts with digit
+/// ```
+pub fn validate_label(name: &str) -> Result<(), LabelError> {
     if name.is_empty() {
-        return Err("label name cannot be empty".to_string());
+        return Err(LabelError::InvalidStart(
+            "label name cannot be empty".to_string(),
+        ));
     }
 
     if name.len() > 32 {
-        return Err(format!("label name too long (max 32 characters): {}", name));
+        return Err(LabelError::TooLong(name.len()));
     }
 
     let mut chars = name.chars();
     let first = chars.next().unwrap();
 
     if !first.is_ascii_alphabetic() {
-        return Err(format!("label must start with a letter, not '{}'", first));
+        return Err(LabelError::InvalidStart(format!(
+            "label must start with a letter, not '{}'",
+            first
+        )));
     }
 
     for ch in chars {
         if !ch.is_ascii_alphanumeric() && ch != '_' {
-            return Err(format!(
+            return Err(LabelError::InvalidCharacters(format!(
                 "label contains invalid character '{}' (only letters, digits, and underscores allowed)",
                 ch
-            ));
+            )));
         }
     }
 
@@ -577,5 +680,114 @@ mod tests {
         assert!(validate_label("MY-LABEL").is_err());
         assert!(validate_label("LABEL!").is_err());
         assert!(validate_label(&"A".repeat(33)).is_err());
+    }
+
+    #[test]
+    fn test_validate_label_error_types() {
+        // Test InvalidStart errors
+        match validate_label("") {
+            Err(LabelError::InvalidStart(_)) => {}
+            _ => panic!("Expected InvalidStart error for empty label"),
+        }
+
+        match validate_label("1START") {
+            Err(LabelError::InvalidStart(_)) => {}
+            _ => panic!("Expected InvalidStart error for label starting with digit"),
+        }
+
+        match validate_label("_invalid") {
+            Err(LabelError::InvalidStart(_)) => {}
+            _ => panic!("Expected InvalidStart error for label starting with underscore"),
+        }
+
+        // Test InvalidCharacters errors
+        match validate_label("MY-LABEL") {
+            Err(LabelError::InvalidCharacters(_)) => {}
+            _ => panic!("Expected InvalidCharacters error for label with hyphen"),
+        }
+
+        match validate_label("LABEL!") {
+            Err(LabelError::InvalidCharacters(_)) => {}
+            _ => panic!("Expected InvalidCharacters error for label with exclamation"),
+        }
+
+        // Test TooLong error
+        match validate_label(&"A".repeat(33)) {
+            Err(LabelError::TooLong(33)) => {}
+            _ => panic!("Expected TooLong error for 33-character label"),
+        }
+    }
+
+    #[test]
+    fn test_assemble_with_origin_basic() {
+        let source = "START:\n    LDA #$42";
+        let output = assemble_with_origin(source, 0x8000).unwrap();
+
+        // Check that the label has the correct address
+        assert_eq!(output.symbol_table.len(), 1);
+        assert_eq!(output.symbol_table[0].name, "START");
+        assert_eq!(output.symbol_table[0].address, 0x8000);
+
+        // Check assembled bytes (LDA immediate)
+        assert_eq!(output.bytes.len(), 2);
+        assert_eq!(output.bytes[0], 0xA9); // LDA immediate opcode
+        assert_eq!(output.bytes[1], 0x42);
+    }
+
+    #[test]
+    fn test_assemble_with_origin_multiple_labels() {
+        let source = "START:\n    NOP\nLOOP:\n    NOP\n    JMP LOOP";
+        let output = assemble_with_origin(source, 0x1000).unwrap();
+
+        // Check that labels have correct addresses
+        assert_eq!(output.symbol_table.len(), 2);
+        let start = output.lookup_symbol("START").unwrap();
+        let loop_label = output.lookup_symbol("LOOP").unwrap();
+
+        assert_eq!(start.address, 0x1000);
+        assert_eq!(loop_label.address, 0x1001); // After one NOP
+    }
+
+    #[test]
+    fn test_assemble_with_origin_preserves_errors() {
+        let source = "INVALID SYNTAX HERE";
+        let result = assemble_with_origin(source, 0x8000);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lookup_symbol_addr() {
+        let source = "START:\n    LDA #$42\nEND:\n    RTS";
+        let output = assemble(source).unwrap();
+
+        // Test existing symbol
+        assert_eq!(output.lookup_symbol_addr("START"), Some(0));
+        assert_eq!(output.lookup_symbol_addr("END"), Some(2));
+
+        // Test non-existent symbol
+        assert_eq!(output.lookup_symbol_addr("NONEXISTENT"), None);
+    }
+
+    #[test]
+    fn test_lookup_symbol_addr_with_origin() {
+        let source = "START:\n    NOP\nEND:\n    NOP";
+        let output = assemble_with_origin(source, 0x2000).unwrap();
+
+        assert_eq!(output.lookup_symbol_addr("START"), Some(0x2000));
+        assert_eq!(output.lookup_symbol_addr("END"), Some(0x2001));
+    }
+
+    #[test]
+    fn test_lookup_symbol_still_works() {
+        // Ensure the richer lookup_symbol method still works alongside lookup_symbol_addr
+        let source = "START:\n    LDA #$42";
+        let output = assemble(source).unwrap();
+
+        let symbol = output.lookup_symbol("START");
+        assert!(symbol.is_some());
+        let symbol = symbol.unwrap();
+        assert_eq!(symbol.name, "START");
+        assert_eq!(symbol.address, 0);
+        assert_eq!(symbol.defined_at, 1);
     }
 }
