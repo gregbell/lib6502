@@ -35,29 +35,67 @@ pub(crate) fn execute_adc<M: MemoryBus>(
     let a = cpu.a;
     let carry_in = if cpu.flag_c { 1 } else { 0 };
 
-    // Perform addition with carry
-    let result16 = a as u16 + value as u16 + carry_in as u16;
-    let result = result16 as u8;
+    let result: u8;
 
-    // Update flags
+    if cpu.flag_d {
+        // BCD (Binary Coded Decimal) mode
+        // Each nibble represents a decimal digit (0-9)
+        // Need to adjust when nibbles exceed 9
 
-    // Carry flag: Set if result > 255
-    cpu.flag_c = result16 > 0xFF;
+        // Add low nibbles (ones digit)
+        let mut al = (a & 0x0F) + (value & 0x0F) + carry_in;
+        if al >= 0x0A {
+            // Adjust low nibble if >= 10
+            al = ((al + 0x06) & 0x0F) + 0x10;
+        }
 
-    // Zero flag: Set if result is 0
-    cpu.flag_z = result == 0;
+        // Add high nibbles (tens digit) plus any carry from low nibble
+        let mut ah = (a >> 4) + (value >> 4) + (al >> 4);
 
-    // Negative flag: Set if bit 7 of result is set
-    cpu.flag_n = (result & 0x80) != 0;
+        // Set carry flag if high nibble >= 10
+        if ah >= 0x0A {
+            ah = (ah + 0x06) & 0x0F;
+            cpu.flag_c = true;
+        } else {
+            cpu.flag_c = false;
+        }
 
-    // Overflow flag: Set if sign bit is incorrect
-    // Overflow occurs when:
-    // - Adding two positive numbers yields a negative result, or
-    // - Adding two negative numbers yields a positive result
-    // Formula: V = (A^result) & (M^result) & 0x80
-    // This checks if both operands had same sign but result has different sign
-    let overflow = ((a ^ result) & (value ^ result) & 0x80) != 0;
-    cpu.flag_v = overflow;
+        // Combine nibbles into result
+        result = (ah << 4) | (al & 0x0F);
+
+        // Zero flag: Set if result is 0
+        cpu.flag_z = result == 0;
+
+        // Note: N and V flags are undefined in decimal mode on NMOS 6502
+        // We leave them unchanged (some implementations set them from binary result)
+        // The Klaus test may not rely on specific N/V behavior in decimal mode
+    } else {
+        // Binary mode (standard two's complement addition)
+
+        // Perform addition with carry
+        let result16 = a as u16 + value as u16 + carry_in as u16;
+        result = result16 as u8;
+
+        // Update flags
+
+        // Carry flag: Set if result > 255
+        cpu.flag_c = result16 > 0xFF;
+
+        // Zero flag: Set if result is 0
+        cpu.flag_z = result == 0;
+
+        // Negative flag: Set if bit 7 of result is set
+        cpu.flag_n = (result & 0x80) != 0;
+
+        // Overflow flag: Set if sign bit is incorrect
+        // Overflow occurs when:
+        // - Adding two positive numbers yields a negative result, or
+        // - Adding two negative numbers yields a positive result
+        // Formula: V = (A^result) & (M^result) & 0x80
+        // This checks if both operands had same sign but result has different sign
+        let overflow = ((a ^ result) & (value ^ result) & 0x80) != 0;
+        cpu.flag_v = overflow;
+    }
 
     // Store result in accumulator
     cpu.a = result;
@@ -441,30 +479,69 @@ pub(crate) fn execute_sbc<M: MemoryBus>(
     let a = cpu.a;
     let carry_in = if cpu.flag_c { 1 } else { 0 };
 
-    // Perform subtraction using two's complement: A - M - (1 - C) = A + ~M + C
-    let result16 = a as u16 + (!value) as u16 + carry_in as u16;
-    let result = result16 as u8;
+    let result: u8;
 
-    // Update flags
+    if cpu.flag_d {
+        // BCD (Binary Coded Decimal) mode
+        // Each nibble represents a decimal digit (0-9)
+        // Need to adjust when borrowing occurs
 
-    // Carry flag: Set if no borrow occurred (result >= 0 in signed terms)
-    // In subtraction, carry is set when result16 > 0xFF (no borrow needed)
-    cpu.flag_c = result16 > 0xFF;
+        let borrow_in = 1 - carry_in; // SBC uses inverted carry as borrow
 
-    // Zero flag: Set if result is 0
-    cpu.flag_z = result == 0;
+        // Subtract low nibbles (ones digit)
+        let mut al = (a & 0x0F) as i16 - (value & 0x0F) as i16 - borrow_in as i16;
+        if al < 0 {
+            al -= 6; // Adjust for decimal borrow (difference between binary and decimal)
+        }
 
-    // Negative flag: Set if bit 7 of result is set
-    cpu.flag_n = (result & 0x80) != 0;
+        // Subtract high nibbles (tens digit)
+        let mut ah = (a >> 4) as i16 - (value >> 4) as i16;
+        if al < 0 {
+            ah -= 1; // Borrow from high nibble
+        }
+        if ah < 0 {
+            ah -= 6; // Adjust for decimal borrow
+        }
 
-    // Overflow flag: Set if sign bit is incorrect
-    // Overflow occurs when:
-    // - Subtracting a positive from a negative yields a positive, or
-    // - Subtracting a negative from a positive yields a negative
-    // Formula: V = (A^result) & (A^M) & 0x80
-    // This checks if A and M had different signs and result has different sign from A
-    let overflow = ((a ^ result) & (a ^ value) & 0x80) != 0;
-    cpu.flag_v = overflow;
+        // Set carry flag: true if no borrow, false if borrow
+        cpu.flag_c = ah >= 0;
+
+        // Combine nibbles into result
+        result = (((ah & 0x0F) << 4) | (al & 0x0F)) as u8;
+
+        // Zero flag: Set if result is 0
+        cpu.flag_z = result == 0;
+
+        // Note: N and V flags are undefined in decimal mode on NMOS 6502
+        // We leave them unchanged
+    } else {
+        // Binary mode (standard two's complement subtraction)
+
+        // Perform subtraction using two's complement: A - M - (1 - C) = A + ~M + C
+        let result16 = a as u16 + (!value) as u16 + carry_in as u16;
+        result = result16 as u8;
+
+        // Update flags
+
+        // Carry flag: Set if no borrow occurred (result >= 0 in signed terms)
+        // In subtraction, carry is set when result16 > 0xFF (no borrow needed)
+        cpu.flag_c = result16 > 0xFF;
+
+        // Zero flag: Set if result is 0
+        cpu.flag_z = result == 0;
+
+        // Negative flag: Set if bit 7 of result is set
+        cpu.flag_n = (result & 0x80) != 0;
+
+        // Overflow flag: Set if sign bit is incorrect
+        // Overflow occurs when:
+        // - Subtracting a positive from a negative yields a positive, or
+        // - Subtracting a negative from a positive yields a negative
+        // Formula: V = (A^result) & (A^M) & 0x80
+        // This checks if A and M had different signs and result has different sign from A
+        let overflow = ((a ^ result) & (a ^ value) & 0x80) != 0;
+        cpu.flag_v = overflow;
+    }
 
     // Store result in accumulator
     cpu.a = result;

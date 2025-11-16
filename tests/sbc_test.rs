@@ -558,3 +558,182 @@ fn test_sbc_borrow_chain() {
     assert_eq!(cpu.a(), 0xF4);
     assert!(cpu.flag_c()); // No new borrow (0xF5 - 0 - 1 still positive in unsigned)
 }
+
+// ========== Decimal Mode (BCD) Tests ==========
+
+#[test]
+fn test_sbc_decimal_mode_basic() {
+    let mut cpu = setup_cpu();
+
+    // SBC #$25 in decimal mode: 50 - 25 = 25 (BCD)
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x25);
+
+    cpu.set_a(0x50);
+    cpu.set_flag_c(true); // No borrow
+    cpu.set_flag_d(true); // Enable decimal mode
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x25); // BCD result: 50 - 25 = 25
+    assert!(cpu.flag_c()); // No borrow
+    assert!(!cpu.flag_z());
+}
+
+#[test]
+fn test_sbc_decimal_mode_with_borrow_in() {
+    let mut cpu = setup_cpu();
+
+    // SBC #$25 in decimal mode with borrow: 50 - 25 - 1 = 24 (BCD)
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x25);
+
+    cpu.set_a(0x50);
+    cpu.set_flag_c(false); // Borrow in
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x24); // BCD result: 50 - 25 - 1 = 24
+    assert!(cpu.flag_c()); // No borrow out
+}
+
+#[test]
+fn test_sbc_decimal_mode_with_borrow_out() {
+    let mut cpu = setup_cpu();
+
+    // SBC #$50 in decimal mode: 25 - 50 requires borrow (BCD)
+    // Result should wrap in BCD
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x50);
+
+    cpu.set_a(0x25);
+    cpu.set_flag_c(true); // No borrow in
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x75); // BCD result: 25 - 50 = -25 -> 75 (with borrow)
+    assert!(!cpu.flag_c()); // Borrow occurred
+}
+
+#[test]
+fn test_sbc_decimal_mode_low_nibble_borrow() {
+    let mut cpu = setup_cpu();
+
+    // SBC #$08 in decimal mode: 15 - 08 = 07 (BCD)
+    // Tests low nibble borrow (5 - 8 requires borrowing from tens)
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x08);
+
+    cpu.set_a(0x15);
+    cpu.set_flag_c(true);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x07); // BCD result: 15 - 08 = 07
+    assert!(cpu.flag_c()); // No borrow out
+}
+
+#[test]
+fn test_sbc_decimal_mode_high_nibble_borrow() {
+    let mut cpu = setup_cpu();
+
+    // SBC #$35 in decimal mode: 42 - 35 = 07 (BCD)
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x35);
+
+    cpu.set_a(0x42);
+    cpu.set_flag_c(true);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x07); // BCD result: 42 - 35 = 07
+    assert!(cpu.flag_c()); // No borrow
+}
+
+#[test]
+fn test_sbc_decimal_mode_zero_result() {
+    let mut cpu = setup_cpu();
+
+    // SBC #$50 in decimal mode: 50 - 50 = 00 (BCD)
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x50);
+
+    cpu.set_a(0x50);
+    cpu.set_flag_c(true);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x00); // BCD result: 50 - 50 = 00
+    assert!(cpu.flag_c()); // No borrow
+    assert!(cpu.flag_z()); // Zero flag set
+}
+
+#[test]
+fn test_sbc_decimal_mode_99_minus_1() {
+    let mut cpu = setup_cpu();
+
+    // SBC #$01 in decimal mode: 99 - 01 = 98 (BCD)
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x01);
+
+    cpu.set_a(0x99);
+    cpu.set_flag_c(true);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x98); // BCD result: 99 - 01 = 98
+    assert!(cpu.flag_c()); // No borrow
+    assert!(!cpu.flag_z());
+}
+
+#[test]
+fn test_sbc_decimal_mode_subtract_from_zero() {
+    let mut cpu = setup_cpu();
+
+    // SBC #$01 in decimal mode: 00 - 01 requires borrow (BCD)
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x01);
+
+    cpu.set_a(0x00);
+    cpu.set_flag_c(true);
+    cpu.set_flag_d(true);
+
+    cpu.step().unwrap();
+
+    assert_eq!(cpu.a(), 0x99); // BCD result: 00 - 01 = -01 -> 99 (with borrow)
+    assert!(!cpu.flag_c()); // Borrow occurred
+}
+
+#[test]
+fn test_sbc_decimal_vs_binary_mode() {
+    let mut cpu = setup_cpu();
+
+    // Compare binary vs decimal mode for same inputs
+    // Binary: 0x50 - 0x25 = 0x2B
+    // Decimal: 50 - 25 = 25 (BCD)
+
+    // Test in binary mode first
+    cpu.memory_mut().write(0x8000, 0xE9);
+    cpu.memory_mut().write(0x8001, 0x25);
+    cpu.set_a(0x50);
+    cpu.set_flag_c(true);
+    cpu.set_flag_d(false); // Binary mode
+
+    cpu.step().unwrap();
+    assert_eq!(cpu.a(), 0x2B); // Binary result
+
+    // Reset and test in decimal mode
+    cpu.set_pc(0x8000);
+    cpu.set_a(0x50);
+    cpu.set_flag_c(true);
+    cpu.set_flag_d(true); // Decimal mode
+
+    cpu.step().unwrap();
+    assert_eq!(cpu.a(), 0x25); // BCD result: 50 - 25 = 25
+}
