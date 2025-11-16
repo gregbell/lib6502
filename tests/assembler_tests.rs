@@ -731,3 +731,204 @@ fn test_mixed_case_mnemonic_and_register() {
         result3
     );
 }
+
+// Tests for branch instructions with numeric addresses
+// Discovered via Klaus round-trip test - branches should accept numeric
+// target addresses and automatically calculate relative offsets
+
+#[test]
+fn test_branch_with_numeric_address_forward() {
+    // Branch forward to absolute address
+    let source = r#"
+        .org $1000
+        BEQ $1010
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // BEQ opcode is $F0
+    // Instruction at $1000, next instruction at $1002
+    // Target is $1010, offset = $1010 - $1002 = $000E = 14
+    assert_eq!(result.bytes, vec![0xF0, 0x0E]);
+}
+
+#[test]
+fn test_branch_with_numeric_address_backward() {
+    // Branch backward to absolute address
+    let source = r#"
+        .org $1010
+        BNE $1000
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // BNE opcode is $D0
+    // Instruction at $1010, next instruction at $1012
+    // Target is $1000, offset = $1000 - $1012 = -18 = $EE (two's complement)
+    assert_eq!(result.bytes, vec![0xD0, 0xEE]);
+}
+
+#[test]
+fn test_branch_with_numeric_address_zero_offset() {
+    // Branch to the next instruction (offset = 0)
+    let source = r#"
+        .org $1000
+        BCC $1002
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // BCC opcode is $90
+    // Instruction at $1000, next instruction at $1002
+    // Target is $1002, offset = $1002 - $1002 = 0
+    assert_eq!(result.bytes, vec![0x90, 0x00]);
+}
+
+#[test]
+fn test_branch_with_numeric_address_max_forward() {
+    // Branch with maximum forward offset (+127)
+    let source = r#"
+        .org $1000
+        BPL $1081
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // BPL opcode is $10
+    // Instruction at $1000, next instruction at $1002
+    // Target is $1081, offset = $1081 - $1002 = $007F = 127
+    assert_eq!(result.bytes, vec![0x10, 0x7F]);
+}
+
+#[test]
+fn test_branch_with_numeric_address_max_backward() {
+    // Branch with maximum backward offset (-128)
+    let source = r#"
+        .org $1000
+        BMI $0F82
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // BMI opcode is $30
+    // Instruction at $1000, next instruction at $1002
+    // Target is $0F82, offset = $0F82 - $1002 = -128 = $80 (two's complement)
+    assert_eq!(result.bytes, vec![0x30, 0x80]);
+}
+
+#[test]
+fn test_branch_with_numeric_address_out_of_range_forward() {
+    // Branch target too far forward (> +127)
+    let source = r#"
+        .org $1000
+        BEQ $1082
+    "#;
+
+    let result = assemble(source);
+    assert!(result.is_err());
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::RangeError);
+    assert!(errors[0].message.contains("out of range"));
+}
+
+#[test]
+fn test_branch_with_numeric_address_out_of_range_backward() {
+    // Branch target too far backward (< -128)
+    let source = r#"
+        .org $1000
+        BNE $0F81
+    "#;
+
+    let result = assemble(source);
+    assert!(result.is_err());
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::RangeError);
+    assert!(errors[0].message.contains("out of range"));
+}
+
+#[test]
+fn test_all_branch_instructions_with_numeric_addresses() {
+    // Test all 8 branch instructions to ensure they all support numeric addresses
+    let source = r#"
+        .org $2000
+        BCC $2010
+        BCS $2010
+        BEQ $2010
+        BMI $2010
+        BNE $2010
+        BPL $2010
+        BVC $2010
+        BVS $2010
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // Each branch is 2 bytes (opcode + offset)
+    assert_eq!(result.bytes.len(), 16);
+
+    // All should have offset $0E (target $2010 - next instruction address)
+    // Opcodes: BCC=$90, BCS=$B0, BEQ=$F0, BMI=$30, BNE=$D0, BPL=$10, BVC=$50, BVS=$70
+    assert_eq!(
+        result.bytes,
+        vec![
+            0x90, 0x0E, // BCC
+            0xB0, 0x0C, // BCS (from $2002)
+            0xF0, 0x0A, // BEQ (from $2004)
+            0x30, 0x08, // BMI (from $2006)
+            0xD0, 0x06, // BNE (from $2008)
+            0x10, 0x04, // BPL (from $200A)
+            0x50, 0x02, // BVC (from $200C)
+            0x70, 0x00, // BVS (from $200E, target is $2010)
+        ]
+    );
+}
+
+#[test]
+fn test_branch_numeric_address_with_hex_prefix() {
+    // Ensure hex prefix works ($XXXX format)
+    let source = r#"
+        .org $1000
+        BEQ $1010
+    "#;
+
+    let result = assemble(source).unwrap();
+    assert_eq!(result.bytes, vec![0xF0, 0x0E]);
+}
+
+#[test]
+fn test_branch_numeric_address_decimal_format() {
+    // Test decimal format (without $ prefix)
+    let source = r#"
+        .org $1000
+        BEQ 4112
+    "#; // 4112 decimal = $1010 hex
+
+    let result = assemble(source).unwrap();
+    assert_eq!(result.bytes, vec![0xF0, 0x0E]);
+}
+
+#[test]
+fn test_branch_still_works_with_labels() {
+    // Ensure label-based branches still work (existing functionality)
+    let source = r#"
+.org $1000
+START:
+    NOP
+LOOP:
+    NOP
+    BNE START
+    RTS
+"#;
+
+    let result = assemble(source).unwrap();
+    // START: NOP ($1000-$1001)
+    // LOOP: NOP ($1001-$1002)
+    // BNE START ($1002-$1004, offset back to $1000)
+    // Offset = $1000 - $1004 = -4 = $FC (two's complement)
+    // RTS ($1004-$1005)
+    assert_eq!(result.bytes, vec![0xEA, 0xEA, 0xD0, 0xFC, 0x60]);
+}

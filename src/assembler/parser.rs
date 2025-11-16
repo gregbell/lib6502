@@ -631,4 +631,81 @@ mod tests {
             _ => panic!("Expected Word directive"),
         }
     }
+
+    // Tests for hex digit count logic (discovered via Klaus round-trip test)
+    // This ensures that $13 (2 digits) is treated as zero page, while
+    // $0013 (4 digits) is treated as absolute, even when the value is the same.
+
+    #[test]
+    fn test_hex_digit_count_zero_page_x() {
+        // 2 hex digits → Zero Page,X
+        let (mode, value) = detect_addressing_mode("$13,X").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPageX);
+        assert_eq!(value, 0x13);
+    }
+
+    #[test]
+    fn test_hex_digit_count_absolute_x() {
+        // 4 hex digits → Absolute,X (even though value could fit in zero page)
+        let (mode, value) = detect_addressing_mode("$0013,X").unwrap();
+        assert_eq!(mode, AddressingMode::AbsoluteX);
+        assert_eq!(value, 0x0013);
+    }
+
+    #[test]
+    fn test_hex_digit_count_zero_page_y() {
+        // 2 hex digits → Zero Page,Y
+        let (mode, value) = detect_addressing_mode("$13,Y").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPageY);
+        assert_eq!(value, 0x13);
+    }
+
+    #[test]
+    fn test_hex_digit_count_absolute_y() {
+        // 4 hex digits → Absolute,Y (even though value could fit in zero page)
+        let (mode, value) = detect_addressing_mode("$0013,Y").unwrap();
+        assert_eq!(mode, AddressingMode::AbsoluteY);
+        assert_eq!(value, 0x0013);
+    }
+
+    #[test]
+    fn test_hex_digit_count_zero_page() {
+        // 2 hex digits → Zero Page
+        let (mode, value) = detect_addressing_mode("$13").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPage);
+        assert_eq!(value, 0x13);
+    }
+
+    #[test]
+    fn test_hex_digit_count_absolute() {
+        // 4 hex digits → Absolute (even though value could fit in zero page)
+        let (mode, value) = detect_addressing_mode("$0013").unwrap();
+        assert_eq!(mode, AddressingMode::Absolute);
+        assert_eq!(value, 0x0013);
+    }
+
+    #[test]
+    fn test_decimal_values_still_use_value_based_detection() {
+        // Decimal values still use value-based detection (no hex prefix)
+        let (mode, value) = detect_addressing_mode("19,X").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPageX); // 19 < 256 → zero page
+        assert_eq!(value, 19);
+
+        let (mode, value) = detect_addressing_mode("256,X").unwrap();
+        assert_eq!(mode, AddressingMode::AbsoluteX); // 256 >= 256 → absolute
+        assert_eq!(value, 256);
+    }
+
+    #[test]
+    fn test_hex_digit_count_with_leading_zeros() {
+        // 4 digits with leading zeros → Absolute
+        let (mode, value) = detect_addressing_mode("$0001").unwrap();
+        assert_eq!(mode, AddressingMode::Absolute);
+        assert_eq!(value, 0x0001);
+
+        // 2 digits → Zero Page
+        let (mode, value) = detect_addressing_mode("$01").unwrap();
+        assert_eq!(mode, AddressingMode::ZeroPage);
+        assert_eq!(value, 0x01);
+    }
 }
