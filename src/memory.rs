@@ -31,7 +31,7 @@
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{MemoryBus, FlatMemory};
+/// use lib6502::{MemoryBus, FlatMemory};
 ///
 /// let mut mem = FlatMemory::new();
 ///
@@ -45,7 +45,7 @@
 /// ## Implementing Custom Memory
 ///
 /// ```
-/// use cpu6502::MemoryBus;
+/// use lib6502::MemoryBus;
 ///
 /// struct RomRamMemory {
 ///     ram: [u8; 0x8000],  // 32KB RAM (0x0000-0x7FFF)
@@ -96,7 +96,7 @@ pub trait MemoryBus {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{MemoryBus, FlatMemory};
+    /// use lib6502::{MemoryBus, FlatMemory};
     ///
     /// let mem = FlatMemory::new();
     /// let value = mem.read(0x1234);
@@ -116,7 +116,7 @@ pub trait MemoryBus {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{MemoryBus, FlatMemory};
+    /// use lib6502::{MemoryBus, FlatMemory};
     ///
     /// let mut mem = FlatMemory::new();
     /// mem.write(0x1234, 0xFF);
@@ -142,7 +142,7 @@ pub trait MemoryBus {
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// // Create memory and set up reset vector
 /// let mut memory = FlatMemory::new();
@@ -167,7 +167,7 @@ impl FlatMemory {
     /// # Examples
     ///
     /// ```
-    /// use cpu6502::{FlatMemory, MemoryBus};
+    /// use lib6502::{FlatMemory, MemoryBus};
     ///
     /// let mem = FlatMemory::new();
     /// // All memory initially zero

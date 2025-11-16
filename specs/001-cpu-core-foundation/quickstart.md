@@ -124,7 +124,7 @@ Expected output: Example demonstrates CPU initialization, memory setup, and atte
 The CPU requires a memory implementation. Use the provided `FlatMemory` for simple cases:
 
 ```rust
-use cpu6502::FlatMemory;
+use lib6502::FlatMemory;
 
 // Create 64KB flat memory (all addresses mapped to RAM)
 let mut memory = FlatMemory::new();
@@ -141,7 +141,7 @@ memory.write(0x8001, 0x00); // BRK (opcode 0x00 - not implemented yet)
 ### Step 2: Initialize the CPU
 
 ```rust
-use cpu6502::CPU;
+use lib6502::CPU;
 
 // Create CPU with the memory bus
 let mut cpu = CPU::new(memory);
@@ -156,7 +156,7 @@ println!("Cycles: {}", cpu.cycles());   // Should be 0
 ### Step 3: Execute Instructions
 
 ```rust
-use cpu6502::ExecutionError;
+use lib6502::ExecutionError;
 
 // Execute one instruction
 match cpu.step() {
@@ -197,7 +197,7 @@ match cpu.run_for_cycles(CYCLES_PER_FRAME) {
 For more complex memory layouts (e.g., NES-style memory mapping, memory-mapped I/O), implement the `MemoryBus` trait:
 
 ```rust
-use cpu6502::MemoryBus;
+use lib6502::MemoryBus;
 
 /// Custom memory with ROM at 0x8000-0xFFFF and RAM at 0x0000-0x7FFF
 struct RomRamMemory {
@@ -286,7 +286,7 @@ println!("Total cycles: {}", cpu.cycles());
 The opcode metadata table is publicly accessible for introspection:
 
 ```rust
-use cpu6502::OPCODE_TABLE;
+use lib6502::OPCODE_TABLE;
 
 // Look up metadata for a specific opcode
 let lda_immediate = &OPCODE_TABLE[0xA9];

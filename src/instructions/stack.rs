@@ -35,7 +35,7 @@ use crate::{ExecutionError, MemoryBus, CPU, OPCODE_TABLE};
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -100,7 +100,7 @@ pub(crate) fn execute_pha<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -172,7 +172,7 @@ pub(crate) fn execute_php<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);
@@ -261,7 +261,7 @@ pub(crate) fn execute_pla<M: MemoryBus>(
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{CPU, FlatMemory, MemoryBus};
+/// use lib6502::{CPU, FlatMemory, MemoryBus};
 ///
 /// let mut memory = FlatMemory::new();
 /// memory.write(0xFFFC, 0x00);

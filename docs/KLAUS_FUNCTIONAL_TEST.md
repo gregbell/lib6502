@@ -286,7 +286,7 @@ The functional test suite was created by Klaus Dormann (Klaus2m5).
 - **Author**: Klaus Dormann
 - **License**: See original repository
 
-This integration is part of the cpu6502 emulator project and follows the project's MIT/Apache-2.0 dual license.
+This integration is part of the lib6502 emulator project and follows the project's MIT/Apache-2.0 dual license.
 
 ## References
 

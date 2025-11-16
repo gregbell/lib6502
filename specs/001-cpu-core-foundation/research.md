@@ -135,12 +135,12 @@ enum AddressingMode {
 **Cargo.toml**:
 ```toml
 [package]
-name = "cpu6502"
+name = "lib6502"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "cpu6502"
+name = "lib6502"
 path = "src/lib.rs"
 
 [dependencies]

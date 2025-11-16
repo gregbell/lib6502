@@ -2,7 +2,7 @@
 //!
 //! Verifies that the MemoryBus trait implementation works correctly.
 
-use cpu6502::{FlatMemory, MemoryBus};
+use lib6502::{FlatMemory, MemoryBus};
 
 #[test]
 fn test_flat_memory_initialization() {
@@ -101,7 +101,7 @@ fn test_flat_memory_full_address_space() {
 
 #[test]
 fn test_memory_bus_with_cpu() {
-    use cpu6502::CPU;
+    use lib6502::CPU;
 
     let mut memory = FlatMemory::new();
 

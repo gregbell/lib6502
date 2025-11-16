@@ -32,7 +32,7 @@ use crate::addressing::AddressingMode;
 /// # Examples
 ///
 /// ```
-/// use cpu6502::{OPCODE_TABLE, AddressingMode};
+/// use lib6502::{OPCODE_TABLE, AddressingMode};
 ///
 /// // Look up LDA immediate (opcode 0xA9)
 /// let lda_imm = &OPCODE_TABLE[0xA9];
@@ -85,7 +85,7 @@ pub struct OpcodeMetadata {
 /// # Examples
 ///
 /// ```
-/// use cpu6502::OPCODE_TABLE;
+/// use lib6502::OPCODE_TABLE;
 ///
 /// // Look up instruction metadata
 /// let brk = &OPCODE_TABLE[0x00];

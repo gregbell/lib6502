@@ -1,5 +1,5 @@
 [package]
-name = "cpu6502"
+name = "lib6502"
 version = "0.1.0"
 edition = "2021"
 authors = ["6502 Emulator Contributors"]
@@ -9,7 +9,7 @@ repository = "https://github.com/your-org/6502"
 readme = "README.md"
 
 [lib]
-name = "cpu6502"
+name = "lib6502"
 path = "src/lib.rs"
 
 [dependencies]

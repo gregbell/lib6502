@@ -2,7 +2,7 @@
 //!
 //! Verifies that the CPU initializes correctly to 6502 reset state.
 
-use cpu6502::{FlatMemory, MemoryBus, CPU};
+use lib6502::{FlatMemory, MemoryBus, CPU};
 
 #[test]
 fn test_cpu_reset_values() {

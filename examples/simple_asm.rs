@@ -1,6 +1,6 @@
 //! Basic assembler usage example
 
-use cpu6502::assembler::assemble;
+use lib6502::assembler::assemble;
 
 fn main() {
     let source = r#"

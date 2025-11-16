@@ -9,7 +9,7 @@
 //! - Correct cycle count (7 cycles)
 //! - PC+2 pushed to stack (not PC+1)
 
-use cpu6502::{FlatMemory, MemoryBus, CPU};
+use lib6502::{FlatMemory, MemoryBus, CPU};
 
 /// Helper function to create a CPU with reset vector at 0x8000
 fn setup_cpu() -> CPU<FlatMemory> {

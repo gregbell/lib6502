@@ -1,8 +1,8 @@
 //! Integration tests for the 6502 disassembler
 
-use cpu6502::addressing::AddressingMode;
-use cpu6502::disassembler::formatter::format_instruction;
-use cpu6502::disassembler::{disassemble, DisassemblyOptions};
+use lib6502::addressing::AddressingMode;
+use lib6502::disassembler::formatter::format_instruction;
+use lib6502::disassembler::{disassemble, DisassemblyOptions};
 
 // T015: Integration test for single instruction disassembly (LDA #$42)
 #[test]
@@ -121,7 +121,7 @@ fn test_empty_disassembly() {
 // T081: Integration test for hex dump format with single instruction
 #[test]
 fn test_hex_dump_single_instruction() {
-    use cpu6502::disassembler::formatter::format_hex_dump;
+    use lib6502::disassembler::formatter::format_hex_dump;
 
     let bytes = &[0xA9, 0x42]; // LDA #$42
 
@@ -143,7 +143,7 @@ fn test_hex_dump_single_instruction() {
 // T082: Integration test for hex dump with varying instruction byte lengths
 #[test]
 fn test_hex_dump_varying_lengths() {
-    use cpu6502::disassembler::formatter::format_hex_dump;
+    use lib6502::disassembler::formatter::format_hex_dump;
 
     let bytes = &[
         0xEA, // NOP (1 byte)
@@ -220,7 +220,7 @@ fn test_hex_dump_varying_lengths() {
 // T083: Integration test for hex dump with multi-line output and address increments
 #[test]
 fn test_hex_dump_multiline_addresses() {
-    use cpu6502::disassembler::formatter::format_hex_dump;
+    use lib6502::disassembler::formatter::format_hex_dump;
 
     let bytes = &[
         0xA9, 0x01, // LDA #$01 at 0x0000

@@ -11,7 +11,7 @@
 //! - Other processor flags are not affected
 //! - Edge cases (stack wraparound, various pulled values)
 
-use cpu6502::{FlatMemory, MemoryBus, CPU};
+use lib6502::{FlatMemory, MemoryBus, CPU};
 
 /// Helper function to create a CPU with reset vector at 0x8000
 fn setup_cpu() -> CPU<FlatMemory> {

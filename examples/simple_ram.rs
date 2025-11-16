@@ -9,7 +9,7 @@
 //! - Initializing the CPU
 //! - Executing instructions and inspecting state
 
-use cpu6502::{ExecutionError, FlatMemory, MemoryBus, CPU, OPCODE_TABLE};
+use lib6502::{ExecutionError, FlatMemory, MemoryBus, CPU, OPCODE_TABLE};
 
 fn main() {
     println!("6502 CPU Core Foundation - Simple RAM Example");

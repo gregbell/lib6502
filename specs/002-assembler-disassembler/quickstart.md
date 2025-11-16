@@ -12,7 +12,7 @@ This guide provides quick examples for using the 6502 assembler and disassembler
 ### Basic Disassembly
 
 ```rust
-use cpu6502::disassembler::{disassemble, DisassemblyOptions};
+use lib6502::disassembler::{disassemble, DisassemblyOptions};
 
 fn main() {
     // Machine code bytes
@@ -50,7 +50,7 @@ fn main() {
 ### Hex Dump Format
 
 ```rust
-use cpu6502::disassembler::{disassemble, format_hex_dump, DisassemblyOptions};
+use lib6502::disassembler::{disassemble, format_hex_dump, DisassemblyOptions};
 
 fn main() {
     let code = &[0xA9, 0x42, 0x8D, 0x00, 0x80, 0x4C, 0x00, 0x80];
@@ -80,7 +80,7 @@ fn main() {
 ### Inspecting Instruction Metadata
 
 ```rust
-use cpu6502::disassembler::disassemble;
+use lib6502::disassembler::disassemble;
 
 fn main() {
     let code = &[0xA9, 0x42]; // LDA #$42
@@ -112,7 +112,7 @@ Addressing mode: Immediate
 ### Basic Assembly
 
 ```rust
-use cpu6502::assembler::assemble;
+use lib6502::assembler::assemble;
 
 fn main() {
     let source = r#"
@@ -152,7 +152,7 @@ A9 42 8D 00 80 4C 00 80
 ### Assembly with Labels
 
 ```rust
-use cpu6502::assembler::assemble;
+use lib6502::assembler::assemble;
 
 fn main() {
     let source = r#"
@@ -200,7 +200,7 @@ Symbol Table:
 ### Using Source Maps for Debugging
 
 ```rust
-use cpu6502::assembler::assemble;
+use lib6502::assembler::assemble;
 
 fn main() {
     let source = r#"
@@ -236,7 +236,7 @@ Line 2 contains instructions from $0000 to $0002
 ### Handling Assembly Errors
 
 ```rust
-use cpu6502::assembler::{assemble, ErrorType};
+use lib6502::assembler::{assemble, ErrorType};
 
 fn main() {
     let source = r#"
@@ -279,7 +279,7 @@ Error at line 4, column 12:
 ### Using Directives
 
 ```rust
-use cpu6502::assembler::assemble;
+use lib6502::assembler::assemble;
 
 fn main() {
     let source = r#"
@@ -314,8 +314,8 @@ Bytes:
 ## Round-Trip: Assemble → Disassemble
 
 ```rust
-use cpu6502::assembler::assemble;
-use cpu6502::disassembler::{disassemble, format_instruction, DisassemblyOptions};
+use lib6502::assembler::assemble;
+use lib6502::disassembler::{disassemble, format_instruction, DisassemblyOptions};
 
 fn main() {
     let source = r#"
@@ -354,8 +354,8 @@ Disassembled:
 ## Integration with CPU Emulator
 
 ```rust
-use cpu6502::{CPU, FlatMemory};
-use cpu6502::assembler::assemble;
+use lib6502::{CPU, FlatMemory};
+use lib6502::assembler::assemble;
 
 fn main() {
     // Assemble program
@@ -406,7 +406,7 @@ Value at $00: $42
 ## Number Format Examples
 
 ```rust
-use cpu6502::assembler::assemble;
+use lib6502::assembler::assemble;
 
 fn main() {
     let source = r#"
@@ -435,8 +435,8 @@ Bytes: [A9, FF, A2, FF, A0, FF]
 
 ```rust
 use wasm_bindgen::prelude::*;
-use cpu6502::assembler::assemble;
-use cpu6502::disassembler::{disassemble, format_hex_dump};
+use lib6502::assembler::assemble;
+use lib6502::disassembler::{disassemble, format_hex_dump};
 
 #[wasm_bindgen]
 pub fn assemble_6502(source: &str) -> Result<Vec<u8>, JsValue> {

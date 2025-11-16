@@ -1,6 +1,6 @@
 # Disassembler API Contract
 
-**Module**: `cpu6502::disassembler`
+**Module**: `lib6502::disassembler`
 **Version**: 0.1.0
 
 ## Public API
@@ -34,7 +34,7 @@ pub fn disassemble(
 
 **Example**:
 ```rust
-use cpu6502::disassembler::{disassemble, DisassemblyOptions};
+use lib6502::disassembler::{disassemble, DisassemblyOptions};
 
 let code = &[0xA9, 0x42, 0x8D, 0x00, 0x80];
 let options = DisassemblyOptions {
