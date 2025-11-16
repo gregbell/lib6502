@@ -105,3 +105,35 @@ pub(crate) fn execute_tsx<M: MemoryBus>(
 
     Ok(())
 }
+
+/// Executes the TXA (Transfer X to Accumulator) instruction.
+///
+/// Copies the current contents of the X register into the accumulator
+/// and sets the zero and negative flags as appropriate.
+/// Updates Z and N flags.
+///
+/// # Arguments
+///
+/// * `cpu` - Mutable reference to the CPU
+/// * `opcode` - The opcode byte for this TXA instruction
+pub(crate) fn execute_txa<M: MemoryBus>(
+    cpu: &mut CPU<M>,
+    opcode: u8,
+) -> Result<(), ExecutionError> {
+    let metadata = &OPCODE_TABLE[opcode as usize];
+
+    // Transfer X register to accumulator
+    cpu.a = cpu.x;
+
+    // Update Z and N flags based on result
+    cpu.flag_z = cpu.a == 0;
+    cpu.flag_n = (cpu.a & 0x80) != 0;
+
+    // Update cycle count
+    cpu.cycles += metadata.base_cycles as u64;
+
+    // Advance PC
+    cpu.pc = cpu.pc.wrapping_add(metadata.size_bytes as u16);
+
+    Ok(())
+}
