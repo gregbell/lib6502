@@ -140,6 +140,8 @@ When adding new instructions:
 ## Active Technologies
 - Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible) (002-assembler-disassembler)
 - N/A (operates on in-memory byte slices and strings) (002-assembler-disassembler)
+- Rust 1.75+ (for WASM compilation), HTML5/CSS3/JavaScript ES6+ (for frontend) (003-wasm-web-demo)
+- N/A (fully client-side, no persistence) (003-wasm-web-demo)
 
 ## Recent Changes
 - 002-assembler-disassembler: Added Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible)
