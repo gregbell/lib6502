@@ -213,7 +213,7 @@ class App {
     }
 
     isProgramComplete() {
-        const pc = this.emulator.get_pc();
+        const pc = this.emulator.pc;
         return pc >= this.programEnd;
     }
 
@@ -222,22 +222,22 @@ class App {
 
         // Update registers
         this.registerDisplay.update({
-            a: this.emulator.get_a(),
-            x: this.emulator.get_x(),
-            y: this.emulator.get_y(),
-            pc: this.emulator.get_pc(),
-            sp: this.emulator.get_sp(),
-            cycles: this.emulator.get_cycles()
+            a: this.emulator.a,
+            x: this.emulator.x,
+            y: this.emulator.y,
+            pc: this.emulator.pc,
+            sp: this.emulator.sp,
+            cycles: this.emulator.cycles
         });
 
         // Update flags
         this.flagsDisplay.update({
-            n: this.emulator.get_flag_n(),
-            v: this.emulator.get_flag_v(),
-            d: this.emulator.get_flag_d(),
-            i: this.emulator.get_flag_i(),
-            z: this.emulator.get_flag_z(),
-            c: this.emulator.get_flag_c()
+            n: this.emulator.flag_n,
+            v: this.emulator.flag_v,
+            d: this.emulator.flag_d,
+            i: this.emulator.flag_i,
+            z: this.emulator.flag_z,
+            c: this.emulator.flag_c
         });
 
         // Update memory viewer (visible pages only)

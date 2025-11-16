@@ -227,6 +227,13 @@ impl Emulator6502 {
         self.cpu.flag_c()
     }
 
+    // Register setters
+
+    /// Set the program counter
+    pub fn set_pc(&mut self, addr: u16) {
+        self.cpu.set_pc(addr);
+    }
+
     // Memory access methods
 
     /// Read a single byte from memory
