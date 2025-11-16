@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM API Test - lib6502</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        h1 { color: #00ff00; }
+        .info {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        code {
+            color: #ff00ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>lib6502 WASM API Test</h1>
+    <div class="info">
+        <h2>Manual Test Instructions:</h2>
+        <p>Open browser DevTools console and try:</p>
+        <pre><code>
+// 1. Create emulator instance
+const emu = new Emulator6502();
+
+// 2. Check initial state
+emu.get_a()      // Should return 0
+emu.get_pc()     // Should return 0
+emu.get_cycles() // Should return 0
+
+// 3. Load a simple program (LDA #$42)
+emu.write_memory(0x0600, 0xA9);  // LDA immediate
+emu.write_memory(0x0601, 0x42);  // Value $42
+emu.set_pc(0x0600);
+
+// 4. Execute one instruction
+emu.step()
+
+// 5. Check result
+emu.get_a()      // Should return 66 ($42 in decimal)
+emu.get_pc()     // Should return 0x0602
+emu.get_cycles() // Should return 2
+
+// 6. Test assembly
+const code = `
+    LDA #$FF
+    TAX
+    TAY
+    BRK
+`;
+const result = emu.assemble_and_load(code, 0x0600);
+console.log('Assembled:', result);
+
+// 7. Run program
+emu.set_pc(0x0600);
+while (emu.get_pc() < 0x0610) {
+    try {
+        emu.step();
+        console.log('A:', emu.get_a().toString(16),
+                   'X:', emu.get_x().toString(16),
+                   'Y:', emu.get_y().toString(16),
+                   'PC:', emu.get_pc().toString(16));
+    } catch (e) {
+        console.log('Program halted:', e);
+        break;
+    }
+}
+        </code></pre>
+    </div>
+    <div class="info">
+        <h2>Status:</h2>
+        <p id="status">Loading WASM module...</p>
+    </div>
+
+    <script type="module">
+        import init, { Emulator6502 } from './lib6502_wasm/lib6502.js';
+
+        async function run() {
+            try {
+                await init();
+                window.Emulator6502 = Emulator6502;
+                document.getElementById('status').textContent =
+                    '✓ WASM loaded successfully! Emulator6502 is available in console.';
+                console.log('✓ lib6502 WASM module loaded');
+                console.log('✓ Emulator6502 constructor available');
+                console.log('Try: const emu = new Emulator6502()');
+            } catch (e) {
+                document.getElementById('status').textContent =
+                    '✗ Failed to load WASM: ' + e.message;
+                console.error('Failed to load WASM:', e);
+            }
+        }
+
+        run();
+    </script>
+</body>
+</html>
