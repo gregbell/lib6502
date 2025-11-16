@@ -552,13 +552,14 @@ fn resolve_operand(
         // calculate the offset from a numeric target address
         if is_branch && !operand_trimmed.starts_with('#') && !operand_trimmed.starts_with('(') {
             // Parse the target address (supports $hex, %binary, or decimal)
-            let target_address = parser::parse_number(operand_trimmed).map_err(|e| AssemblerError {
-                error_type: ErrorType::InvalidOperand,
-                line: 0,
-                column: 0,
-                span: (0, 0),
-                message: format!("Invalid branch target '{}': {}", operand, e),
-            })?;
+            let target_address =
+                parser::parse_number(operand_trimmed).map_err(|e| AssemblerError {
+                    error_type: ErrorType::InvalidOperand,
+                    line: 0,
+                    column: 0,
+                    span: (0, 0),
+                    message: format!("Invalid branch target '{}': {}", operand, e),
+                })?;
 
             // Calculate relative offset
             let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes

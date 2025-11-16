@@ -289,8 +289,7 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
         if let Ok(addr) = parse_number(addr_str) {
             // Check the number of hex digits to distinguish zero-page from absolute
             // This handles cases like $0013 (4 digits = absolute) vs $13 (2 digits = zero-page)
-            if addr_str.starts_with('$') {
-                let hex_part = &addr_str[1..];
+            if let Some(hex_part) = addr_str.strip_prefix('$') {
                 if hex_part.len() <= 2 && addr <= 0xFF {
                     return Ok(AddressingMode::ZeroPageX);
                 } else {
@@ -314,8 +313,7 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
         if let Ok(addr) = parse_number(addr_str) {
             // Check the number of hex digits to distinguish zero-page from absolute
             // This handles cases like $0013 (4 digits = absolute) vs $13 (2 digits = zero-page)
-            if addr_str.starts_with('$') {
-                let hex_part = &addr_str[1..];
+            if let Some(hex_part) = addr_str.strip_prefix('$') {
                 if hex_part.len() <= 2 && addr <= 0xFF {
                     return Ok(AddressingMode::ZeroPageY);
                 } else {
@@ -335,12 +333,11 @@ pub fn detect_addressing_mode_or_label(operand: &str) -> Result<AddressingMode, 
     if let Ok(value) = parse_number(&normalized) {
         // Choose zero-page or absolute based on value and hex digit count
         // $0013 (4 digits) = absolute, $13 (2 digits) = zero-page
-        if normalized.starts_with('$') {
-            let hex_part = &normalized[1..];
+        if let Some(hex_part) = normalized.strip_prefix('$') {
             if hex_part.len() <= 2 && value <= 0xFF {
-                return Ok(AddressingMode::ZeroPage);
+                Ok(AddressingMode::ZeroPage)
             } else {
-                return Ok(AddressingMode::Absolute);
+                Ok(AddressingMode::Absolute)
             }
         } else if value <= 0xFF {
             Ok(AddressingMode::ZeroPage)
@@ -406,8 +403,7 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
 
         // Choose zero-page or absolute based on value and hex digit count
         // $0013,X (4 digits) = absolute, $13,X (2 digits) = zero-page
-        if addr_str.starts_with('$') {
-            let hex_part = &addr_str[1..];
+        if let Some(hex_part) = addr_str.strip_prefix('$') {
             if hex_part.len() <= 2 && addr <= 0xFF {
                 return Ok((AddressingMode::ZeroPageX, addr));
             } else {
@@ -427,8 +423,7 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
 
         // Choose zero-page or absolute based on value and hex digit count
         // $0013,Y (4 digits) = absolute, $13,Y (2 digits) = zero-page
-        if addr_str.starts_with('$') {
-            let hex_part = &addr_str[1..];
+        if let Some(hex_part) = addr_str.strip_prefix('$') {
             if hex_part.len() <= 2 && addr <= 0xFF {
                 return Ok((AddressingMode::ZeroPageY, addr));
             } else {
@@ -446,8 +441,7 @@ pub fn detect_addressing_mode(operand: &str) -> Result<(AddressingMode, u16), St
 
     // Choose zero-page or absolute based on value and hex digit count
     // $0013 (4 digits) = absolute, $13 (2 digits) = zero-page
-    if normalized.starts_with('$') {
-        let hex_part = &normalized[1..];
+    if let Some(hex_part) = normalized.strip_prefix('$') {
         if hex_part.len() <= 2 && value <= 0xFF {
             Ok((AddressingMode::ZeroPage, value))
         } else {

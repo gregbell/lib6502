@@ -280,7 +280,10 @@ fn klaus_assembler_disassembler_roundtrip() {
             println!("\nThis validates:");
             println!("  - Disassembler correctly decodes all opcodes");
             println!("  - Assembler correctly encodes all instructions");
-            println!("  - All {} unique opcodes round-trip correctly", opcode_set.len());
+            println!(
+                "  - All {} unique opcodes round-trip correctly",
+                opcode_set.len()
+            );
         }
         Err(msg) => {
             eprintln!("\n✗ FAILURE: Round-trip test failed!");
