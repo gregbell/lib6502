@@ -12,6 +12,7 @@
 - Q: What byte value should be returned when the CPU reads from an unmapped memory address? → A: Return $FF (255) for all unmapped reads
 - Q: What should happen when attempting to register a device whose address range overlaps with an existing device? → A: Reject registration with error (fail-fast, no overlaps allowed)
 - Q: What happens when 6502 code writes to UART data register when transmit is busy, or reads when receive buffer is empty? → A: Transmit: Immediate callback (no buffer, TDRE always 1). Receive empty: Return last byte or $00
+- Q: What should happen when the browser terminal disconnects while the emulator is running? → A: Continue running, callbacks no-op, receive still buffers
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -70,7 +71,7 @@ A user running the emulator in a web browser wants to interact with the emulated
 - **Overlapping memory regions**: Device registration fails with an error if the new device's address range overlaps with any existing device. The system enforces non-overlapping address spaces to prevent ambiguous routing.
 - **UART transmit**: Transmit is immediate via callback with no buffering. TDRE (bit 4 of status register) is always 1, indicating the transmitter is always ready. Multiple writes execute callbacks sequentially.
 - **UART receive buffer empty**: Reading the data register when the receive buffer is empty returns the last successfully received byte, or $00 if no bytes have been received yet.
-- How does the system behave if the terminal connection is disconnected while the emulator is running?
+- **Terminal disconnection**: If the browser terminal disconnects while the emulator is running, the emulator continues executing. UART transmit callbacks become no-ops (silently succeed), and the receive buffer continues to accept injected bytes for potential reconnection.
 - Can the memory mapping configuration be changed dynamically while the emulator is running, or must it be set once at initialization?
 
 ## Requirements *(mandatory)*
@@ -89,6 +90,7 @@ A user running the emulator in a web browser wants to interact with the emulated
 - **FR-009**: UART command register (offset +2) MUST allow configuring parity mode, echo mode, and interrupt enables
 - **FR-010**: UART control register (offset +3) MUST allow configuring baud rate, word length, and stop bits
 - **FR-011**: UART MUST provide a callback or event interface for delivering transmitted bytes to external consumers
+- **FR-011a**: UART MUST continue operating if callback is unavailable or disconnected (callback failures become no-ops)
 - **FR-012**: UART MUST provide a method for external sources to inject received bytes into the receiver buffer
 - **FR-013**: System MUST buffer received bytes when they arrive faster than 6502 code can process them
 - **FR-014**: System MUST indicate buffer overflow conditions through status register flags
