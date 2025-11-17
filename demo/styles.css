@@ -115,22 +115,17 @@ footer a:hover {
     text-decoration: underline;
 }
 
-/**
-.flag-item.flag-set {
-    background: rgba(80, 250, 123, 0.1);
-    border-color: var(--accent-success);
-}
-**/
 button {
-    background: rgba(80, 250, 123, 0.1);
-    color: var(--accent-primary);
-    border: none;
     padding: 8px 16px;
     border-radius: 4px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
+    font-size: 13px;
     cursor: pointer;
-    transition: opacity 0.2s;
+    border: 1px solid;
+    transition: all 0.2s;
+    background: rgba(80, 250, 123, 0.1);
+    color: var(--accent-primary);
+    border-color: var(--border);
 }
 
 button:hover:not(:disabled) {
@@ -440,17 +435,6 @@ button.danger {
     padding: 6px 12px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
-}
-
-.memory-controls button {
-    background: var(--accent-primary);
-    color: white;
-    border: none;
-    padding: 6px 16px;
-    border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    cursor: pointer;
 }
 
 .memory-scroll-container {
