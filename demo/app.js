@@ -3,7 +3,7 @@
  * Interactive 6502 assembly playground
  */
 
-import init, { Emulator6502 } from './lib6502_wasm/lib6502.js?v=2';
+import init, { Emulator6502 } from './lib6502_wasm/lib6502.js?v=3';
 import { CodeEditor } from './components/editor.js';
 import { RegisterDisplay } from './components/registers.js';
 import { FlagsDisplay } from './components/flags.js';
@@ -130,6 +130,17 @@ class App {
 
         try {
             const result = this.emulator.assemble_and_load(code, this.programStart);
+
+            // Check if assembly succeeded
+            if (!result.success) {
+                const errorMsg = result.error_message || 'Assembly failed';
+                const errorLine = result.error_line !== undefined ? ` (line ${result.error_line})` : '';
+                this.showError(`${errorMsg}${errorLine}`);
+                this.assembled = false;
+                this.controlPanel.setAssembled(false);
+                return;
+            }
+
             this.programEnd = result.end_addr;
             this.assembled = true;
             this.controlPanel.setAssembled(true);
