@@ -9,10 +9,47 @@ use std::collections::VecDeque;
 /// W65C51 ACIA UART serial communication device.
 ///
 /// The UART device emulates a 6551 ACIA chip with four memory-mapped registers:
-/// - Offset 0: Data register (read: receive, write: transmit)
-/// - Offset 1: Status register (read-only)
-/// - Offset 2: Command register (read/write)
-/// - Offset 3: Control register (read/write)
+///
+/// ## Register Map (offsets from device base address)
+///
+/// | Offset | Register | Access | Description |
+/// |--------|----------|--------|-------------|
+/// | 0      | Data     | R/W    | Transmit/Receive data |
+/// | 1      | Status   | R      | Status flags (read-only) |
+/// | 2      | Command  | R/W    | Command register |
+/// | 3      | Control  | R/W    | Control register |
+///
+/// ## Status Register (Offset 1, Read-Only)
+///
+/// | Bit | Name | Description |
+/// |-----|------|-------------|
+/// | 4   | TDRE | Transmit Data Register Empty (always 1 - ready) |
+/// | 3   | RDRF | Receive Data Register Full (1 = data available) |
+/// | 2   | OVRN | Overrun Error (1 = buffer overflow occurred) |
+/// | 1-0 | -    | Reserved (always 0) |
+///
+/// ## Command Register (Offset 2, Read/Write)
+///
+/// | Bit | Name | Description |
+/// |-----|------|-------------|
+/// | 3   | ECHO | Echo mode (1 = auto-retransmit received bytes) |
+/// | 7-4,2-0 | - | User-defined (stored but not interpreted) |
+///
+/// ## Control Register (Offset 3, Read/Write)
+///
+/// User-defined - stored but not interpreted by emulator.
+///
+/// ## Receive Buffer
+///
+/// - **Capacity**: 256 bytes (FIFO via VecDeque)
+/// - **Overflow**: Sets OVRN flag, drops new bytes when full
+/// - **Clear**: Reading data register pops one byte from buffer
+///
+/// ## Transmit Behavior
+///
+/// - **Immediate**: Writes to data register invoke callback immediately
+/// - **No buffering**: TDRE always set (always ready)
+/// - **Echo mode**: When command register bit 3 set, received bytes auto-transmit
 ///
 /// # Example
 ///
@@ -29,9 +66,16 @@ use std::collections::VecDeque;
 /// // Inject received byte
 /// uart.receive_byte(b'A');
 ///
+/// // Check status
+/// assert_eq!(uart.status() & 0x08, 0x08); // RDRF set
+///
 /// // Read via Device trait (offset 0 = data register)
 /// assert_eq!(uart.read(0), b'A');
 /// ```
+///
+/// # WASM Integration
+///
+/// See `examples/wasm_terminal.rs` for browser terminal integration patterns.
 pub struct Uart6551 {
     // Registers (4 bytes)
     data_register: u8,

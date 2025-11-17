@@ -169,49 +169,81 @@ fn main() {
 
 ## Example 4: Browser Terminal Integration (WASM)
 
-**Goal**: Connect UART to xterm.js in browser.
+**Goal**: Connect UART to xterm.js in browser for bidirectional serial communication.
+
+**See**: `examples/wasm_terminal.rs` for complete WASM integration patterns and browser compatibility notes.
 
 **Rust WASM Side**:
 
 ```rust
 use wasm_bindgen::prelude::*;
-use lib6502::{CPU, MappedMemory, Uart6551, RamDevice};
-use std::sync::{Arc, Mutex};
+use lib6502::{CPU, MappedMemory, Uart6551, RamDevice, RomDevice};
+use std::rc::Rc;
+use std::cell::RefCell;
 
 #[wasm_bindgen]
 pub struct Emulator {
     cpu: CPU<MappedMemory>,
-    uart: Arc<Mutex<Uart6551>>,
+    uart: Rc<RefCell<Uart6551>>,
 }
 
 #[wasm_bindgen]
 impl Emulator {
     #[wasm_bindgen(constructor)]
-    pub fn new(on_transmit: js_sys::Function) -> Self {
+    pub fn new(on_transmit: js_sys::Function) -> Result<Emulator, JsValue> {
         let mut memory = MappedMemory::new();
-        memory.add_device(0x0000, Box::new(RamDevice::new(32768))).unwrap();
 
-        let uart = Arc::new(Mutex::new(Uart6551::new()));
+        // Add 32KB RAM at 0x0000-0x7FFF
+        memory.add_device(0x0000, Box::new(RamDevice::new(32768)))
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
 
-        // Set WASM-compatible callback
-        let uart_clone = uart.clone();
-        uart.lock().unwrap().set_transmit_callback(move |byte| {
-            on_transmit.call1(&JsValue::NULL, &JsValue::from(byte)).unwrap();
+        // Create UART with transmit callback
+        let mut uart = Uart6551::new();
+        uart.set_transmit_callback(move |byte| {
+            let char_str = String::from_utf8(vec![byte]).unwrap_or_else(|_| "?".to_string());
+            let _ = on_transmit.call1(&JsValue::NULL, &JsValue::from_str(&char_str));
         });
 
-        memory.add_device(0x5000, Box::new(uart.lock().unwrap())).unwrap();
+        // Store UART separately for receive_byte access
+        let uart = Rc::new(RefCell::new(uart));
+
+        memory.add_device(0x8000, Box::new(uart.borrow().clone()))
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+
+        // Add 16KB ROM at 0xC000-0xFFFF with reset vector
+        let mut rom = vec![0xEA; 16384]; // Fill with NOP
+        rom[0x3FFC] = 0x00; // Reset vector -> 0x0200
+        rom[0x3FFD] = 0x02;
+        memory.add_device(0xC000, Box::new(RomDevice::new(rom)))
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
 
         let cpu = CPU::new(memory);
 
-        Self { cpu, uart }
+        Ok(Emulator { cpu, uart })
     }
 
-    pub fn step(&mut self) {
-        self.cpu.step().unwrap();
+    #[wasm_bindgen]
+    pub fn step(&mut self) -> Result<(), JsValue> {
+        self.cpu.step().map_err(|e| JsValue::from_str(&format!("{:?}", e)))
     }
 
+    #[wasm_bindgen]
+    pub fn run_cycles(&mut self, cycles: u32) -> Result<(), JsValue> {
+        self.cpu.run_for_cycles(cycles as usize)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+    }
+
+    #[wasm_bindgen]
     pub fn receive_byte(&mut self, byte: u8) {
-        self.uart.lock().unwrap().receive_byte(byte);
+        self.uart.borrow_mut().receive_byte(byte);
+    }
+
+    #[wasm_bindgen]
+    pub fn load_program(&mut self, address: u16, bytes: &[u8]) {
+        for (i, &byte) in bytes.iter().enumerate() {
+            let addr = address.wrapping_add(i as u16);
+            self.cpu.memory_mut().write(addr, byte);
+        }
     }
 }
 ```
@@ -219,18 +251,28 @@ impl Emulator {
 **JavaScript Side**:
 
 ```javascript
-import init, { Emulator } from './lib6502.js';
+import { Terminal } from 'xterm';
+import { FitAddon } from 'xterm-addon-fit';
+import init, { Emulator } from './pkg/lib6502.js';
 
 async function main() {
+    // Initialize WASM module
     await init();
 
-    // Create xterm.js terminal
-    const term = new Terminal();
+    // Create terminal
+    const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+    });
+
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
+    fitAddon.fit();
 
     // Create emulator with transmit callback
-    const emulator = new Emulator((byte) => {
-        term.write(String.fromCharCode(byte));
+    const emulator = new Emulator((char) => {
+        term.write(char);  // Write to terminal when UART transmits
     });
 
     // Handle terminal input
@@ -240,22 +282,52 @@ async function main() {
         }
     });
 
-    // Run emulator loop
-    setInterval(() => {
-        for (let i = 0; i < 1000; i++) {
-            emulator.step();
+    // Load echo program into RAM
+    // LDA $8000; STA $8000; JMP $0200
+    const program = new Uint8Array([
+        0xAD, 0x00, 0x80,  // LDA $8000 (read UART)
+        0x8D, 0x00, 0x80,  // STA $8000 (write UART)
+        0x4C, 0x00, 0x02,  // JMP $0200 (loop)
+    ]);
+    emulator.load_program(0x0200, program);
+
+    // Run emulator loop at ~60 FPS
+    function runEmulator() {
+        try {
+            emulator.run_cycles(1000);  // ~1 MHz at 60 FPS
+        } catch (e) {
+            console.error('Emulator error:', e);
         }
-    }, 16);  // ~60 FPS
+        requestAnimationFrame(runEmulator);
+    }
+
+    runEmulator();
 }
 
 main();
 ```
 
+**Build & Deploy**:
+
+```bash
+# Build WASM module
+wasm-pack build --target web
+
+# Serve locally
+python3 -m http.server 8000
+
+# Open browser
+open http://localhost:8000
+```
+
 **Key Points**:
-- WASM callback passes byte to JS function
-- JS function writes to xterm.js terminal
-- Terminal `onData` event sends keypresses to UART
-- Emulator runs in loop (1000 instructions per frame)
+- Use `Rc<RefCell<>>` for shared UART access (not `Arc<Mutex<>>` in WASM)
+- Transmit callback writes directly to xterm.js terminal
+- Terminal `onData` event sends keypresses to UART via `receive_byte()`
+- Emulator runs in `requestAnimationFrame` loop for smooth 60 FPS
+- UART buffer (256 bytes) decouples input timing from CPU execution
+- See `examples/wasm_terminal.rs` for complete patterns and browser compatibility
+- See `specs/004-memory-mapping-module/browser-test-plan.md` for testing checklist
 
 ---
 
