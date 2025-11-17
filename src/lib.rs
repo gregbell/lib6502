@@ -51,6 +51,7 @@
 pub mod addressing;
 pub mod assembler;
 pub mod cpu;
+pub mod devices;
 pub mod disassembler;
 pub mod memory;
 pub mod opcodes;
@@ -66,6 +67,7 @@ pub mod wasm;
 pub use addressing::AddressingMode;
 pub use assembler::{assemble, AssemblerError, AssemblerOutput, ErrorType, Symbol};
 pub use cpu::CPU;
+pub use devices::{Device, DeviceError, MappedMemory, RamDevice, RomDevice};
 pub use disassembler::{disassemble, DisassemblyOptions, Instruction};
 pub use memory::{FlatMemory, MemoryBus};
 pub use opcodes::{OpcodeMetadata, OPCODE_TABLE};

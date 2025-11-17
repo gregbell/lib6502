@@ -26,9 +26,9 @@ Single project structure (repository root):
 
 **Purpose**: Project initialization and module structure
 
-- [ ] T001 Create `src/devices/` module directory
-- [ ] T002 Add `pub mod devices;` declaration to `src/lib.rs`
-- [ ] T003 Create `src/devices/mod.rs` with module declarations
+- [X] T001 Create `src/devices/` module directory
+- [X] T002 Add `pub mod devices;` declaration to `src/lib.rs`
+- [X] T003 Create `src/devices/mod.rs` with module declarations
 
 ---
 
@@ -38,13 +38,13 @@ Single project structure (repository root):
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Define Device trait in `src/devices/mod.rs` with read/write/size methods
-- [ ] T005 Define DeviceMapping struct in `src/devices/mod.rs` with base_addr and boxed device
-- [ ] T006 Define MappedMemory struct in `src/devices/mod.rs` with devices Vec and unmapped_value
-- [ ] T007 Implement MappedMemory::new() constructor in `src/devices/mod.rs` with default unmapped value 0xFF
-- [ ] T008 Implement MappedMemory::add_device() method in `src/devices/mod.rs` with overlap detection
-- [ ] T009 Implement MemoryBus trait for MappedMemory in `src/devices/mod.rs` with device routing logic
-- [ ] T010 Re-export Device, MappedMemory types in `src/lib.rs` public API
+- [X] T004 Define Device trait in `src/devices/mod.rs` with read/write/size methods
+- [X] T005 Define DeviceMapping struct in `src/devices/mod.rs` with base_addr and boxed device
+- [X] T006 Define MappedMemory struct in `src/devices/mod.rs` with devices Vec and unmapped_value
+- [X] T007 Implement MappedMemory::new() constructor in `src/devices/mod.rs` with default unmapped value 0xFF
+- [X] T008 Implement MappedMemory::add_device() method in `src/devices/mod.rs` with overlap detection
+- [X] T009 Implement MemoryBus trait for MappedMemory in `src/devices/mod.rs` with device routing logic
+- [X] T010 Re-export Device, MappedMemory types in `src/lib.rs` public API
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -58,26 +58,26 @@ Single project structure (repository root):
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Create `src/devices/ram.rs` module file
-- [ ] T012 [P] [US1] Implement RamDevice struct in `src/devices/ram.rs` with Vec<u8> data field
-- [ ] T013 [P] [US1] Implement RamDevice::new(size: u16) constructor in `src/devices/ram.rs`
-- [ ] T014 [P] [US1] Implement RamDevice::load_bytes() method in `src/devices/ram.rs` for initializing contents
-- [ ] T015 [US1] Implement Device trait for RamDevice in `src/devices/ram.rs` with read/write/size methods
-- [ ] T016 [P] [US1] Create `src/devices/rom.rs` module file
-- [ ] T017 [P] [US1] Implement RomDevice struct in `src/devices/rom.rs` with Vec<u8> data field
-- [ ] T018 [P] [US1] Implement RomDevice::new(data: Vec<u8>) constructor in `src/devices/rom.rs`
-- [ ] T019 [US1] Implement Device trait for RomDevice in `src/devices/rom.rs` with read/write (no-op)/size methods
-- [ ] T020 [US1] Add ram and rom submodules to `src/devices/mod.rs`
-- [ ] T021 [US1] Re-export RamDevice and RomDevice in `src/devices/mod.rs`
-- [ ] T022 [US1] Re-export RamDevice and RomDevice in `src/lib.rs` public API
-- [ ] T023 [P] [US1] Create integration test file `tests/memory_mapping_tests.rs`
-- [ ] T024 [US1] Add test_ram_device_basic_read_write to `tests/memory_mapping_tests.rs`
-- [ ] T025 [US1] Add test_rom_device_read_only to `tests/memory_mapping_tests.rs`
-- [ ] T026 [US1] Add test_mapped_memory_routing to `tests/memory_mapping_tests.rs` verifying RAM/ROM address routing
-- [ ] T027 [US1] Add test_unmapped_address_returns_ff to `tests/memory_mapping_tests.rs`
-- [ ] T028 [US1] Add test_overlapping_devices_rejected to `tests/memory_mapping_tests.rs`
-- [ ] T029 [P] [US1] Create example file `examples/memory_mapped_system.rs`
-- [ ] T030 [US1] Implement memory_mapped_system example in `examples/memory_mapped_system.rs` with RAM/ROM setup per quickstart.md
+- [X] T011 [P] [US1] Create `src/devices/ram.rs` module file
+- [X] T012 [P] [US1] Implement RamDevice struct in `src/devices/ram.rs` with Vec<u8> data field
+- [X] T013 [P] [US1] Implement RamDevice::new(size: u16) constructor in `src/devices/ram.rs`
+- [X] T014 [P] [US1] Implement RamDevice::load_bytes() method in `src/devices/ram.rs` for initializing contents
+- [X] T015 [US1] Implement Device trait for RamDevice in `src/devices/ram.rs` with read/write/size methods
+- [X] T016 [P] [US1] Create `src/devices/rom.rs` module file
+- [X] T017 [P] [US1] Implement RomDevice struct in `src/devices/rom.rs` with Vec<u8> data field
+- [X] T018 [P] [US1] Implement RomDevice::new(data: Vec<u8>) constructor in `src/devices/rom.rs`
+- [X] T019 [US1] Implement Device trait for RomDevice in `src/devices/rom.rs` with read/write (no-op)/size methods
+- [X] T020 [US1] Add ram and rom submodules to `src/devices/mod.rs`
+- [X] T021 [US1] Re-export RamDevice and RomDevice in `src/devices/mod.rs`
+- [X] T022 [US1] Re-export RamDevice and RomDevice in `src/lib.rs` public API
+- [X] T023 [P] [US1] Create integration test file `tests/memory_mapping_tests.rs`
+- [X] T024 [US1] Add test_ram_device_basic_read_write to `tests/memory_mapping_tests.rs`
+- [X] T025 [US1] Add test_rom_device_read_only to `tests/memory_mapping_tests.rs`
+- [X] T026 [US1] Add test_mapped_memory_routing to `tests/memory_mapping_tests.rs` verifying RAM/ROM address routing
+- [X] T027 [US1] Add test_unmapped_address_returns_ff to `tests/memory_mapping_tests.rs`
+- [X] T028 [US1] Add test_overlapping_devices_rejected to `tests/memory_mapping_tests.rs`
+- [X] T029 [P] [US1] Create example file `examples/memory_mapped_system.rs`
+- [X] T030 [US1] Implement memory_mapped_system example in `examples/memory_mapped_system.rs` with RAM/ROM setup per quickstart.md
 
 **Checkpoint**: At this point, User Story 1 (core memory mapping) should be fully functional and testable independently
 
