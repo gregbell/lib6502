@@ -33,10 +33,12 @@ use crate::MemoryBus;
 // Device implementations
 pub mod ram;
 pub mod rom;
+pub mod uart;
 
 // Re-export device types
 pub use ram::RamDevice;
 pub use rom::RomDevice;
+pub use uart::Uart6551;
 
 /// Abstract interface for memory-mapped hardware devices.
 ///
