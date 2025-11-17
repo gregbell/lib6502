@@ -63,9 +63,21 @@ fn test_uart_receive_via_mapped_memory() {
     assert_eq!(status & 0x08, 0x08);
 
     // Read data register
-    // Note: Due to Device trait limitation (&self for read), we get last_rx_byte
+    // Now correctly pops from buffer (FIXED: uses interior mutability)
     let data = memory.read(0x8000);
-    assert_eq!(data, b'C'); // Last received byte
+    assert_eq!(data, b'A'); // First byte (FIFO order)
+
+    // Read again - should get B
+    let data = memory.read(0x8000);
+    assert_eq!(data, b'B');
+
+    // Read again - should get C
+    let data = memory.read(0x8000);
+    assert_eq!(data, b'C');
+
+    // Buffer now empty - RDRF should be clear
+    let status = memory.read(0x8001);
+    assert_eq!(status & 0x08, 0x00); // RDRF clear
 }
 
 #[test]
@@ -89,7 +101,7 @@ fn test_uart_with_cpu_integration() {
         0x00, // BRK (stop execution)
     ];
 
-    ram.load_bytes(0x0200, &program);
+    ram.load_bytes(0x0200, &program).unwrap();
 
     memory.add_device(0x0000, Box::new(ram)).unwrap();
 

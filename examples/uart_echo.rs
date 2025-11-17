@@ -35,7 +35,7 @@ fn main() {
         0x4C, 0x00, 0x02, // JMP $0200 (loop)
     ];
 
-    ram.load_bytes(0x0200, &program);
+    ram.load_bytes(0x0200, &program).unwrap();
     memory.add_device(0x0000, Box::new(ram)).unwrap();
 
     // Add UART at 0x8000

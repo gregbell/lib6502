@@ -29,6 +29,7 @@
 //! ```
 
 use crate::MemoryBus;
+use std::any::Any;
 
 // Device implementations
 pub mod ram;
@@ -57,6 +58,7 @@ pub use uart::Uart6551;
 ///
 /// ```rust
 /// use lib6502::Device;
+/// use std::any::Any;
 ///
 /// struct SimpleRam {
 ///     data: Vec<u8>,
@@ -73,6 +75,14 @@ pub use uart::Uart6551;
 ///
 ///     fn size(&self) -> u16 {
 ///         self.data.len() as u16
+///     }
+///
+///     fn as_any(&self) -> &dyn Any {
+///         self
+///     }
+///
+///     fn as_any_mut(&mut self) -> &mut dyn Any {
+///         self
 ///     }
 /// }
 /// ```
@@ -102,12 +112,80 @@ pub trait Device {
     ///
     /// Number of bytes in device's address range
     fn size(&self) -> u16;
+
+    /// Support for downcasting to concrete device types.
+    ///
+    /// This method enables safe downcasting from `&dyn Device` to `&T`
+    /// where `T` is the concrete device type.
+    fn as_any(&self) -> &dyn Any;
+
+    /// Support for downcasting to concrete device types (mutable).
+    ///
+    /// This method enables safe downcasting from `&mut dyn Device` to `&mut T`
+    /// where `T` is the concrete device type.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+/// Helper for address range calculations and overlap detection.
+///
+/// Encapsulates logic for working with memory address ranges, including
+/// overflow handling and overlap detection.
+#[derive(Debug, Clone, Copy)]
+struct AddressRange {
+    base: u16,
+    size: u16,
+}
+
+impl AddressRange {
+    /// Create a new address range.
+    fn new(base: u16, size: u16) -> Self {
+        Self { base, size }
+    }
+
+    /// Get the end address (exclusive) and overflow flag.
+    ///
+    /// Returns (end_addr, overflow) where overflow indicates the range
+    /// extends to 0xFFFF (inclusive).
+    fn end(&self) -> (u16, bool) {
+        self.base.overflowing_add(self.size)
+    }
+
+    /// Check if an address falls within this range.
+    fn contains(&self, addr: u16) -> bool {
+        let (end_addr, overflow) = self.end();
+
+        if overflow {
+            // Device extends to 0xFFFF (inclusive)
+            addr >= self.base
+        } else {
+            // Device extends to end_addr (exclusive)
+            addr >= self.base && addr < end_addr
+        }
+    }
+
+    /// Check if this range overlaps with another range.
+    fn overlaps(&self, other: &AddressRange) -> bool {
+        let (self_end, _) = self.end();
+        let (other_end, _) = other.end();
+
+        // Range 1: [self.base, self_end)
+        // Range 2: [other.base, other_end)
+        // Overlap if: self.base < other_end AND self_end > other.base
+        self.base < other_end && self_end > other.base
+    }
 }
 
 /// Internal mapping of a device to a base address.
 struct DeviceMapping {
     base_addr: u16,
     device: Box<dyn Device>,
+}
+
+impl DeviceMapping {
+    /// Get the address range for this device mapping.
+    fn range(&self) -> AddressRange {
+        AddressRange::new(self.base_addr, self.device.size())
+    }
 }
 
 /// Error returned when device registration fails.
@@ -241,21 +319,16 @@ impl MappedMemory {
         base_addr: u16,
         device: Box<dyn Device>,
     ) -> Result<(), DeviceError> {
-        let new_size = device.size();
-        let new_end = base_addr.saturating_add(new_size);
+        let new_range = AddressRange::new(base_addr, device.size());
 
         // Check for overlaps with existing devices
         for mapping in &self.devices {
-            let existing_end = mapping.base_addr.saturating_add(mapping.device.size());
+            let existing_range = mapping.range();
 
-            // Check if ranges overlap
-            // Range 1: [base_addr, new_end)
-            // Range 2: [mapping.base_addr, existing_end)
-            // Overlap if: base_addr < existing_end AND new_end > mapping.base_addr
-            if base_addr < existing_end && new_end > mapping.base_addr {
+            if new_range.overlaps(&existing_range) {
                 return Err(DeviceError::OverlapError {
                     new_base: base_addr,
-                    new_size,
+                    new_size: device.size(),
                     existing_base: mapping.base_addr,
                     existing_size: mapping.device.size(),
                 });
@@ -279,19 +352,9 @@ impl MappedMemory {
     /// * `None` - If address is not mapped to any device
     fn find_device(&mut self, addr: u16) -> Option<(&mut dyn Device, u16)> {
         for mapping in &mut self.devices {
-            let size = mapping.device.size();
-            let (end_addr, overflow) = mapping.base_addr.overflowing_add(size);
+            let range = mapping.range();
 
-            // Check if address is in device range
-            // If overflow, device extends to 0xFFFF (inclusive)
-            // Otherwise, device extends to end_addr (exclusive)
-            let in_range = if overflow {
-                addr >= mapping.base_addr
-            } else {
-                addr >= mapping.base_addr && addr < end_addr
-            };
-
-            if in_range {
+            if range.contains(addr) {
                 let offset = addr - mapping.base_addr;
                 return Some((mapping.device.as_mut(), offset));
             }
@@ -311,24 +374,98 @@ impl MappedMemory {
     /// * `None` - If address is not mapped to any device
     fn find_device_immut(&self, addr: u16) -> Option<(&dyn Device, u16)> {
         for mapping in &self.devices {
-            let size = mapping.device.size();
-            let (end_addr, overflow) = mapping.base_addr.overflowing_add(size);
+            let range = mapping.range();
 
-            // Check if address is in device range
-            // If overflow, device extends to 0xFFFF (inclusive)
-            // Otherwise, device extends to end_addr (exclusive)
-            let in_range = if overflow {
-                addr >= mapping.base_addr
-            } else {
-                addr >= mapping.base_addr && addr < end_addr
-            };
-
-            if in_range {
+            if range.contains(addr) {
                 let offset = addr - mapping.base_addr;
                 return Some((mapping.device.as_ref(), offset));
             }
         }
         None
+    }
+
+    /// Get a reference to a device at a specific address, downcast to a concrete type.
+    ///
+    /// This method allows accessing device-specific methods after registration.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The concrete device type to downcast to
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - Address within the device's mapped range
+    ///
+    /// # Returns
+    ///
+    /// * `Some(&T)` - Reference to the device if found and successfully downcast
+    /// * `None` - If no device at address or downcast fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use lib6502::{MappedMemory, Uart6551};
+    ///
+    /// let mut memory = MappedMemory::new();
+    /// let mut uart = Uart6551::new();
+    ///
+    /// uart.set_transmit_callback(|byte| {
+    ///     println!("TX: 0x{:02X}", byte);
+    /// });
+    ///
+    /// memory.add_device(0x8000, Box::new(uart)).unwrap();
+    ///
+    /// // Later, get device reference to check status
+    /// if let Some(uart) = memory.get_device_at::<Uart6551>(0x8000) {
+    ///     println!("UART status: 0x{:02X}", uart.status());
+    /// }
+    /// ```
+    pub fn get_device_at<T: Device + 'static>(&self, addr: u16) -> Option<&T> {
+        if let Some((device, _)) = self.find_device_immut(addr) {
+            device.as_any().downcast_ref::<T>()
+        } else {
+            None
+        }
+    }
+
+    /// Get a mutable reference to a device at a specific address, downcast to a concrete type.
+    ///
+    /// This method allows accessing device-specific methods after registration.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The concrete device type to downcast to
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - Address within the device's mapped range
+    ///
+    /// # Returns
+    ///
+    /// * `Some(&mut T)` - Mutable reference to the device if found and successfully downcast
+    /// * `None` - If no device at address or downcast fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use lib6502::{MappedMemory, Uart6551};
+    ///
+    /// let mut memory = MappedMemory::new();
+    /// memory.add_device(0x8000, Box::new(Uart6551::new())).unwrap();
+    ///
+    /// // Set callback after registration
+    /// if let Some(uart) = memory.get_device_at_mut::<Uart6551>(0x8000) {
+    ///     uart.set_transmit_callback(|byte| {
+    ///         println!("TX: 0x{:02X}", byte);
+    ///     });
+    /// }
+    /// ```
+    pub fn get_device_at_mut<T: Device + 'static>(&mut self, addr: u16) -> Option<&mut T> {
+        if let Some((device, _)) = self.find_device(addr) {
+            device.as_any_mut().downcast_mut::<T>()
+        } else {
+            None
+        }
     }
 }
 
@@ -383,6 +520,14 @@ mod tests {
 
         fn size(&self) -> u16 {
             self.data.len() as u16
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn Any {
+            self
         }
     }
 

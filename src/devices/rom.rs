@@ -3,6 +3,7 @@
 //! Provides read-only memory storage via the Device trait.
 
 use super::Device;
+use std::any::Any;
 
 /// Read-only memory device.
 ///
@@ -24,6 +25,7 @@ use super::Device;
 /// rom.write(0, 0xFF);
 /// assert_eq!(rom.read(0), 0xEA); // Still original value
 /// ```
+#[derive(Clone)]
 pub struct RomDevice {
     data: Vec<u8>,
 }
@@ -62,7 +64,7 @@ impl RomDevice {
 
 impl Device for RomDevice {
     fn read(&self, offset: u16) -> u8 {
-        self.data[offset as usize]
+        self.data.get(offset as usize).copied().unwrap_or(0xFF) // Safe fallback for out-of-bounds
     }
 
     fn write(&mut self, _offset: u16, _value: u8) {
@@ -71,6 +73,14 @@ impl Device for RomDevice {
 
     fn size(&self) -> u16 {
         self.data.len() as u16
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

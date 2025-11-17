@@ -4,6 +4,8 @@
 //! for external terminal integration.
 
 use super::Device;
+use std::any::Any;
+use std::cell::RefCell;
 use std::collections::VecDeque;
 
 /// W65C51 ACIA UART serial communication device.
@@ -79,22 +81,22 @@ use std::collections::VecDeque;
 pub struct Uart6551 {
     // Registers (4 bytes)
     data_register: u8,
-    status_register: u8,
+    status_register: RefCell<u8>, // Mutable during read
     command_register: u8,
     control_register: u8,
 
-    // Receive buffer
-    rx_buffer: VecDeque<u8>,
+    // Receive buffer (uses interior mutability for read-time mutation)
+    rx_buffer: RefCell<VecDeque<u8>>,
     rx_buffer_capacity: usize,
 
     // Transmit callback
     on_transmit: Option<Box<dyn Fn(u8)>>,
 
-    // Last received byte (returned when buffer is empty)
-    last_rx_byte: u8,
+    // Last received byte (uses interior mutability)
+    last_rx_byte: RefCell<u8>,
 
-    // Overrun flag (sticky until cleared by status->data read sequence)
-    overrun_occurred: bool,
+    // Overrun flag (uses interior mutability)
+    overrun_occurred: RefCell<bool>,
 }
 
 impl Uart6551 {
@@ -118,14 +120,14 @@ impl Uart6551 {
     pub fn new() -> Self {
         Self {
             data_register: 0x00,
-            status_register: 0x10, // TDRE (bit 4) = 1, transmitter always ready
+            status_register: RefCell::new(0x10), // TDRE (bit 4) = 1, transmitter always ready
             command_register: 0x00,
             control_register: 0x00,
-            rx_buffer: VecDeque::new(),
+            rx_buffer: RefCell::new(VecDeque::new()),
             rx_buffer_capacity: 256,
             on_transmit: None,
-            last_rx_byte: 0x00,
-            overrun_occurred: false,
+            last_rx_byte: RefCell::new(0x00),
+            overrun_occurred: RefCell::new(false),
         }
     }
 
@@ -182,9 +184,9 @@ impl Uart6551 {
     /// assert_eq!(uart.status() & 0x08, 0x08);
     /// ```
     pub fn receive_byte(&mut self, byte: u8) {
-        if self.rx_buffer.len() < self.rx_buffer_capacity {
-            self.rx_buffer.push_back(byte);
-            self.last_rx_byte = byte;
+        if self.rx_buffer.borrow().len() < self.rx_buffer_capacity {
+            self.rx_buffer.borrow_mut().push_back(byte);
+            *self.last_rx_byte.borrow_mut() = byte;
             self.update_status_register();
 
             // Echo mode: automatically retransmit if enabled (command bit 3)
@@ -195,7 +197,7 @@ impl Uart6551 {
             }
         } else {
             // Buffer overflow
-            self.overrun_occurred = true;
+            *self.overrun_occurred.borrow_mut() = true;
             self.update_status_register();
         }
     }
@@ -218,7 +220,7 @@ impl Uart6551 {
     /// assert_eq!(uart.status() & 0x10, 0x10); // TDRE always set
     /// ```
     pub fn status(&self) -> u8 {
-        self.status_register
+        *self.status_register.borrow()
     }
 
     /// Get current receive buffer length (for testing).
@@ -238,7 +240,7 @@ impl Uart6551 {
     /// assert_eq!(uart.rx_buffer_len(), 2);
     /// ```
     pub fn rx_buffer_len(&self) -> usize {
-        self.rx_buffer.len()
+        self.rx_buffer.borrow().len()
     }
 
     /// Write to data register (offset 0).
@@ -258,17 +260,19 @@ impl Uart6551 {
 
     /// Update status register based on current state.
     fn update_status_register(&mut self) {
-        self.status_register = 0x10; // TDRE (bit 4) always 1
+        let mut status = 0x10; // TDRE (bit 4) always 1
 
         // RDRF (bit 3): Set if receive buffer has data
-        if !self.rx_buffer.is_empty() {
-            self.status_register |= 0x08;
+        if !self.rx_buffer.borrow().is_empty() {
+            status |= 0x08;
         }
 
         // Overrun (bit 2): Set if buffer overflow occurred
-        if self.overrun_occurred {
-            self.status_register |= 0x04;
+        if *self.overrun_occurred.borrow() {
+            status |= 0x04;
         }
+
+        *self.status_register.borrow_mut() = status;
     }
 }
 
@@ -282,11 +286,30 @@ impl Device for Uart6551 {
     fn read(&self, offset: u16) -> u8 {
         match offset {
             0 => {
-                // Data register - need mutable access, but trait requires &self
-                // Return last byte (actual pop happens in mutable context via MemoryBus)
-                self.last_rx_byte
+                // Data register - pop byte from receive buffer
+                // Uses interior mutability to modify buffer during read
+                let mut rx_buffer = self.rx_buffer.borrow_mut();
+                if let Some(byte) = rx_buffer.pop_front() {
+                    // Clear overrun flag on successful read
+                    *self.overrun_occurred.borrow_mut() = false;
+                    *self.last_rx_byte.borrow_mut() = byte;
+
+                    // Update status (RDRF may clear if buffer now empty)
+                    let mut status = 0x10; // TDRE always 1
+                    if !rx_buffer.is_empty() {
+                        status |= 0x08; // RDRF
+                    }
+                    drop(rx_buffer); // Release borrow before updating status
+                    *self.status_register.borrow_mut() = status;
+
+                    byte
+                } else {
+                    drop(rx_buffer); // Release borrow
+                                     // Buffer empty - return last byte or 0x00
+                    *self.last_rx_byte.borrow()
+                }
             }
-            1 => self.status_register,
+            1 => *self.status_register.borrow(),
             2 => self.command_register,
             3 => self.control_register,
             _ => 0x00, // Invalid offset
@@ -315,6 +338,14 @@ impl Device for Uart6551 {
 
     fn size(&self) -> u16 {
         4 // Four registers: data, status, command, control
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

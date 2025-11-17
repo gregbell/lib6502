@@ -145,19 +145,21 @@ fn test_cpu_with_mapped_memory() {
     // Add lower 32KB RAM
     let mut ram_low = RamDevice::new(32768);
     // Load a simple program at 0x200: LDA #$42, STA $10
-    ram_low.load_bytes(
-        0x0200,
-        &[
-            0xA9, 0x42, // LDA #$42
-            0x85, 0x10, // STA $10
-        ],
-    );
+    ram_low
+        .load_bytes(
+            0x0200,
+            &[
+                0xA9, 0x42, // LDA #$42
+                0x85, 0x10, // STA $10
+            ],
+        )
+        .unwrap();
     memory.add_device(0x0000, Box::new(ram_low)).unwrap();
 
     // Add upper 32KB RAM
     let mut ram_high = RamDevice::new(32768);
     // Set reset vector to 0x0200 (0x7FFC-0x7FFD within device)
-    ram_high.load_bytes(0x7FFC, &[0x00, 0x02]);
+    ram_high.load_bytes(0x7FFC, &[0x00, 0x02]).unwrap();
     memory.add_device(0x8000, Box::new(ram_high)).unwrap();
 
     // Create CPU
@@ -184,7 +186,7 @@ fn test_ram_load_bytes_integration() {
     // Create RAM and load program data
     let mut ram = RamDevice::new(16384);
     let program = vec![0xA9, 0xFF, 0x85, 0x00]; // LDA #$FF, STA $00
-    ram.load_bytes(0x200, &program);
+    ram.load_bytes(0x200, &program).unwrap();
 
     memory.add_device(0x0000, Box::new(ram)).unwrap();
 

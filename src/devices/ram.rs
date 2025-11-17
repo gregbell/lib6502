@@ -3,6 +3,7 @@
 //! Provides readable and writable memory storage via the Device trait.
 
 use super::Device;
+use std::any::Any;
 
 /// Simple RAM device with readable and writable storage.
 ///
@@ -20,6 +21,7 @@ use super::Device;
 /// ram.write(0x42, 0xAA);
 /// assert_eq!(ram.read(0x42), 0xAA);
 /// ```
+#[derive(Clone)]
 pub struct RamDevice {
     data: Vec<u8>,
 }
@@ -59,9 +61,10 @@ impl RamDevice {
     /// * `offset` - Starting offset within the RAM device
     /// * `bytes` - Slice of bytes to load
     ///
-    /// # Panics
+    /// # Returns
     ///
-    /// Panics if `offset + bytes.len()` exceeds the device size.
+    /// * `Ok(())` if bytes were loaded successfully
+    /// * `Err(&str)` if offset or length would exceed device size
     ///
     /// # Examples
     ///
@@ -69,30 +72,50 @@ impl RamDevice {
     /// use lib6502::{RamDevice, Device};
     ///
     /// let mut ram = RamDevice::new(1024);
-    /// ram.load_bytes(0x100, &[0x01, 0x02, 0x03]);
+    /// ram.load_bytes(0x100, &[0x01, 0x02, 0x03]).unwrap();
     ///
     /// assert_eq!(ram.read(0x100), 0x01);
     /// assert_eq!(ram.read(0x101), 0x02);
     /// assert_eq!(ram.read(0x102), 0x03);
+    ///
+    /// // Out of bounds returns error
+    /// assert!(ram.load_bytes(1023, &[0x01, 0x02]).is_err());
     /// ```
-    pub fn load_bytes(&mut self, offset: u16, bytes: &[u8]) {
+    pub fn load_bytes(&mut self, offset: u16, bytes: &[u8]) -> Result<(), &'static str> {
         let start = offset as usize;
-        let end = start + bytes.len();
+        let end = start.checked_add(bytes.len()).ok_or("Offset overflow")?;
+
+        if end > self.data.len() {
+            return Err("Data exceeds device size");
+        }
+
         self.data[start..end].copy_from_slice(bytes);
+        Ok(())
     }
 }
 
 impl Device for RamDevice {
     fn read(&self, offset: u16) -> u8 {
-        self.data[offset as usize]
+        self.data.get(offset as usize).copied().unwrap_or(0xFF) // Safe fallback for out-of-bounds
     }
 
     fn write(&mut self, offset: u16, value: u8) {
-        self.data[offset as usize] = value;
+        if let Some(cell) = self.data.get_mut(offset as usize) {
+            *cell = value;
+        }
+        // Out-of-bounds writes are silently ignored
     }
 
     fn size(&self) -> u16 {
         self.data.len() as u16
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -135,7 +158,7 @@ mod tests {
         let mut ram = RamDevice::new(256);
 
         let program = vec![0xA9, 0x42, 0x85, 0x10]; // LDA #$42, STA $10
-        ram.load_bytes(0x200 - 0x200, &program); // Offset 0 within device
+        ram.load_bytes(0x200 - 0x200, &program).unwrap(); // Offset 0 within device
 
         assert_eq!(ram.read(0), 0xA9);
         assert_eq!(ram.read(1), 0x42);
