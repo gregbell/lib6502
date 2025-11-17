@@ -42,7 +42,7 @@ class App {
             this.registerDisplay = new RegisterDisplay('registers-container');
             this.flagsDisplay = new FlagsDisplay('flags-container');
             this.memoryViewer = new MemoryViewer('memory-container');
-            this.controlPanel = new ControlPanel('controls-container');
+            this.controlPanel = new ControlPanel('assemble-button-container', 'execution-controls-container');
             this.errorDisplay = new ErrorDisplay('error-container');
             this.exampleSelector = new ExampleSelector(this.editor);
 

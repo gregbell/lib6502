@@ -73,6 +73,25 @@ main {
     padding: 16px;
 }
 
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+.panel-header h2 {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin: 0;
+}
+
 .panel h2 {
     font-size: 14px;
     margin-bottom: 16px;
@@ -83,6 +102,28 @@ main {
     margin-right: -16px;
     padding-left: 16px;
     padding-right: 16px;
+}
+
+.header-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.btn-header {
+    padding: 4px 10px;
+    font-size: 11px;
+}
+
+.speed-select-header {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
 }
 
 .editor-panel {

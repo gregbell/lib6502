@@ -4,8 +4,9 @@
  */
 
 export class ControlPanel {
-    constructor(containerId) {
-        this.container = document.getElementById(containerId);
+    constructor(assembleContainerId, executionContainerId) {
+        this.assembleContainer = document.getElementById(assembleContainerId);
+        this.executionContainer = document.getElementById(executionContainerId);
         this.mode = 'idle'; // idle, running, stepping
         this.assembled = false;
         this.render();
@@ -13,25 +14,25 @@ export class ControlPanel {
     }
 
     render() {
-        this.container.innerHTML = `
-            <div class="controls-panel">
-                <div class="control-group">
-                    <button id="btn-assemble" class="btn btn-primary">Assemble</button>
-                    <button id="btn-run" class="btn btn-success" disabled>Run</button>
-                    <button id="btn-step" class="btn btn-info" disabled>Step</button>
-                    <button id="btn-stop" class="btn btn-warning" disabled>Stop</button>
-                    <button id="btn-reset" class="btn btn-secondary">Reset</button>
-                </div>
-                <div class="control-group speed-control">
-                    <label for="speed-select">Speed:</label>
-                    <select id="speed-select">
-                        <option value="500000">0.5 MHz (Slow)</option>
-                        <option value="1000000" selected>1 MHz (Authentic)</option>
-                        <option value="1790000">1.79 MHz (NES/C64)</option>
-                        <option value="2000000">2 MHz (Apple IIgs)</option>
-                        <option value="-1">Unlimited</option>
-                    </select>
-                </div>
+        // Assemble button in editor header
+        this.assembleContainer.innerHTML = `
+            <button id="btn-assemble" class="btn btn-primary btn-header">Assemble</button>
+        `;
+
+        // Execution controls in CPU state header
+        this.executionContainer.innerHTML = `
+            <div class="header-controls">
+                <button id="btn-run" class="btn btn-success btn-header" disabled>Run</button>
+                <button id="btn-step" class="btn btn-info btn-header" disabled>Step</button>
+                <button id="btn-stop" class="btn btn-warning btn-header" disabled>Stop</button>
+                <button id="btn-reset" class="btn btn-secondary btn-header">Reset</button>
+                <select id="speed-select" class="speed-select-header">
+                    <option value="500000">0.5 MHz</option>
+                    <option value="1000000" selected>1 MHz</option>
+                    <option value="1790000">1.79 MHz</option>
+                    <option value="2000000">2 MHz</option>
+                    <option value="-1">Max</option>
+                </select>
             </div>
         `;
     }

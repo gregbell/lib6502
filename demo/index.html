@@ -17,16 +17,21 @@
     <main class="split-panel">
         <section class="left-panel">
             <div class="panel editor-panel">
-                <h2>Assembly Code</h2>
+                <div class="panel-header">
+                    <h2>Assembly Code</h2>
+                    <div id="assemble-button-container"></div>
+                </div>
                 <div id="editor-container"></div>
-                <div id="controls-container"></div>
                 <div id="error-container"></div>
             </div>
         </section>
 
         <section class="right-panel">
             <div class="panel cpu-state-panel">
-                <h2>CPU State</h2>
+                <div class="panel-header">
+                    <h2>CPU State</h2>
+                    <div id="execution-controls-container"></div>
+                </div>
                 <div id="registers-container"></div>
                 <div id="flags-container"></div>
             </div>
