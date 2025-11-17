@@ -11,6 +11,7 @@
 
 - Q: What byte value should be returned when the CPU reads from an unmapped memory address? → A: Return $FF (255) for all unmapped reads
 - Q: What should happen when attempting to register a device whose address range overlaps with an existing device? → A: Reject registration with error (fail-fast, no overlaps allowed)
+- Q: What happens when 6502 code writes to UART data register when transmit is busy, or reads when receive buffer is empty? → A: Transmit: Immediate callback (no buffer, TDRE always 1). Receive empty: Return last byte or $00
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -67,8 +68,8 @@ A user running the emulator in a web browser wants to interact with the emulated
 
 - **Unmapped memory reads**: When 6502 code reads from an address with no registered device, the system returns $FF (mimicking classic 6502 floating bus behavior). Writes to unmapped addresses are silently ignored.
 - **Overlapping memory regions**: Device registration fails with an error if the new device's address range overlaps with any existing device. The system enforces non-overlapping address spaces to prevent ambiguous routing.
-- What happens when UART transmit buffer is full and 6502 code tries to write another byte?
-- What happens when UART receive buffer is empty and 6502 code tries to read a byte?
+- **UART transmit**: Transmit is immediate via callback with no buffering. TDRE (bit 4 of status register) is always 1, indicating the transmitter is always ready. Multiple writes execute callbacks sequentially.
+- **UART receive buffer empty**: Reading the data register when the receive buffer is empty returns the last successfully received byte, or $00 if no bytes have been received yet.
 - How does the system behave if the terminal connection is disconnected while the emulator is running?
 - Can the memory mapping configuration be changed dynamically while the emulator is running, or must it be set once at initialization?
 
@@ -83,8 +84,8 @@ A user running the emulator in a web browser wants to interact with the emulated
 - **FR-004**: System MUST route write operations to the appropriate device based on the target address
 - **FR-005**: System MUST return $FF when reading from unmapped memory addresses
 - **FR-006**: System MUST support a 6551 UART device implementation with four memory-mapped registers (data, status, command, control)
-- **FR-007**: UART data register (offset +0) MUST allow writing bytes for transmission and reading received bytes
-- **FR-008**: UART status register (offset +1) MUST indicate transmitter ready status (bit 4) and receiver data available status (bit 3)
+- **FR-007**: UART data register (offset +0) MUST allow writing bytes for transmission (triggering immediate callback) and reading received bytes (returning last byte or $00 if buffer empty)
+- **FR-008**: UART status register (offset +1) MUST indicate transmitter ready status (bit 4, always 1) and receiver data available status (bit 3, set when buffer not empty)
 - **FR-009**: UART command register (offset +2) MUST allow configuring parity mode, echo mode, and interrupt enables
 - **FR-010**: UART control register (offset +3) MUST allow configuring baud rate, word length, and stop bits
 - **FR-011**: UART MUST provide a callback or event interface for delivering transmitted bytes to external consumers
