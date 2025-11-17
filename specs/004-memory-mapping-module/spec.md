@@ -10,6 +10,7 @@
 ### Session 2025-11-17
 
 - Q: What byte value should be returned when the CPU reads from an unmapped memory address? → A: Return $FF (255) for all unmapped reads
+- Q: What should happen when attempting to register a device whose address range overlaps with an existing device? → A: Reject registration with error (fail-fast, no overlaps allowed)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -65,7 +66,7 @@ A user running the emulator in a web browser wants to interact with the emulated
 ### Edge Cases
 
 - **Unmapped memory reads**: When 6502 code reads from an address with no registered device, the system returns $FF (mimicking classic 6502 floating bus behavior). Writes to unmapped addresses are silently ignored.
-- How does the system handle overlapping memory regions (two devices claiming the same address)?
+- **Overlapping memory regions**: Device registration fails with an error if the new device's address range overlaps with any existing device. The system enforces non-overlapping address spaces to prevent ambiguous routing.
 - What happens when UART transmit buffer is full and 6502 code tries to write another byte?
 - What happens when UART receive buffer is empty and 6502 code tries to read a byte?
 - How does the system behave if the terminal connection is disconnected while the emulator is running?
@@ -77,6 +78,7 @@ A user running the emulator in a web browser wants to interact with the emulated
 
 - **FR-001**: System MUST provide a mechanism to register multiple hardware device implementations with the memory bus
 - **FR-002**: System MUST support configuring address range mappings (start address and size) for each registered device
+- **FR-002a**: System MUST reject device registration with an error if the address range overlaps with any existing registered device
 - **FR-003**: System MUST route read operations to the appropriate device based on the target address
 - **FR-004**: System MUST route write operations to the appropriate device based on the target address
 - **FR-005**: System MUST return $FF when reading from unmapped memory addresses
