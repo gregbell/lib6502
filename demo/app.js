@@ -3,7 +3,7 @@
  * Interactive 6502 assembly playground
  */
 
-import init, { Emulator6502 } from './lib6502_wasm/lib6502.js?v=3';
+import init, { Emulator6502 } from './lib6502_wasm/lib6502.js';
 import { CodeEditor } from './components/editor.js';
 import { RegisterDisplay } from './components/registers.js';
 import { FlagsDisplay } from './components/flags.js';
