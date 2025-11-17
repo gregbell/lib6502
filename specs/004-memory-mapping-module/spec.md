@@ -1,6 +1,6 @@
 # Feature Specification: Memory Mapping Module with UART Device Support
 
-**Feature Branch**: `001-memory-mapping-module`
+**Feature Branch**: `004-memory-mapping-module`
 **Created**: 2025-11-17
 **Status**: Draft
 **Input**: User description: "A new memory mapping module/trait so that we can wire up multiple different emulated hardware devices to the read/write memory interface and one particular: a serial device via a UART. Ultimately, I'd like to be able to use iterm.js in the browser to have a terminal/serial connection to the machine. I think we should emulate the same thing that Ben Eater does in his RS232 interface with the 6551 UART video https://www.youtube.com/watch?v=zsERDRM1oy8"
