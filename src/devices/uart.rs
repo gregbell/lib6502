@@ -197,23 +197,6 @@ impl Uart6551 {
         self.rx_buffer.len()
     }
 
-    /// Read from data register (offset 0).
-    ///
-    /// Pops a byte from the receive buffer. If buffer is empty, returns the
-    /// last successfully received byte (or 0x00 if no bytes received yet).
-    fn read_data_register(&mut self) -> u8 {
-        if let Some(byte) = self.rx_buffer.pop_front() {
-            // Reading data after reading status clears overrun flag
-            self.overrun_occurred = false;
-            self.last_rx_byte = byte;
-            self.update_status_register();
-            byte
-        } else {
-            // Buffer empty: return last byte or 0x00
-            self.last_rx_byte
-        }
-    }
-
     /// Write to data register (offset 0).
     ///
     /// Invokes transmit callback immediately (no buffering). TDRE always

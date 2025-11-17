@@ -57,8 +57,22 @@ fn main() {
 
     // Check UART status
     println!("UART status register: 0x{:02X}", uart.status());
-    println!("  TDRE (bit 4): {}", if uart.status() & 0x10 != 0 { "1 (ready)" } else { "0" });
-    println!("  RDRF (bit 3): {}", if uart.status() & 0x08 != 0 { "1 (data available)" } else { "0" });
+    println!(
+        "  TDRE (bit 4): {}",
+        if uart.status() & 0x10 != 0 {
+            "1 (ready)"
+        } else {
+            "0"
+        }
+    );
+    println!(
+        "  RDRF (bit 3): {}",
+        if uart.status() & 0x08 != 0 {
+            "1 (data available)"
+        } else {
+            "0"
+        }
+    );
     println!("  Receive buffer length: {}\n", uart.rx_buffer_len());
 
     memory.add_device(0x8000, Box::new(uart)).unwrap();
@@ -71,7 +85,9 @@ fn main() {
     rom_data[0x3FFC] = 0x00; // Low byte of 0x0200
     rom_data[0x3FFD] = 0x02; // High byte of 0x0200
 
-    memory.add_device(0xC000, Box::new(RomDevice::new(rom_data))).unwrap();
+    memory
+        .add_device(0xC000, Box::new(RomDevice::new(rom_data)))
+        .unwrap();
 
     // Create CPU
     let mut cpu = CPU::new(memory);
@@ -113,7 +129,9 @@ fn main() {
     println!("===============================\n");
 
     let mut memory2 = MappedMemory::new();
-    memory2.add_device(0x0000, Box::new(RamDevice::new(32768))).unwrap();
+    memory2
+        .add_device(0x0000, Box::new(RamDevice::new(32768)))
+        .unwrap();
 
     let mut uart2 = Uart6551::new();
 
