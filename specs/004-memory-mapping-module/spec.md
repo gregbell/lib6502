@@ -13,6 +13,7 @@
 - Q: What should happen when attempting to register a device whose address range overlaps with an existing device? → A: Reject registration with error (fail-fast, no overlaps allowed)
 - Q: What happens when 6502 code writes to UART data register when transmit is busy, or reads when receive buffer is empty? → A: Transmit: Immediate callback (no buffer, TDRE always 1). Receive empty: Return last byte or $00
 - Q: What should happen when the browser terminal disconnects while the emulator is running? → A: Continue running, callbacks no-op, receive still buffers
+- Q: What should echo mode do when enabled via the UART command register? → A: Automatically retransmit all received bytes when enabled
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -72,6 +73,7 @@ A user running the emulator in a web browser wants to interact with the emulated
 - **UART transmit**: Transmit is immediate via callback with no buffering. TDRE (bit 4 of status register) is always 1, indicating the transmitter is always ready. Multiple writes execute callbacks sequentially.
 - **UART receive buffer empty**: Reading the data register when the receive buffer is empty returns the last successfully received byte, or $00 if no bytes have been received yet.
 - **Terminal disconnection**: If the browser terminal disconnects while the emulator is running, the emulator continues executing. UART transmit callbacks become no-ops (silently succeed), and the receive buffer continues to accept injected bytes for potential reconnection.
+- **UART echo mode**: When bit 3 of the command register is set, all bytes injected into the receive buffer are automatically retransmitted through the transmit callback. This enables terminal echo without CPU intervention.
 - Can the memory mapping configuration be changed dynamically while the emulator is running, or must it be set once at initialization?
 
 ## Requirements *(mandatory)*
@@ -87,7 +89,7 @@ A user running the emulator in a web browser wants to interact with the emulated
 - **FR-006**: System MUST support a 6551 UART device implementation with four memory-mapped registers (data, status, command, control)
 - **FR-007**: UART data register (offset +0) MUST allow writing bytes for transmission (triggering immediate callback) and reading received bytes (returning last byte or $00 if buffer empty)
 - **FR-008**: UART status register (offset +1) MUST indicate transmitter ready status (bit 4, always 1) and receiver data available status (bit 3, set when buffer not empty)
-- **FR-009**: UART command register (offset +2) MUST allow configuring parity mode, echo mode, and interrupt enables
+- **FR-009**: UART command register (offset +2) MUST allow configuring parity mode, echo mode (bit 3, when set automatically retransmits all received bytes), and interrupt enables
 - **FR-010**: UART control register (offset +3) MUST allow configuring baud rate, word length, and stop bits
 - **FR-011**: UART MUST provide a callback or event interface for delivering transmitted bytes to external consumers
 - **FR-011a**: UART MUST continue operating if callback is unavailable or disconnected (callback failures become no-ops)
