@@ -1,11 +1,11 @@
 :root {
-    --bg-primary: #0a0a0a;
-    --bg-secondary: #1a1a1a;
-    --bg-panel: #141414;
+    --bg-primary: #060f11;
+    --bg-secondary: #060f11;
+    --bg-panel:  #060f11;
     --text-primary: #f0f0f0;
     --text-secondary: #888888;
-    --accent-primary: #4A9EFF;
-    --accent-success: #50FA7B;
+    --accent-primary: #48D096;
+    --accent-success: #48D096;
     --accent-warning: #FFB86C;
     --accent-error: #FF5555;
     --border: #2a2a2a;
@@ -35,13 +35,11 @@ h1, h2, h3 {
 
 header {
     background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
-    padding: 24px 32px;
+    padding: 16px 24px;
 }
 
 header h1 {
-    font-size: 32px;
-    margin-bottom: 8px;
+    font-size: 24px;
     color: var(--accent-primary);
 }
 
@@ -52,7 +50,7 @@ header h1 {
 
 main {
     flex: 1;
-    padding: 24px;
+    padding: 0 24px 24px 24px;
 }
 
 .split-panel {
@@ -71,16 +69,20 @@ main {
 .panel {
     background: var(--bg-panel);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 2px;
     padding: 16px;
 }
 
 .panel h2 {
-    font-size: 18px;
+    font-size: 14px;
     margin-bottom: 16px;
     color: var(--text-primary);
     border-bottom: 1px solid var(--border);
     padding-bottom: 8px;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
 }
 
 .editor-panel {
@@ -113,9 +115,15 @@ footer a:hover {
     text-decoration: underline;
 }
 
+/**
+.flag-item.flag-set {
+    background: rgba(80, 250, 123, 0.1);
+    border-color: var(--accent-success);
+}
+**/
 button {
-    background: var(--accent-primary);
-    color: white;
+    background: rgba(80, 250, 123, 0.1);
+    color: var(--accent-primary);
     border: none;
     padding: 8px 16px;
     border-radius: 4px;
@@ -250,34 +258,38 @@ button.danger {
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
     cursor: pointer;
-    border: none;
+    border: 1px solid;
     transition: all 0.2s;
 }
 
 .btn-primary {
-    background: var(--accent-primary);
-    color: white;
+    background: rgba(80, 250, 123, 0.1);
+    color: var(--accent-primary);
+    border-color: var(--border);
 }
 
 .btn-success {
-    background: var(--accent-success);
-    color: black;
+    background: rgba(80, 250, 123, 0.1);
+    color: var(--accent-primary);
+    border-color: var(--border);
 }
 
 .btn-info {
-    background: #8BE9FD;
-    color: black;
+    background: rgba(139, 233, 253, 0.1);
+    color: #8BE9FD;
+    border-color: var(--border);
 }
 
 .btn-warning {
-    background: var(--accent-warning);
-    color: black;
+    background: rgba(255, 184, 108, 0.1);
+    color: var(--accent-warning);
+    border-color: var(--border);
 }
 
 .btn-secondary {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
+    background: rgba(136, 136, 136, 0.1);
+    color: var(--text-secondary);
+    border-color: var(--border);
 }
 
 .btn:hover:not(:disabled) {
