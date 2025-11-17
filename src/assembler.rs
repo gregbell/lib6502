@@ -598,7 +598,9 @@ fn resolve_operand(
     }
 
     // Must be a label reference - look it up
-    if let Some(symbol) = symbol_table.lookup_symbol(operand_trimmed) {
+    // Labels are stored in uppercase, so convert operand to uppercase for lookup
+    let label_name = operand_trimmed.to_uppercase();
+    if let Some(symbol) = symbol_table.lookup_symbol(&label_name) {
         let target_address = symbol.address;
 
         // Determine if this is a branch instruction (needs relative addressing)
@@ -644,7 +646,7 @@ fn resolve_operand(
             line: 0,
             column: 0,
             span: (0, 0),
-            message: format!("Undefined label '{}'", operand_trimmed),
+            message: format!("Undefined label '{}'", label_name),
         })
     }
 }
