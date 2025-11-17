@@ -9,7 +9,7 @@
 //! - 0x0000-0x7FFF: 32KB RAM (writable)
 //! - 0x8000-0xFFFF: 32KB ROM (read-only, contains program)
 
-use lib6502::{RamDevice, RomDevice, MappedMemory, MemoryBus, CPU, ExecutionError};
+use lib6502::{ExecutionError, MappedMemory, MemoryBus, RamDevice, RomDevice, CPU};
 
 fn main() {
     println!("6502 Memory-Mapped System Example");
@@ -38,7 +38,7 @@ fn main() {
         0x85, 0x10, // STA $10
         0xA9, 0xFF, // LDA #$FF
         0x85, 0x11, // STA $11
-        0x00,       // BRK
+        0x00, // BRK
     ];
 
     // Load program at beginning of ROM (will be at 0x8000 in memory map)
@@ -95,7 +95,10 @@ fn main() {
         }
     }
 
-    println!("\nProgram completed after {} instructions", instruction_count);
+    println!(
+        "\nProgram completed after {} instructions",
+        instruction_count
+    );
     println!("\nFinal CPU state:");
     println!("  PC: 0x{:04X}", cpu.pc());
     println!("  A:  0x{:02X}", cpu.a());
@@ -103,8 +106,14 @@ fn main() {
 
     // Verify memory writes
     println!("\nMemory contents:");
-    println!("  0x0010: 0x{:02X} (expected 0x42)", cpu.memory_mut().read(0x10));
-    println!("  0x0011: 0x{:02X} (expected 0xFF)", cpu.memory_mut().read(0x11));
+    println!(
+        "  0x0010: 0x{:02X} (expected 0x42)",
+        cpu.memory_mut().read(0x10)
+    );
+    println!(
+        "  0x0011: 0x{:02X} (expected 0xFF)",
+        cpu.memory_mut().read(0x11)
+    );
 
     // Verify RAM is writable and ROM is read-only
     println!("\nVerifying device behavior:");

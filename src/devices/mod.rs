@@ -234,7 +234,11 @@ impl MappedMemory {
     /// let result = memory.add_device(0x1000, Box::new(RamDevice::new(1024)));
     /// assert!(result.is_err());
     /// ```
-    pub fn add_device(&mut self, base_addr: u16, device: Box<dyn Device>) -> Result<(), DeviceError> {
+    pub fn add_device(
+        &mut self,
+        base_addr: u16,
+        device: Box<dyn Device>,
+    ) -> Result<(), DeviceError> {
         let new_size = device.size();
         let new_end = base_addr.saturating_add(new_size);
 
@@ -269,9 +273,9 @@ impl MappedMemory {
     ///
     /// # Returns
     ///
-    /// * `Some((&mut Box<dyn Device>, offset))` - Device and offset if address is mapped
+    /// * `Some((&mut dyn Device, offset))` - Device and offset if address is mapped
     /// * `None` - If address is not mapped to any device
-    fn find_device(&mut self, addr: u16) -> Option<(&mut Box<dyn Device>, u16)> {
+    fn find_device(&mut self, addr: u16) -> Option<(&mut dyn Device, u16)> {
         for mapping in &mut self.devices {
             let size = mapping.device.size();
             let (end_addr, overflow) = mapping.base_addr.overflowing_add(size);
@@ -287,7 +291,7 @@ impl MappedMemory {
 
             if in_range {
                 let offset = addr - mapping.base_addr;
-                return Some((&mut mapping.device, offset));
+                return Some((mapping.device.as_mut(), offset));
             }
         }
         None
@@ -301,9 +305,9 @@ impl MappedMemory {
     ///
     /// # Returns
     ///
-    /// * `Some((&Box<dyn Device>, offset))` - Device and offset if address is mapped
+    /// * `Some((&dyn Device, offset))` - Device and offset if address is mapped
     /// * `None` - If address is not mapped to any device
-    fn find_device_immut(&self, addr: u16) -> Option<(&Box<dyn Device>, u16)> {
+    fn find_device_immut(&self, addr: u16) -> Option<(&dyn Device, u16)> {
         for mapping in &self.devices {
             let size = mapping.device.size();
             let (end_addr, overflow) = mapping.base_addr.overflowing_add(size);
@@ -319,7 +323,7 @@ impl MappedMemory {
 
             if in_range {
                 let offset = addr - mapping.base_addr;
-                return Some((&mapping.device, offset));
+                return Some((mapping.device.as_ref(), offset));
             }
         }
         None
