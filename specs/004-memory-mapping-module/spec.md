@@ -5,6 +5,12 @@
 **Status**: Draft
 **Input**: User description: "A new memory mapping module/trait so that we can wire up multiple different emulated hardware devices to the read/write memory interface and one particular: a serial device via a UART. Ultimately, I'd like to be able to use iterm.js in the browser to have a terminal/serial connection to the machine. I think we should emulate the same thing that Ben Eater does in his RS232 interface with the 6551 UART video https://www.youtube.com/watch?v=zsERDRM1oy8"
 
+## Clarifications
+
+### Session 2025-11-17
+
+- Q: What byte value should be returned when the CPU reads from an unmapped memory address? → A: Return $FF (255) for all unmapped reads
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Basic Memory-Mapped Device Architecture (Priority: P1)
@@ -19,7 +25,7 @@ An emulator developer wants to create a 6502 system with multiple memory-mapped 
 
 1. **Given** a system configured with RAM at $0000-$3FFF and ROM at $C000-$FFFF, **When** the CPU reads from address $1234, **Then** the request is routed to the RAM device
 2. **Given** a system configured with multiple devices, **When** the CPU writes to address $DEAD, **Then** the request is routed to the device responsible for that address range
-3. **Given** a system with unmapped address regions, **When** the CPU accesses an unmapped address, **Then** the system returns a predictable default value (e.g., $FF or $00)
+3. **Given** a system with unmapped address regions, **When** the CPU reads from an unmapped address, **Then** the system returns $FF
 
 ---
 
@@ -58,7 +64,7 @@ A user running the emulator in a web browser wants to interact with the emulated
 
 ### Edge Cases
 
-- What happens when 6502 code accesses an address range that no device has claimed (unmapped region)?
+- **Unmapped memory reads**: When 6502 code reads from an address with no registered device, the system returns $FF (mimicking classic 6502 floating bus behavior). Writes to unmapped addresses are silently ignored.
 - How does the system handle overlapping memory regions (two devices claiming the same address)?
 - What happens when UART transmit buffer is full and 6502 code tries to write another byte?
 - What happens when UART receive buffer is empty and 6502 code tries to read a byte?
@@ -73,7 +79,7 @@ A user running the emulator in a web browser wants to interact with the emulated
 - **FR-002**: System MUST support configuring address range mappings (start address and size) for each registered device
 - **FR-003**: System MUST route read operations to the appropriate device based on the target address
 - **FR-004**: System MUST route write operations to the appropriate device based on the target address
-- **FR-005**: System MUST provide predictable behavior when accessing unmapped memory addresses
+- **FR-005**: System MUST return $FF when reading from unmapped memory addresses
 - **FR-006**: System MUST support a 6551 UART device implementation with four memory-mapped registers (data, status, command, control)
 - **FR-007**: UART data register (offset +0) MUST allow writing bytes for transmission and reading received bytes
 - **FR-008**: UART status register (offset +1) MUST indicate transmitter ready status (bit 4) and receiver data available status (bit 3)
