@@ -248,7 +248,7 @@ START:
     assert!(symbol.is_some(), "Should find START label");
     let symbol = symbol.unwrap();
     assert_eq!(symbol.name, "START");
-    assert_eq!(symbol.address, 0, "START should be at address 0");
+    assert_eq!(symbol.value, 0, "START should be at address 0");
 
     // Verify bytes: LDA #$42 (A9 42) + JMP $0000 (4C 00 00)
     assert_eq!(output.bytes, vec![0xA9, 0x42, 0x4C, 0x00, 0x00]);
@@ -277,7 +277,7 @@ END:
     assert!(symbol.is_some(), "Should find END label");
     let symbol = symbol.unwrap();
     assert_eq!(
-        symbol.address, 5,
+        symbol.value, 5,
         "END should be at address 5 (after JMP + LDA)"
     );
 
@@ -308,7 +308,7 @@ LOOP:
     // Verify symbol table
     let symbol = output.lookup_symbol("LOOP");
     assert!(symbol.is_some());
-    assert_eq!(symbol.unwrap().address, 0);
+    assert_eq!(symbol.unwrap().value, 0);
 
     // BEQ LOOP should branch back
     // From address 2 (after LDA #$42), branch to address 0
@@ -344,7 +344,7 @@ FORWARD:
         "FORWARD label should exist in symbol table"
     );
     assert_eq!(
-        symbol.unwrap().address,
+        symbol.unwrap().value,
         3,
         "FORWARD should be at address 3 (BEQ=2 bytes, NOP=1 byte)"
     );
@@ -931,4 +931,499 @@ LOOP:
     // Offset = $1000 - $1004 = -4 = $FC (two's complement)
     // RTS ($1004-$1005)
     assert_eq!(result.bytes, vec![0xEA, 0xEA, 0xD0, 0xFC, 0x60]);
+}
+
+// T016: Integration test for basic constant definition
+#[test]
+fn test_constant_definition_basic() {
+    let source = r#"
+MAX = 255
+SCREEN = $4000
+BITS = %11110000
+
+START:
+    NOP
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Assembly with constants should succeed");
+
+    let output = result.unwrap();
+
+    // Verify constants are in symbol table
+    let max_symbol = output.lookup_symbol("MAX");
+    assert!(
+        max_symbol.is_some(),
+        "MAX constant should be in symbol table"
+    );
+    let max_symbol = max_symbol.unwrap();
+    assert_eq!(max_symbol.value, 255);
+    assert_eq!(max_symbol.kind, lib6502::assembler::SymbolKind::Constant);
+
+    let screen_symbol = output.lookup_symbol("SCREEN");
+    assert!(
+        screen_symbol.is_some(),
+        "SCREEN constant should be in symbol table"
+    );
+    let screen_symbol = screen_symbol.unwrap();
+    assert_eq!(screen_symbol.value, 0x4000);
+    assert_eq!(screen_symbol.kind, lib6502::assembler::SymbolKind::Constant);
+
+    let bits_symbol = output.lookup_symbol("BITS");
+    assert!(
+        bits_symbol.is_some(),
+        "BITS constant should be in symbol table"
+    );
+    let bits_symbol = bits_symbol.unwrap();
+    assert_eq!(bits_symbol.value, 0b11110000);
+    assert_eq!(bits_symbol.kind, lib6502::assembler::SymbolKind::Constant);
+
+    // Verify label is also in symbol table with correct kind
+    let start_symbol = output.lookup_symbol("START");
+    assert!(
+        start_symbol.is_some(),
+        "START label should be in symbol table"
+    );
+    let start_symbol = start_symbol.unwrap();
+    assert_eq!(start_symbol.value, 0); // Address 0
+    assert_eq!(start_symbol.kind, lib6502::assembler::SymbolKind::Label);
+
+    // Verify the NOP instruction assembled correctly
+    assert_eq!(output.bytes, vec![0xEA]); // NOP opcode
+}
+
+// T020: Integration test for immediate addressing with constant (LDA #MAX)
+#[test]
+fn test_constant_usage_immediate() {
+    let source = r#"
+MAX = 255
+SMALL = 42
+
+    LDA #MAX
+    LDX #SMALL
+    LDY #10
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Assembly with constants in immediate mode should succeed"
+    );
+
+    let output = result.unwrap();
+
+    // Verify assembled bytes
+    // LDA #255 = A9 FF
+    // LDX #42 = A2 2A
+    // LDY #10 = A0 0A
+    assert_eq!(output.bytes, vec![0xA9, 0xFF, 0xA2, 0x2A, 0xA0, 0x0A]);
+}
+
+// T021: Integration test for zero page with constant (LDA ZP_TEMP)
+#[test]
+fn test_constant_usage_zero_page() {
+    let source = r#"
+ZP_TEMP = $20
+ZP_PTR = $30
+
+    LDA ZP_TEMP
+    STA ZP_PTR
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Assembly with constants in zero page mode should succeed"
+    );
+
+    let output = result.unwrap();
+
+    // Verify assembled bytes
+    // LDA $20 = A5 20 (zero page)
+    // STA $30 = 85 30 (zero page)
+    assert_eq!(output.bytes, vec![0xA5, 0x20, 0x85, 0x30]);
+}
+
+// T022: Integration test for absolute with constant (STA SCREEN)
+#[test]
+fn test_constant_usage_absolute() {
+    let source = r#"
+SCREEN = $4000
+IO_PORT = $8000
+
+    LDA #$42
+    STA SCREEN
+    STX IO_PORT
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Assembly with constants in absolute mode should succeed"
+    );
+
+    let output = result.unwrap();
+
+    // Verify assembled bytes
+    // LDA #$42 = A9 42
+    // STA $4000 = 8D 00 40 (absolute, little-endian)
+    // STX $8000 = 8E 00 80 (absolute, little-endian)
+    assert_eq!(
+        output.bytes,
+        vec![0xA9, 0x42, 0x8D, 0x00, 0x40, 0x8E, 0x00, 0x80]
+    );
+}
+
+// T023: Integration test for indexed with constant (LDA IO_BASE,X)
+#[test]
+fn test_constant_usage_indexed() {
+    let source = r#"
+IO_BASE = $200
+BUFFER = $50
+
+    LDA IO_BASE,X
+    STA IO_BASE,Y
+    LDA BUFFER,X
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Assembly with constants in indexed mode should succeed"
+    );
+
+    let output = result.unwrap();
+
+    // Verify assembled bytes
+    // LDA $200,X = BD 00 02 (absolute,X - little-endian)
+    // STA $200,Y = 99 00 02 (absolute,Y - little-endian)
+    // LDA $50,X = B5 50 (zero page,X)
+    assert_eq!(
+        output.bytes,
+        vec![0xBD, 0x00, 0x02, 0x99, 0x00, 0x02, 0xB5, 0x50]
+    );
+}
+
+// T031: Integration test for undefined constant error
+#[test]
+fn test_error_undefined_constant() {
+    let source = r#"
+    LDA #MISSING
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail with undefined constant");
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::UndefinedLabel); // Undefined symbol
+    assert!(errors[0].message.contains("MISSING"));
+}
+
+// T032: Integration test for duplicate constant error
+#[test]
+fn test_error_duplicate_constant() {
+    let source = r#"
+MAX = 100
+MAX = 200
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail with duplicate constant");
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::DuplicateConstant);
+    assert!(errors[0].message.contains("MAX"));
+    assert!(errors[0].message.contains("previously defined"));
+}
+
+// T033: Integration test for name collision error (constant then label)
+#[test]
+fn test_error_name_collision_constant_then_label() {
+    let source = r#"
+FOO = 42
+FOO:
+    NOP
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail with name collision");
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::NameCollision);
+    assert!(errors[0].message.contains("FOO"));
+    assert!(errors[0].message.contains("already defined as a constant"));
+}
+
+// T034: Integration test for name collision error (label then constant)
+#[test]
+fn test_error_name_collision_label_then_constant() {
+    let source = r#"
+BAR:
+    NOP
+BAR = 100
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail with name collision");
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::NameCollision);
+    assert!(errors[0].message.contains("BAR"));
+    assert!(errors[0].message.contains("already defined as a label"));
+}
+
+// T038: Integration test for mixed constants and labels in same program
+#[test]
+fn test_mixed_constants_and_labels() {
+    let source = r#"
+; Define constants
+MAX_LIVES = 3
+SCREEN_ADDR = $4000
+ZP_TEMP = $20
+
+; Define labels and code
+START:
+    LDA #MAX_LIVES
+    STA ZP_TEMP
+
+LOOP:
+    LDA ZP_TEMP
+    STA SCREEN_ADDR
+    JMP LOOP
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble mixed constants and labels"
+    );
+
+    let output = result.unwrap();
+
+    // Verify constants are in symbol table
+    let max_lives = output.lookup_symbol("MAX_LIVES").unwrap();
+    assert_eq!(max_lives.kind, lib6502::assembler::SymbolKind::Constant);
+    assert_eq!(max_lives.value, 3);
+
+    let screen = output.lookup_symbol("SCREEN_ADDR").unwrap();
+    assert_eq!(screen.kind, lib6502::assembler::SymbolKind::Constant);
+    assert_eq!(screen.value, 0x4000);
+
+    let zp = output.lookup_symbol("ZP_TEMP").unwrap();
+    assert_eq!(zp.kind, lib6502::assembler::SymbolKind::Constant);
+    assert_eq!(zp.value, 0x20);
+
+    // Verify labels are in symbol table
+    let start = output.lookup_symbol("START").unwrap();
+    assert_eq!(start.kind, lib6502::assembler::SymbolKind::Label);
+    assert_eq!(start.value, 0); // Address 0
+
+    let loop_label = output.lookup_symbol("LOOP").unwrap();
+    assert_eq!(loop_label.kind, lib6502::assembler::SymbolKind::Label);
+    // LOOP address depends on instruction sizes - just verify it exists
+
+    // Verify program assembled successfully
+    assert!(!output.bytes.is_empty());
+    assert_eq!(output.bytes[0], 0xA9); // LDA immediate
+    assert_eq!(output.bytes[1], 0x03); // value 3
+}
+
+// T039: Integration test for constants in all addressing modes
+#[test]
+fn test_constants_all_addressing_modes() {
+    let source = r#"
+; Define test constants
+IMM_VAL = 42
+ZP_ADDR = $50
+ABS_ADDR = $2000
+ZP_IDX = $60
+ABS_IDX = $3000
+
+    ; Immediate mode
+    LDA #IMM_VAL
+
+    ; Zero page
+    STA ZP_ADDR
+
+    ; Absolute
+    STA ABS_ADDR
+
+    ; Zero page indexed
+    LDA ZP_IDX,X
+    LDX ZP_IDX,Y  ; LDX supports ZP,Y
+
+    ; Absolute indexed
+    STA ABS_IDX,X
+    STA ABS_IDX,Y
+"#;
+
+    let result = assemble(source);
+    if result.is_err() {
+        eprintln!("Assembly errors: {:#?}", result.as_ref().unwrap_err());
+    }
+    assert!(
+        result.is_ok(),
+        "Should successfully use constants in all addressing modes"
+    );
+
+    let output = result.unwrap();
+
+    // Verify all constants are in symbol table
+    assert_eq!(output.lookup_symbol("IMM_VAL").unwrap().value, 42);
+    assert_eq!(output.lookup_symbol("ZP_ADDR").unwrap().value, 0x50);
+    assert_eq!(output.lookup_symbol("ABS_ADDR").unwrap().value, 0x2000);
+    assert_eq!(output.lookup_symbol("ZP_IDX").unwrap().value, 0x60);
+    assert_eq!(output.lookup_symbol("ABS_IDX").unwrap().value, 0x3000);
+
+    // Verify assembled bytes
+    let expected = vec![
+        0xA9, 0x2A, // LDA #42
+        0x85, 0x50, // STA $50 (zero page)
+        0x8D, 0x00, 0x20, // STA $2000 (absolute)
+        0xB5, 0x60, // LDA $60,X (zero page,X)
+        0xB6, 0x60, // LDX $60,Y (zero page,Y)
+        0x9D, 0x00, 0x30, // STA $3000,X (absolute,X)
+        0x99, 0x00, 0x30, // STA $3000,Y (absolute,Y)
+    ];
+    assert_eq!(output.bytes, expected);
+}
+
+// T043: Integration test for complex program with many constants
+#[test]
+fn test_complex_program_with_many_constants() {
+    let source = r#"
+; I/O addresses
+UART_DATA = $8000
+UART_STATUS = $8001
+SCREEN_BASE = $4000
+KEYBOARD_PORT = $8002
+
+; Character constants
+CHAR_CR = 13
+CHAR_LF = 10
+CHAR_SPACE = 32
+
+; System constants
+MAX_BUFFER = 128
+ZP_PTR = $40
+ZP_COUNTER = $42
+
+; Program
+START:
+    LDX #0
+    STX ZP_COUNTER
+
+MAIN_LOOP:
+    LDA UART_STATUS
+    AND #1
+    BEQ MAIN_LOOP
+
+    LDA UART_DATA
+    CMP #CHAR_CR
+    BEQ HANDLE_CR
+    CMP #CHAR_LF
+    BEQ HANDLE_LF
+
+    STA SCREEN_BASE,X
+    INX
+    CPX #MAX_BUFFER
+    BNE MAIN_LOOP
+
+HANDLE_CR:
+    LDA #CHAR_SPACE
+    STA SCREEN_BASE,X
+    JMP MAIN_LOOP
+
+HANDLE_LF:
+    INX
+    JMP MAIN_LOOP
+"#;
+
+    let result = assemble(source);
+    if result.is_err() {
+        eprintln!("Assembly errors: {:#?}", result.as_ref().unwrap_err());
+    }
+    assert!(
+        result.is_ok(),
+        "Complex program with many constants should assemble successfully"
+    );
+
+    let output = result.unwrap();
+
+    // Verify all constants exist
+    assert_eq!(output.lookup_symbol("UART_DATA").unwrap().value, 0x8000);
+    assert_eq!(output.lookup_symbol("CHAR_CR").unwrap().value, 13);
+    assert_eq!(output.lookup_symbol("MAX_BUFFER").unwrap().value, 128);
+    assert_eq!(output.lookup_symbol("ZP_PTR").unwrap().value, 0x40);
+
+    // Verify all constants have correct kind
+    assert_eq!(
+        output.lookup_symbol("UART_DATA").unwrap().kind,
+        lib6502::assembler::SymbolKind::Constant
+    );
+
+    // Verify all labels exist
+    assert!(output.lookup_symbol("START").is_some());
+    assert!(output.lookup_symbol("MAIN_LOOP").is_some());
+    assert!(output.lookup_symbol("HANDLE_CR").is_some());
+
+    // Verify labels have correct kind
+    assert_eq!(
+        output.lookup_symbol("START").unwrap().kind,
+        lib6502::assembler::SymbolKind::Label
+    );
+
+    // Verify program assembled successfully
+    assert!(
+        !output.bytes.is_empty(),
+        "Program should have assembled code"
+    );
+}
+
+// T044: Integration test for backward compatibility (existing code without constants)
+#[test]
+fn test_backward_compatibility_no_constants() {
+    // This is an existing test pattern that should continue to work unchanged
+    let source = r#"
+.org $8000
+
+START:
+    LDA #$42
+    STA $2000
+    LDX #$00
+
+LOOP:
+    LDA $2000,X
+    STA $4000,X
+    INX
+    CPX #$10
+    BNE LOOP
+
+    JMP START
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Existing assembly code without constants should work unchanged"
+    );
+
+    let output = result.unwrap();
+
+    // Verify labels still work as before
+    let start = output.lookup_symbol("START").unwrap();
+    assert_eq!(start.kind, lib6502::assembler::SymbolKind::Label);
+    assert_eq!(start.value, 0x8000);
+
+    let loop_label = output.lookup_symbol("LOOP").unwrap();
+    assert_eq!(loop_label.kind, lib6502::assembler::SymbolKind::Label);
+
+    // Verify code still assembles correctly
+    assert!(!output.bytes.is_empty());
+    assert_eq!(output.bytes[0], 0xA9); // LDA immediate
+    assert_eq!(output.bytes[1], 0x42); // value 0x42
 }
