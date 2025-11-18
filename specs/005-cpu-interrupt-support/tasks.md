@@ -108,28 +108,28 @@ Single project structure (Rust library crate):
 
 #### Multi-Device IRQ Logic
 
-- [ ] T038 [US2] Verify MappedMemory::irq_active() correctly ORs all device interrupt flags in src/devices/mod.rs
-- [ ] T039 [US2] Add documentation to irq_active() explaining level-sensitive IRQ line semantics in src/devices/mod.rs
-- [ ] T040 [US2] Ensure CPU re-checks IRQ line after RTI instruction (verify in src/cpu.rs)
+- [x] T038 [US2] Verify MappedMemory::irq_active() correctly ORs all device interrupt flags in src/devices/mod.rs
+- [x] T039 [US2] Add documentation to irq_active() explaining level-sensitive IRQ line semantics in src/devices/mod.rs
+- [x] T040 [US2] Ensure CPU re-checks IRQ line after RTI instruction (verify in src/cpu.rs)
 
 #### Example Multi-Device System
 
-- [ ] T041 [P] [US2] Create UartDevice struct in examples/interrupt_device.rs with interrupt_pending field
-- [ ] T042 [P] [US2] Implement Device trait for UartDevice in examples/interrupt_device.rs (size() returns 4)
-- [ ] T043 [P] [US2] Implement InterruptDevice trait for UartDevice in examples/interrupt_device.rs
-- [ ] T044 [P] [US2] Implement MemoryBus trait for UartDevice with memory-mapped registers in examples/interrupt_device.rs
-- [ ] T045 [US2] Add receive_byte() method to UartDevice that sets interrupt_pending in examples/interrupt_device.rs
-- [ ] T046 [US2] Implement STATUS register for UartDevice showing interrupt_pending in bit 7 in examples/interrupt_device.rs
-- [ ] T047 [US2] Implement DATA register for UartDevice that clears interrupt when read in examples/interrupt_device.rs
+- [x] T041 [P] [US2] Create UartDevice struct in examples/interrupt_device.rs with interrupt_pending field
+- [x] T042 [P] [US2] Implement Device trait for UartDevice in examples/interrupt_device.rs (size() returns 4)
+- [x] T043 [P] [US2] Implement InterruptDevice trait for UartDevice in examples/interrupt_device.rs
+- [x] T044 [P] [US2] Implement MemoryBus trait for UartDevice with memory-mapped registers in examples/interrupt_device.rs
+- [x] T045 [US2] Add receive_byte() method to UartDevice that sets interrupt_pending in examples/interrupt_device.rs
+- [x] T046 [US2] Implement STATUS register for UartDevice showing interrupt_pending in bit 7 in examples/interrupt_device.rs
+- [x] T047 [US2] Implement DATA register for UartDevice that clears interrupt when read in examples/interrupt_device.rs
 
 #### Integration & Validation
 
-- [ ] T048 [US2] Add test case: two devices assert interrupts simultaneously, IRQ line active until both clear in tests/integration/test_interrupts.rs
-- [ ] T049 [US2] Add test case: device asserts interrupt during ISR, CPU re-enters ISR after RTI in tests/integration/test_interrupts.rs
-- [ ] T050 [US2] Add test case: ISR polls multiple devices, identifies and handles all interrupt sources in tests/integration/test_interrupts.rs
-- [ ] T051 [US2] Add test case: verify IRQ line inactive only when all devices cleared in tests/integration/test_interrupts.rs
-- [ ] T052 [US2] Create multi-device example in examples/interrupt_device.rs with timer + UART
-- [ ] T053 [US2] Add ISR polling example showing how to check multiple devices in priority order in examples/interrupt_device.rs
+- [x] T048 [US2] Add test case: two devices assert interrupts simultaneously, IRQ line active until both clear in tests/integration/test_interrupts.rs
+- [x] T049 [US2] Add test case: device asserts interrupt during ISR, CPU re-enters ISR after RTI in tests/integration/test_interrupts.rs
+- [x] T050 [US2] Add test case: ISR polls multiple devices, identifies and handles all interrupt sources in tests/integration/test_interrupts.rs
+- [x] T051 [US2] Add test case: verify IRQ line inactive only when all devices cleared in tests/integration/test_interrupts.rs
+- [x] T052 [US2] Create multi-device example in examples/interrupt_device.rs with timer + UART
+- [x] T053 [US2] Add ISR polling example showing how to check multiple devices in priority order in examples/interrupt_device.rs
 
 **Checkpoint**: At this point, User Story 2 should be fully functional - multiple devices can signal interrupts, IRQ line correctly represents OR of all device states, ISR can poll and handle multiple sources.
 

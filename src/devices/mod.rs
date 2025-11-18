@@ -552,9 +552,55 @@ impl MemoryBus for MappedMemory {
     }
 
     fn irq_active(&self) -> bool {
-        // Check all devices for pending interrupts
-        // This implements the level-sensitive IRQ line: active if ANY device has interrupt
-        // Returns true if at least one device has_interrupt() returns true
+        // Level-Sensitive IRQ Line Implementation
+        //
+        // This method implements the 6502's level-sensitive IRQ line behavior by
+        // performing a logical OR of all device interrupt flags. The IRQ line is
+        // active (high) if ANY device has a pending interrupt.
+        //
+        // Hardware Semantics:
+        // - IRQ line is ACTIVE when at least one device has_interrupt() returns true
+        // - IRQ line is INACTIVE only when ALL devices have cleared their interrupts
+        // - This matches real 6502 hardware where multiple devices share the IRQ line
+        //
+        // Multi-Device Behavior:
+        // - When multiple devices assert interrupts, the IRQ line stays active
+        // - ISR must poll all devices to identify interrupt sources
+        // - ISR must acknowledge each device individually (device-specific mechanism)
+        // - IRQ line goes inactive only after ALL devices are acknowledged
+        // - If new interrupt asserts during ISR, CPU re-enters ISR after RTI
+        //
+        // ISR Pattern for Multi-Device Systems:
+        // 1. ISR polls each device's status register in priority order
+        // 2. For each device with pending interrupt:
+        //    a. Read device status to identify cause
+        //    b. Handle the interrupt
+        //    c. Acknowledge device (write to control register or read data)
+        // 3. RTI instruction returns to interrupted code
+        // 4. CPU immediately checks IRQ line - if still active, re-enters ISR
+        //
+        // Example (3 devices at 0xD000, 0xD100, 0xD200):
+        //   irq_handler:
+        //       lda $D000          ; Check timer status (highest priority)
+        //       and #$80           ; Interrupt pending?
+        //       beq check_uart
+        //       ; handle timer...
+        //       sta $D001          ; Acknowledge timer
+        //   check_uart:
+        //       lda $D100          ; Check UART status
+        //       and #$80
+        //       beq check_gpio
+        //       ; handle UART...
+        //       lda $D104          ; Acknowledge by reading data
+        //   check_gpio:
+        //       lda $D200          ; Check GPIO status
+        //       and #$80
+        //       beq done
+        //       ; handle GPIO...
+        //       sta $D201          ; Acknowledge GPIO
+        //   done:
+        //       rti                ; Return - CPU will re-check IRQ line
+        //
         self.devices
             .iter()
             .any(|mapping| mapping.device.has_interrupt())

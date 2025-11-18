@@ -572,6 +572,7 @@ impl<M: MemoryBus> CPU<M> {
     ///
     /// Stack pointer wraps around (0xFF wraps to 0x00) matching hardware behavior.
     /// No underflow checking is performed.
+    #[allow(dead_code)]
     fn pull_stack(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let stack_addr = 0x0100 | (self.sp as u16);
