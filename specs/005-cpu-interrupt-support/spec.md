@@ -10,7 +10,8 @@
 ### Session 2025-11-18
 
 - Q: Should the interrupt mechanism mimic real 6502 hardware behavior (level-sensitive IRQ line, no queueing) or implement a modern queued interrupt controller? → A: Level-sensitive like real hardware: Single IRQ line, no queue. Multiple devices can pull IRQ low simultaneously. ISR polls device status registers to identify interrupt sources.
-- Q: How should devices be notified that their interrupt is being serviced? → A: Automatic notification: CPU automatically notifies all devices with pending interrupts when entering ISR (simplified but not hardware-accurate).
+- Q: How should devices be notified that their interrupt is being serviced? → A: ISR acknowledges explicitly: Devices are acknowledged only when the ISR reads/writes their status/control registers (matches real hardware behavior).
+- Q: How should devices expose their interrupt status for ISR polling? → A: Memory-mapped status registers: Devices expose status via reads/writes to specific memory addresses. ISR polls by reading memory. Matches real hardware behavior.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -24,9 +25,9 @@ An external device (such as a timer, UART serial port, or keyboard controller) n
 
 **Acceptance Scenarios**:
 
-1. **Given** a device is connected to the CPU and an interrupt handler is registered, **When** the device signals an interrupt, **Then** the CPU executes the interrupt handler at the next instruction boundary
-2. **Given** the interrupt disable flag (I flag) is set, **When** a device signals an interrupt, **Then** the CPU does not execute the interrupt handler until the I flag is cleared
-3. **Given** an interrupt has been signaled, **When** the CPU begins executing the interrupt handler, **Then** the device receives notification that its interrupt is being handled
+1. **Given** a device is connected to the CPU and an interrupt handler is registered, **When** the device asserts its interrupt request, **Then** the CPU executes the interrupt handler at the next instruction boundary
+2. **Given** the interrupt disable flag (I flag) is set, **When** a device asserts an interrupt request, **Then** the CPU does not execute the interrupt handler until the I flag is cleared
+3. **Given** an interrupt has been signaled, **When** the ISR reads the device's status register, **Then** the device identifies itself as the interrupt source and clears its interrupt request flag when acknowledged
 
 ---
 
@@ -57,7 +58,7 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 **Acceptance Scenarios**:
 
 1. **Given** a JavaScript device is connected to the WASM CPU, **When** the device asserts its interrupt request, **Then** the CPU processes the interrupt identically to native devices
-2. **Given** the CPU begins handling an interrupt from a JavaScript device, **When** the interrupt handler executes, **Then** the JavaScript device receives acknowledgment notification
+2. **Given** the ISR is handling an interrupt from a JavaScript device, **When** the ISR reads the device's memory-mapped status register, **Then** the JavaScript device correctly reports its interrupt status
 3. **Given** a JavaScript device needs to assert an interrupt, **When** the device uses the provided interface, **Then** the interrupt request is registered without blocking JavaScript execution
 
 ---
@@ -78,21 +79,24 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 - **FR-002**: Devices MUST be able to signal interrupts to the CPU through a defined interface
 - **FR-003**: The CPU MUST respect the interrupt disable flag (I flag) and only process interrupts when I flag is clear
 - **FR-004**: The CPU MUST execute interrupt handlers by reading the interrupt vector from memory locations 0xFFFE-0xFFFF (IRQ vector)
-- **FR-005**: The CPU MUST automatically notify all devices with active interrupt requests when entering the interrupt service routine
+- **FR-005**: Devices MUST expose memory-mapped status and control registers that the ISR can read/write to identify and acknowledge interrupt sources
 - **FR-006**: The system MUST support multiple independent interrupt sources
 - **FR-007**: The system MUST implement a level-sensitive IRQ line that remains active while any device has an unserviced interrupt request (multiple devices share the IRQ line via logical OR)
 - **FR-008**: The CPU MUST save processor state (program counter and status flags) on the stack when entering an interrupt handler
 - **FR-009**: The CPU MUST set the interrupt disable flag when entering an interrupt handler to prevent nested interrupts (unless explicitly re-enabled)
 - **FR-010**: The interrupt mechanism MUST work across language boundaries in WASM (JavaScript devices → Rust CPU)
 - **FR-011**: The interrupt system MUST not block normal CPU execution when no interrupts are pending (zero overhead when idle)
-- **FR-012**: Devices MUST be able to determine if their interrupt was successfully delivered
+- **FR-012**: Devices MUST integrate with the MemoryBus trait to expose their status and control registers at specific memory addresses
+- **FR-013**: When the ISR reads a device's status register or writes to its control register, the device MUST clear its interrupt request flag if appropriate
 
 ### Key Entities
 
 - **IRQ Line**: Level-sensitive signal line shared by all devices; active (low) when any device has an unserviced interrupt request
 - **Device Interrupt State**: Each device maintains its own interrupt request flag that contributes to the shared IRQ line state
-- **Interrupt Handler**: Code executed by the CPU in response to an active IRQ line, identified by the interrupt vector in memory
-- **Device Interface**: Abstract mechanism through which devices assert/clear their interrupt request and receive acknowledgment from the CPU, independent of device implementation language
+- **Interrupt Handler (ISR)**: Code executed by the CPU in response to an active IRQ line, identified by the interrupt vector in memory; responsible for polling device status registers and acknowledging interrupts
+- **Device Status Register**: Memory-mapped register that the ISR reads to determine if a device has a pending interrupt
+- **Device Control Register**: Memory-mapped register that the ISR writes to acknowledge and clear a device's interrupt request
+- **Device Interface**: Abstract mechanism through which devices integrate with the MemoryBus to expose status/control registers and manage their interrupt request flag, independent of device implementation language
 
 ## Success Criteria *(mandatory)*
 
