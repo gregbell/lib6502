@@ -4,6 +4,12 @@
  * Provides a terminal interface connected to the 6502 UART device.
  * User input from the terminal is dispatched as CustomEvents for the emulator to handle.
  * Output from the UART is displayed in the terminal via the write() method.
+ *
+ * Terminal Controls (User Story 3):
+ * - Clear: Call clear() method to clear terminal display
+ * - Copy/Paste: Supported by xterm.js natively (Ctrl+C/Ctrl+V or right-click)
+ * - Resize: Automatically fits to container on window resize events
+ * - Selection: Click and drag to select text, standard browser copy shortcuts work
  */
 
 export class Terminal {
@@ -90,6 +96,8 @@ export class Terminal {
         });
 
         // Handle window resize - fit terminal to container
+        // User Story 3: Automatic terminal resize on window size changes
+        // The FitAddon adjusts terminal dimensions to fill available container space
         window.addEventListener('resize', () => {
             this.fitAddon.fit();
         });
