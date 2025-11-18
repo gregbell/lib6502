@@ -177,22 +177,22 @@ Implement named constant support for the 6502 assembler using `NAME = VALUE` syn
 
 #### Error Types
 
-- [ ] T024 [P] [US3] Add UndefinedConstant variant to ErrorType enum in src/assembler.rs
-- [ ] T025 [P] [US3] Add DuplicateConstant variant to ErrorType enum in src/assembler.rs
-- [ ] T026 [P] [US3] Add NameCollision variant to ErrorType enum in src/assembler.rs
-- [ ] T027 [P] [US3] Add InvalidConstantValue variant to ErrorType enum in src/assembler.rs
+- [X] T024 [P] [US3] Add UndefinedConstant variant to ErrorType enum in src/assembler.rs
+- [X] T025 [P] [US3] Add DuplicateConstant variant to ErrorType enum in src/assembler.rs
+- [X] T026 [P] [US3] Add NameCollision variant to ErrorType enum in src/assembler.rs
+- [X] T027 [P] [US3] Add InvalidConstantValue variant to ErrorType enum in src/assembler.rs
 
 #### Error Detection
 
-- [ ] T028 [US3] Implement collision detection in add_symbol() in src/assembler/symbol_table.rs (check existing symbol kind)
-- [ ] T029 [US3] Add undefined constant error handling in resolve_operand() in src/assembler/encoder.rs (Pass 2)
-- [ ] T030 [US3] Update Display impl for AssemblerError in src/assembler.rs with new error message templates
+- [X] T028 [US3] Implement collision detection in constant/label processing in src/assembler.rs (check existing symbol kind)
+- [X] T029 [US3] Add undefined constant error handling in resolve_operand() in src/assembler.rs (Pass 2)
+- [X] T030 [US3] Update Display impl for AssemblerError in src/assembler.rs with new error message templates
 
 **Tests**:
-- [ ] T031 [P] [US3] Add integration test in tests/assembler_tests.rs for undefined constant error
-- [ ] T032 [P] [US3] Add integration test in tests/assembler_tests.rs for duplicate constant error
-- [ ] T033 [P] [US3] Add integration test in tests/assembler_tests.rs for name collision error (constant then label)
-- [ ] T034 [P] [US3] Add integration test in tests/assembler_tests.rs for name collision error (label then constant)
+- [X] T031 [P] [US3] Add integration test in tests/assembler_tests.rs for undefined constant error
+- [X] T032 [P] [US3] Add integration test in tests/assembler_tests.rs for duplicate constant error
+- [X] T033 [P] [US3] Add integration test in tests/assembler_tests.rs for name collision error (constant then label)
+- [X] T034 [P] [US3] Add integration test in tests/assembler_tests.rs for name collision error (label then constant)
 
 **Validation**: Run `cargo test` and verify error messages match templates
 

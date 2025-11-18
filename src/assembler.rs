@@ -173,6 +173,18 @@ pub enum ErrorType {
 
     /// Invalid directive usage
     InvalidDirective,
+
+    /// Undefined constant reference
+    UndefinedConstant,
+
+    /// Duplicate constant definition
+    DuplicateConstant,
+
+    /// Name collision (constant and label with same name)
+    NameCollision,
+
+    /// Invalid constant value (out of range, not literal)
+    InvalidConstantValue,
 }
 
 impl std::fmt::Display for AssemblerError {
@@ -191,6 +203,10 @@ impl std::fmt::Display for AssemblerError {
                 ErrorType::InvalidOperand => "Invalid Operand",
                 ErrorType::RangeError => "Range Error",
                 ErrorType::InvalidDirective => "Invalid Directive",
+                ErrorType::UndefinedConstant => "Undefined Constant",
+                ErrorType::DuplicateConstant => "Duplicate Constant",
+                ErrorType::NameCollision => "Name Collision",
+                ErrorType::InvalidConstantValue => "Invalid Constant Value",
             },
             self.message
         )
@@ -261,16 +277,30 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                     SymbolKind::Label,
                     line.line_number,
                 ) {
-                    errors.push(AssemblerError {
-                        error_type: ErrorType::DuplicateLabel,
-                        line: line.line_number,
-                        column: 0,
-                        span: line.span,
-                        message: format!(
-                            "Duplicate label '{}' (previously defined at line {})",
-                            label, existing.defined_at
-                        ),
-                    });
+                    // Check if it's a collision with a different kind or a duplicate label
+                    if existing.kind == SymbolKind::Label {
+                        errors.push(AssemblerError {
+                            error_type: ErrorType::DuplicateLabel,
+                            line: line.line_number,
+                            column: 0,
+                            span: line.span,
+                            message: format!(
+                                "Duplicate label '{}' (previously defined at line {})",
+                                label, existing.defined_at
+                            ),
+                        });
+                    } else {
+                        errors.push(AssemblerError {
+                            error_type: ErrorType::NameCollision,
+                            line: line.line_number,
+                            column: 0,
+                            span: line.span,
+                            message: format!(
+                                "Name collision: '{}' is already defined as a constant at line {}",
+                                label, existing.defined_at
+                            ),
+                        });
+                    }
                 }
             }
         }
@@ -297,21 +327,35 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                             SymbolKind::Constant,
                             line.line_number,
                         ) {
-                            errors.push(AssemblerError {
-                                error_type: ErrorType::DuplicateLabel,
-                                line: line.line_number,
-                                column: 0,
-                                span: line.span,
-                                message: format!(
-                                    "Duplicate constant '{}' (previously defined at line {})",
-                                    name, existing.defined_at
-                                ),
-                            });
+                            // Check if it's a collision with a different kind or a duplicate constant
+                            if existing.kind == SymbolKind::Constant {
+                                errors.push(AssemblerError {
+                                    error_type: ErrorType::DuplicateConstant,
+                                    line: line.line_number,
+                                    column: 0,
+                                    span: line.span,
+                                    message: format!(
+                                        "Duplicate constant '{}' (previously defined at line {})",
+                                        name, existing.defined_at
+                                    ),
+                                });
+                            } else {
+                                errors.push(AssemblerError {
+                                    error_type: ErrorType::NameCollision,
+                                    line: line.line_number,
+                                    column: 0,
+                                    span: line.span,
+                                    message: format!(
+                                        "Name collision: '{}' is already defined as a label at line {}",
+                                        name, existing.defined_at
+                                    ),
+                                });
+                            }
                         }
                     }
                     Err(e) => {
                         errors.push(AssemblerError {
-                            error_type: ErrorType::InvalidOperand,
+                            error_type: ErrorType::InvalidConstantValue,
                             line: line.line_number,
                             column: 0,
                             span: line.span,
@@ -647,9 +691,16 @@ fn resolve_operand(
                     }
                     return Ok((crate::addressing::AddressingMode::Immediate, symbol.value));
                 }
+            } else {
+                // Symbol not found - return undefined error
+                return Err(AssemblerError {
+                    error_type: ErrorType::UndefinedLabel,
+                    line: 0,
+                    column: 0,
+                    span: (0, 0),
+                    message: format!("Undefined symbol '{}'", constant_name),
+                });
             }
-            // Not found in symbol table - will be caught as undefined later
-            // Fall through to normal parsing to get proper error
         }
 
         // Parse as normal immediate value

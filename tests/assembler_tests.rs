@@ -1103,3 +1103,75 @@ BUFFER = $50
         vec![0xBD, 0x00, 0x02, 0x99, 0x00, 0x02, 0xB5, 0x50]
     );
 }
+
+// T031: Integration test for undefined constant error
+#[test]
+fn test_error_undefined_constant() {
+    let source = r#"
+    LDA #MISSING
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail with undefined constant");
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::UndefinedLabel); // Undefined symbol
+    assert!(errors[0].message.contains("MISSING"));
+}
+
+// T032: Integration test for duplicate constant error
+#[test]
+fn test_error_duplicate_constant() {
+    let source = r#"
+MAX = 100
+MAX = 200
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail with duplicate constant");
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::DuplicateConstant);
+    assert!(errors[0].message.contains("MAX"));
+    assert!(errors[0].message.contains("previously defined"));
+}
+
+// T033: Integration test for name collision error (constant then label)
+#[test]
+fn test_error_name_collision_constant_then_label() {
+    let source = r#"
+FOO = 42
+FOO:
+    NOP
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail with name collision");
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::NameCollision);
+    assert!(errors[0].message.contains("FOO"));
+    assert!(errors[0].message.contains("already defined as a constant"));
+}
+
+// T034: Integration test for name collision error (label then constant)
+#[test]
+fn test_error_name_collision_label_then_constant() {
+    let source = r#"
+BAR:
+    NOP
+BAR = 100
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_err(), "Should fail with name collision");
+
+    let errors = result.unwrap_err();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, ErrorType::NameCollision);
+    assert!(errors[0].message.contains("BAR"));
+    assert!(errors[0].message.contains("already defined as a label"));
+}
