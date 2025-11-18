@@ -12,6 +12,7 @@
 - Q: Should the interrupt mechanism mimic real 6502 hardware behavior (level-sensitive IRQ line, no queueing) or implement a modern queued interrupt controller? → A: Level-sensitive like real hardware: Single IRQ line, no queue. Multiple devices can pull IRQ low simultaneously. ISR polls device status registers to identify interrupt sources.
 - Q: How should devices be notified that their interrupt is being serviced? → A: ISR acknowledges explicitly: Devices are acknowledged only when the ISR reads/writes their status/control registers (matches real hardware behavior).
 - Q: How should devices expose their interrupt status for ISR polling? → A: Memory-mapped status registers: Devices expose status via reads/writes to specific memory addresses. ISR polls by reading memory. Matches real hardware behavior.
+- Q: How should memory addresses be allocated for device status and control registers? → A: Device specifies at construction: Each device declares its required address range when created. System validates no overlap. Flexible and explicit.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -70,6 +71,7 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 - What happens when a device tries to signal an interrupt after it has been disconnected?
 - How does the system handle extremely high interrupt rates that could starve normal program execution?
 - What happens when the interrupt vector in memory points to invalid code?
+- What happens when a device declares a memory address range that overlaps with another device's range?
 
 ## Requirements *(mandatory)*
 
@@ -86,8 +88,10 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 - **FR-009**: The CPU MUST set the interrupt disable flag when entering an interrupt handler to prevent nested interrupts (unless explicitly re-enabled)
 - **FR-010**: The interrupt mechanism MUST work across language boundaries in WASM (JavaScript devices → Rust CPU)
 - **FR-011**: The interrupt system MUST not block normal CPU execution when no interrupts are pending (zero overhead when idle)
-- **FR-012**: Devices MUST integrate with the MemoryBus trait to expose their status and control registers at specific memory addresses
-- **FR-013**: When the ISR reads a device's status register or writes to its control register, the device MUST clear its interrupt request flag if appropriate
+- **FR-012**: Devices MUST declare their required memory address range at construction time
+- **FR-013**: The system MUST validate that device memory address ranges do not overlap
+- **FR-014**: Devices MUST integrate with the MemoryBus trait to expose their status and control registers at their declared memory addresses
+- **FR-015**: When the ISR reads a device's status register or writes to its control register, the device MUST clear its interrupt request flag if appropriate
 
 ### Key Entities
 
