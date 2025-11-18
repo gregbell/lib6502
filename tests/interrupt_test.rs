@@ -87,9 +87,17 @@ impl Device for MockInterruptDevice {
 fn create_test_cpu() -> CPU<MappedMemory> {
     let mut memory = MappedMemory::new();
 
-    // Add 48KB RAM
+    // Add 52KB RAM for program and data (0x0000-0xCFFF)
     memory
-        .add_device(0x0000, Box::new(RamDevice::new(0xC000)))
+        .add_device(0x0000, Box::new(RamDevice::new(0xD000)))
+        .unwrap();
+
+    // Reserve 0xD000-0xDFFF for memory-mapped devices (4KB)
+    // Interrupt devices will be added here by individual tests
+
+    // Add RAM for vectors and remaining space (0xE000-0xFFFF, 8KB)
+    memory
+        .add_device(0xE000, Box::new(RamDevice::new(0x2000)))
         .unwrap();
 
     // Set reset vector to 0x8000
@@ -361,10 +369,13 @@ fn test_interrupt_stack_layout() {
         "Return address should point after NOP"
     );
 
-    // Status register should have I flag set (bit 2)
+    // Status register should have I flag CLEAR (bit 2)
+    // The status is pushed BEFORE the I flag is set, so it reflects
+    // the state before interrupt servicing (CLI had cleared the I flag)
     assert!(
-        status & 0b00000100 != 0,
-        "Status on stack should have I flag set"
+        status & 0b00000100 == 0,
+        "Status on stack should have I flag clear (status={:#010b})",
+        status
     );
 }
 

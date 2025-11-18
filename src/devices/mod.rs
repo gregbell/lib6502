@@ -225,13 +225,23 @@ impl AddressRange {
 
     /// Check if this range overlaps with another range.
     fn overlaps(&self, other: &AddressRange) -> bool {
-        let (self_end, _) = self.end();
-        let (other_end, _) = other.end();
+        let (self_end, self_overflow) = self.end();
+        let (other_end, other_overflow) = other.end();
 
-        // Range 1: [self.base, self_end)
-        // Range 2: [other.base, other_end)
-        // Overlap if: self.base < other_end AND self_end > other.base
-        self.base < other_end && self_end > other.base
+        // If either range extends to 0xFFFF (overflow), handle specially
+        if self_overflow {
+            // self extends to 0xFFFF, overlaps if other starts before or at 0xFFFF
+            other.base >= self.base || other_overflow
+        } else if other_overflow {
+            // other extends to 0xFFFF, overlaps if self starts before or at 0xFFFF
+            self.base >= other.base
+        } else {
+            // Neither overflows, use standard range overlap check
+            // Range 1: [self.base, self_end)
+            // Range 2: [other.base, other_end)
+            // Overlap if: self.base < other_end AND self_end > other.base
+            self.base < other_end && self_end > other.base
+        }
     }
 }
 
