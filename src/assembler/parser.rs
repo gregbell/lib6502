@@ -210,6 +210,44 @@ pub fn parse_org_directive(args: &str) -> Result<crate::assembler::AssemblerDire
     Ok(crate::assembler::AssemblerDirective::Origin { address })
 }
 
+/// Parse a directive value (either a literal number or a symbol reference)
+fn parse_directive_value(arg: &str) -> Result<crate::assembler::DirectiveValue, String> {
+    let trimmed = arg.trim();
+
+    // Check if it looks like a number (starts with $, %, or digit)
+    if trimmed.starts_with('$')
+        || trimmed.starts_with('%')
+        || trimmed.chars().next().is_some_and(|c| c.is_ascii_digit())
+    {
+        // Parse as number
+        let val = parse_number(trimmed)?;
+        Ok(crate::assembler::DirectiveValue::Literal(val))
+    } else {
+        // Treat as symbol reference
+        // Validate it looks like a valid identifier
+        if trimmed.is_empty() {
+            return Err("Empty symbol name".to_string());
+        }
+
+        // Check first character is a letter
+        if !trimmed.chars().next().unwrap().is_ascii_alphabetic() {
+            return Err(format!("Symbol '{}' must start with a letter", trimmed));
+        }
+
+        // Check all characters are alphanumeric or underscore
+        if !trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(format!("Symbol '{}' contains invalid characters", trimmed));
+        }
+
+        Ok(crate::assembler::DirectiveValue::Symbol(
+            trimmed.to_uppercase(),
+        ))
+    }
+}
+
 /// Parse .byte directive
 pub fn parse_byte_directive(args: &str) -> Result<crate::assembler::AssemblerDirective, String> {
     if args.is_empty() {
@@ -218,14 +256,19 @@ pub fn parse_byte_directive(args: &str) -> Result<crate::assembler::AssemblerDir
 
     let mut values = Vec::new();
     for arg in args.split(',') {
-        let val = parse_number(arg.trim())?;
-        if val > 0xFF {
-            return Err(format!(
-                "Byte value ${:04X} is too large (must be 0-255)",
-                val
-            ));
+        let directive_val = parse_directive_value(arg)?;
+
+        // For literals, validate they fit in a byte
+        if let crate::assembler::DirectiveValue::Literal(val) = directive_val {
+            if val > 0xFF {
+                return Err(format!(
+                    "Byte value ${:04X} is too large (must be 0-255)",
+                    val
+                ));
+            }
         }
-        values.push(val as u8);
+
+        values.push(directive_val);
     }
 
     if values.is_empty() {
@@ -243,8 +286,8 @@ pub fn parse_word_directive(args: &str) -> Result<crate::assembler::AssemblerDir
 
     let mut values = Vec::new();
     for arg in args.split(',') {
-        let val = parse_number(arg.trim())?;
-        values.push(val);
+        let directive_val = parse_directive_value(arg)?;
+        values.push(directive_val);
     }
 
     if values.is_empty() {
@@ -564,7 +607,14 @@ mod tests {
         let result = parse_byte_directive("$42, $43, $44").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Byte { values } => {
-                assert_eq!(values, vec![0x42, 0x43, 0x44]);
+                assert_eq!(
+                    values,
+                    vec![
+                        crate::assembler::DirectiveValue::Literal(0x42),
+                        crate::assembler::DirectiveValue::Literal(0x43),
+                        crate::assembler::DirectiveValue::Literal(0x44)
+                    ]
+                );
             }
             _ => panic!("Expected Byte directive"),
         }
@@ -575,7 +625,10 @@ mod tests {
         let result = parse_byte_directive("$FF").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Byte { values } => {
-                assert_eq!(values, vec![0xFF]);
+                assert_eq!(
+                    values,
+                    vec![crate::assembler::DirectiveValue::Literal(0xFF)]
+                );
             }
             _ => panic!("Expected Byte directive"),
         }
@@ -600,7 +653,13 @@ mod tests {
         let result = parse_word_directive("$1234, $5678").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Word { values } => {
-                assert_eq!(values, vec![0x1234, 0x5678]);
+                assert_eq!(
+                    values,
+                    vec![
+                        crate::assembler::DirectiveValue::Literal(0x1234),
+                        crate::assembler::DirectiveValue::Literal(0x5678)
+                    ]
+                );
             }
             _ => panic!("Expected Word directive"),
         }
@@ -611,7 +670,10 @@ mod tests {
         let result = parse_word_directive("$ABCD").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Word { values } => {
-                assert_eq!(values, vec![0xABCD]);
+                assert_eq!(
+                    values,
+                    vec![crate::assembler::DirectiveValue::Literal(0xABCD)]
+                );
             }
             _ => panic!("Expected Word directive"),
         }
@@ -699,7 +761,13 @@ mod tests {
         let result = parse_directive(".byte $42, $43").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Byte { values } => {
-                assert_eq!(values, vec![0x42, 0x43]);
+                assert_eq!(
+                    values,
+                    vec![
+                        crate::assembler::DirectiveValue::Literal(0x42),
+                        crate::assembler::DirectiveValue::Literal(0x43)
+                    ]
+                );
             }
             _ => panic!("Expected Byte directive"),
         }
@@ -707,7 +775,10 @@ mod tests {
         let result = parse_directive(".word $1234").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Word { values } => {
-                assert_eq!(values, vec![0x1234]);
+                assert_eq!(
+                    values,
+                    vec![crate::assembler::DirectiveValue::Literal(0x1234)]
+                );
             }
             _ => panic!("Expected Word directive"),
         }

@@ -16,10 +16,23 @@ const BRANCH_OFFSET_MIN: i32 = -128;
 const BRANCH_OFFSET_MAX: i32 = 127;
 const BRANCH_INSTRUCTION_SIZE: u16 = 2;
 
+/// A segment of code at a specific address
+///
+/// Segments are created each time the assembler encounters a `.org` directive
+/// or at the start of assembly. They track where code is located in memory.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodeSegment {
+    /// Starting address of this segment in memory
+    pub address: u16,
+
+    /// Number of bytes in this segment
+    pub length: u16,
+}
+
 /// Complete output from assembling source code
 #[derive(Debug, Clone)]
 pub struct AssemblerOutput {
-    /// Assembled machine code bytes
+    /// Assembled machine code bytes (flat array, no gaps)
     pub bytes: Vec<u8>,
 
     /// Symbol table with all defined labels
@@ -30,6 +43,12 @@ pub struct AssemblerOutput {
 
     /// Non-fatal warnings encountered during assembly
     pub warnings: Vec<AssemblerWarning>,
+
+    /// Code segments tracking address layout
+    ///
+    /// Each segment represents a contiguous block of code at a specific address.
+    /// Segments are created when `.org` directives change the assembly address.
+    pub segments: Vec<CodeSegment>,
 }
 
 impl AssemblerOutput {
@@ -69,6 +88,92 @@ impl AssemblerOutput {
     /// Get address range for a given source line
     pub fn get_address_range(&self, line: usize) -> Option<source_map::AddressRange> {
         self.source_map.get_address_range(line)
+    }
+
+    /// Convert flat bytes to a ROM image with proper address layout
+    ///
+    /// This method creates a contiguous ROM image from the assembled bytes,
+    /// filling gaps between segments with the specified fill byte.
+    ///
+    /// # Arguments
+    ///
+    /// * `fill_byte` - Value to use for uninitialized memory (typically 0xFF or 0x00)
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<u8>` containing the full ROM image from the lowest to highest address.
+    /// The returned vector starts at the address of the first segment and ends at
+    /// the last byte of the last segment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use lib6502::assembler::assemble;
+    ///
+    /// let source = r#"
+    /// .org $8000
+    /// START:
+    ///     LDA #$42
+    ///
+    /// .org $FFFC
+    /// .word START
+    /// "#;
+    ///
+    /// let output = assemble(source).unwrap();
+    /// let rom = output.to_rom_image(0xFF);
+    ///
+    /// // ROM starts at $8000 and ends at $FFFD (inclusive)
+    /// // Length is $FFFD - $8000 + 1 = $7FFE = 32766 bytes
+    /// assert_eq!(rom.len(), 0x7FFE);
+    ///
+    /// // First bytes are the program
+    /// assert_eq!(rom[0], 0xA9); // LDA #$42 opcode
+    /// assert_eq!(rom[1], 0x42);
+    ///
+    /// // Gap is filled with 0xFF
+    /// assert_eq!(rom[2], 0xFF);
+    ///
+    /// // Reset vector at the end
+    /// assert_eq!(rom[0x7FFC], 0x00); // Low byte of $8000
+    /// assert_eq!(rom[0x7FFD], 0x80); // High byte of $8000
+    /// ```
+    pub fn to_rom_image(&self, fill_byte: u8) -> Vec<u8> {
+        if self.segments.is_empty() {
+            return Vec::new();
+        }
+
+        // Find min and max addresses
+        let min_address = self.segments.first().unwrap().address;
+        let last_segment = self.segments.last().unwrap();
+
+        // Calculate max_address safely (last byte of last segment)
+        // Note: address + length gives us one past the last byte
+        let max_address = last_segment
+            .address
+            .wrapping_add(last_segment.length)
+            .wrapping_sub(1);
+
+        // Calculate ROM size - handle wraparound case
+        let rom_size = if max_address < min_address {
+            // Wraparound case (e.g., ends at $FFFF)
+            (0x10000 - min_address as usize) + (max_address as usize + 1)
+        } else {
+            (max_address as usize - min_address as usize) + 1
+        };
+
+        // Create ROM buffer filled with fill_byte
+        let mut rom = vec![fill_byte; rom_size];
+
+        // Copy each segment to its proper location
+        let mut byte_offset = 0;
+        for segment in &self.segments {
+            let rom_offset = (segment.address - min_address) as usize;
+            let segment_bytes = &self.bytes[byte_offset..byte_offset + segment.length as usize];
+            rom[rom_offset..rom_offset + segment.length as usize].copy_from_slice(segment_bytes);
+            byte_offset += segment.length as usize;
+        }
+
+        rom
     }
 }
 
@@ -220,6 +325,16 @@ impl std::fmt::Display for AssemblerError {
     }
 }
 
+/// Value in a directive argument (either a literal or a symbol reference)
+#[derive(Debug, Clone, PartialEq)]
+pub enum DirectiveValue {
+    /// Literal numeric value
+    Literal(u16),
+
+    /// Symbol reference (label or constant name)
+    Symbol(String),
+}
+
 /// Assembler directive types
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssemblerDirective {
@@ -227,10 +342,12 @@ pub enum AssemblerDirective {
     Origin { address: u16 },
 
     /// Insert literal bytes (.byte $XX, $YY, ...)
-    Byte { values: Vec<u8> },
+    /// Values can be literals (0-255) or symbol references
+    Byte { values: Vec<DirectiveValue> },
 
     /// Insert literal 16-bit words (.word $XXXX, $YYYY, ...)
-    Word { values: Vec<u16> },
+    /// Values can be literals (0-65535) or symbol references
+    Word { values: Vec<DirectiveValue> },
 }
 
 /// Helper to detect if a mnemonic is a branch instruction
@@ -434,20 +551,80 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     // Pass 2: Encode instructions with label resolution
     let mut bytes = Vec::new();
     let mut source_map = source_map::SourceMap::new();
+    let mut segments: Vec<CodeSegment> = Vec::new();
     current_address = 0u16;
+
+    // Track current segment
+    let mut current_segment_start = 0u16;
+    let mut current_segment_length = 0u16;
 
     for line in &parsed_lines {
         // Handle directives
         if let Some(ref directive) = line.directive {
             match directive {
                 AssemblerDirective::Origin { address } => {
+                    // Finalize previous segment if it has any bytes
+                    if current_segment_length > 0 {
+                        segments.push(CodeSegment {
+                            address: current_segment_start,
+                            length: current_segment_length,
+                        });
+                    }
+
+                    // Start new segment
                     current_address = *address;
+                    current_segment_start = *address;
+                    current_segment_length = 0;
                 }
                 AssemblerDirective::Byte { values } => {
                     let instruction_start_address = current_address;
 
-                    // Add bytes directly to output
-                    bytes.extend(values);
+                    // Resolve values (handle both literals and symbol references)
+                    let mut resolved_bytes = Vec::new();
+                    for val in values {
+                        let resolved = match val {
+                            DirectiveValue::Literal(lit) => *lit,
+                            DirectiveValue::Symbol(name) => {
+                                // Look up symbol in symbol table
+                                match symbol_table.lookup_symbol_ignore_case(name) {
+                                    Some(sym) => sym.value,
+                                    None => {
+                                        errors.push(AssemblerError {
+                                            error_type: ErrorType::UndefinedLabel,
+                                            line: line.line_number,
+                                            column: 0,
+                                            span: line.span,
+                                            message: format!(
+                                                "Undefined symbol '{}' in .byte directive",
+                                                name
+                                            ),
+                                        });
+                                        continue;
+                                    }
+                                }
+                            }
+                        };
+
+                        // Validate it fits in a byte
+                        if resolved > 0xFF {
+                            errors.push(AssemblerError {
+                                error_type: ErrorType::RangeError,
+                                line: line.line_number,
+                                column: 0,
+                                span: line.span,
+                                message: format!(
+                                    "Value ${:04X} in .byte directive exceeds 8-bit range (max $FF)",
+                                    resolved
+                                ),
+                            });
+                            continue;
+                        }
+
+                        resolved_bytes.push(resolved as u8);
+                    }
+
+                    // Add bytes to output
+                    bytes.extend(&resolved_bytes);
 
                     // Add to source map
                     source_map.add_mapping(
@@ -462,17 +639,48 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                         line.line_number,
                         source_map::AddressRange {
                             start: instruction_start_address,
-                            end: instruction_start_address.wrapping_add(values.len() as u16),
+                            end: instruction_start_address
+                                .wrapping_add(resolved_bytes.len() as u16),
                         },
                     );
 
-                    current_address = current_address.wrapping_add(values.len() as u16);
+                    current_address = current_address.wrapping_add(resolved_bytes.len() as u16);
+                    current_segment_length =
+                        current_segment_length.wrapping_add(resolved_bytes.len() as u16);
                 }
                 AssemblerDirective::Word { values } => {
                     let instruction_start_address = current_address;
 
+                    // Resolve values (handle both literals and symbol references)
+                    let mut resolved_words = Vec::new();
+                    for val in values {
+                        let resolved = match val {
+                            DirectiveValue::Literal(lit) => *lit,
+                            DirectiveValue::Symbol(name) => {
+                                // Look up symbol in symbol table
+                                match symbol_table.lookup_symbol_ignore_case(name) {
+                                    Some(sym) => sym.value,
+                                    None => {
+                                        errors.push(AssemblerError {
+                                            error_type: ErrorType::UndefinedLabel,
+                                            line: line.line_number,
+                                            column: 0,
+                                            span: line.span,
+                                            message: format!(
+                                                "Undefined symbol '{}' in .word directive",
+                                                name
+                                            ),
+                                        });
+                                        continue;
+                                    }
+                                }
+                            }
+                        };
+                        resolved_words.push(resolved);
+                    }
+
                     // Add words in little-endian format
-                    for word in values {
+                    for word in resolved_words.iter() {
                         bytes.push((word & 0xFF) as u8); // Low byte
                         bytes.push(((word >> 8) & 0xFF) as u8); // High byte
                     }
@@ -490,11 +698,15 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                         line.line_number,
                         source_map::AddressRange {
                             start: instruction_start_address,
-                            end: instruction_start_address.wrapping_add((values.len() * 2) as u16),
+                            end: instruction_start_address
+                                .wrapping_add((resolved_words.len() * 2) as u16),
                         },
                     );
 
-                    current_address = current_address.wrapping_add((values.len() * 2) as u16);
+                    current_address =
+                        current_address.wrapping_add((resolved_words.len() * 2) as u16);
+                    current_segment_length =
+                        current_segment_length.wrapping_add((resolved_words.len() * 2) as u16);
                 }
             }
             continue;
@@ -566,6 +778,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 
                 bytes.extend(instruction_bytes);
                 current_address = current_address.wrapping_add(instruction_size);
+                current_segment_length = current_segment_length.wrapping_add(instruction_size);
             }
             Err(mut e) => {
                 // Update error with correct line info
@@ -588,6 +801,14 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         }
     }
 
+    // Finalize the last segment if it has any bytes
+    if current_segment_length > 0 {
+        segments.push(CodeSegment {
+            address: current_segment_start,
+            length: current_segment_length,
+        });
+    }
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -600,6 +821,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         symbol_table: symbol_table.symbols().to_vec(),
         source_map,
         warnings: Vec::new(),
+        segments,
     })
 }
 
