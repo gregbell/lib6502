@@ -25,14 +25,14 @@ As an assembly programmer, I want to:
 
 ### Variable Declaration
 
-Variables are declared using the `.define` or `.equ` directive (both synonyms):
+Variables are declared using simple assignment syntax:
 
 ```assembly
 ; Define constants
-.define SCREEN_ADDR $8000
-.define MAX_LIVES 3
-.equ CHAR_A $41
-.equ SPRITE_X %00100000
+SCREEN_ADDR = $8000
+MAX_LIVES = 3
+CHAR_A = $41
+SPRITE_X = %00100000
 
 ; Use in code
 START:
@@ -46,9 +46,8 @@ START:
 ### Syntax Rules
 
 **Declaration:**
-- Directive: `.define NAME VALUE` or `.equ NAME VALUE`
+- Syntax: `NAME = VALUE`
 - Must appear before first use
-- Case-insensitive directive (`.DEFINE`, `.Define`, `.define`)
 - Variable name follows same rules as labels:
   - Start with letter [a-zA-Z]
   - Contain only alphanumeric + underscore [a-zA-Z0-9_]
@@ -70,9 +69,9 @@ START:
 ### Basic Usage
 
 ```assembly
-.define ZERO_PAGE_START $00
-.define STACK_START $0100
-.define IO_BASE $8000
+ZERO_PAGE_START = $00
+STACK_START = $0100
+IO_BASE = $8000
 
 .org $8000
 START:
@@ -84,11 +83,11 @@ START:
 ### Screen/Character Constants
 
 ```assembly
-.define SCREEN_BASE $4000
-.define CHAR_SPACE $20
-.define CHAR_STAR $2A
-.define WIDTH 40
-.define HEIGHT 25
+SCREEN_BASE = $4000
+CHAR_SPACE = $20
+CHAR_STAR = $2A
+WIDTH = 40
+HEIGHT = 25
 
 CLEAR_SCREEN:
     LDX #WIDTH
@@ -102,9 +101,9 @@ LOOP:
 ### Zero Page Variables
 
 ```assembly
-.define ZP_TEMP $80
-.define ZP_COUNTER $81
-.define ZP_POINTER $82
+ZP_TEMP = $80
+ZP_COUNTER = $81
+ZP_POINTER = $82
 
     LDA #$00
     STA ZP_TEMP          ; STA $80 (zero page)
@@ -123,7 +122,7 @@ LOOP:
 - Type: `SymbolKind::Label`
 
 **Variables** (new):
-- Defined with `.define` or `.equ`
+- Defined with `=` assignment syntax
 - Represent literal values
 - Resolved immediately (no forward references needed)
 - Type: `SymbolKind::Variable`
@@ -136,7 +135,7 @@ Extend `Symbol` struct:
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind {
     Label,      // Memory address (e.g., "START:")
-    Variable,   // Literal value (e.g., ".define FOO 42")
+    Variable,   // Literal value (e.g., "FOO = 42")
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -151,7 +150,7 @@ pub struct Symbol {
 ### 3. Resolution Order
 
 **Pass 1:**
-1. Parse `.define`/`.equ` directives immediately
+1. Parse variable assignments (`NAME = VALUE`) immediately
 2. Add variables to symbol table as encountered
 3. Variables must be defined before use (no forward references)
 4. Process labels as before (addresses calculated)
@@ -172,7 +171,7 @@ pub struct Symbol {
 When a variable is used in an operand:
 
 ```assembly
-.define VALUE $42
+VALUE = $42
 
 LDA #VALUE      ; Immediate: LDA #$42
 LDA VALUE       ; Zero page or absolute, depends on value
@@ -190,9 +189,10 @@ The assembler:
 ### Phase 1: Core Infrastructure
 
 1. **Extend parser** (`src/assembler/parser.rs`):
-   - Add `AssemblerDirective::Define { name: String, value: u16 }`
-   - Parse `.define` and `.equ` directives
+   - Detect variable assignment syntax (`NAME = VALUE`)
+   - Parse variable name and value
    - Validate variable names (same as labels)
+   - Distinguish from label definitions (which have `:`)
 
 2. **Extend symbol system** (`src/assembler/symbol_table.rs`):
    - Add `SymbolKind` enum
@@ -201,7 +201,7 @@ The assembler:
    - Add methods: `add_variable()`, `lookup()`, `is_variable()`
 
 3. **Update assembler** (`src/assembler.rs`):
-   - Process `.define` directives in Pass 1
+   - Process variable assignments in Pass 1
    - Add variables to symbol table immediately
    - Check for duplicate names (variable/label collision)
 
@@ -227,11 +227,11 @@ The assembler:
 ### Phase 3: Testing
 
 **Unit tests** (in `src/assembler/parser.rs`):
-- Parse `.define` directive
-- Parse `.equ` directive
+- Parse variable assignment (`NAME = VALUE`)
 - Parse various value formats (hex, decimal, binary)
 - Validate variable names
 - Reject invalid syntax
+- Distinguish variable assignment from label definition
 
 **Integration tests** (in `tests/assembler_tests.rs`):
 - Basic variable definition and usage
@@ -249,7 +249,7 @@ The assembler:
 #[test]
 fn test_basic_variable_definition() {
     let source = r#"
-        .define VALUE $42
+        VALUE = $42
         LDA #VALUE
     "#;
 
@@ -273,16 +273,16 @@ fn test_undefined_variable_error() {
 
 **Not in initial version:**
 
-1. **Expression support**: `.define FOO (BAR + 2)`
-2. **Arithmetic**: `.define RESULT $1000 + $0020`
-3. **String constants**: `.define MSG "HELLO"`
+1. **Expression support**: `FOO = (BAR + 2)`
+2. **Arithmetic**: `RESULT = $1000 + $0020`
+3. **String constants**: `MSG = "HELLO"`
 4. **Preprocessor conditionals**: `.ifdef`, `.ifndef`
 5. **Local variables**: Variables scoped to labels
 
 ## Compatibility
 
 - Backwards compatible: existing assembly code works unchanged
-- New `.define`/`.equ` directive is optional
+- New variable assignment syntax is optional
 - No changes to existing assembler behavior
 - Symbol table extended but old fields preserved (renamed for clarity)
 
@@ -300,9 +300,9 @@ fn test_undefined_variable_error() {
 
 **Test program 1: Screen clear**
 ```assembly
-.define SCREEN $4000
-.define CHAR_SPACE $20
-.define SCREEN_SIZE 1024
+SCREEN = $4000
+CHAR_SPACE = $20
+SCREEN_SIZE = 1024
 
 .org $8000
 CLEAR:
@@ -320,9 +320,9 @@ LOOP:
 
 **Test program 2: I/O ports**
 ```assembly
-.define UART_DATA $8000
-.define UART_STATUS $8001
-.define TX_READY %00000001
+UART_DATA = $8000
+UART_STATUS = $8001
+TX_READY = %00000001
 
 SEND_CHAR:
     LDA UART_STATUS
@@ -335,7 +335,7 @@ SEND_CHAR:
 
 ## Success Criteria
 
-- [ ] Variables can be defined with `.define` and `.equ`
+- [ ] Variables can be defined with `=` assignment syntax
 - [ ] Variables work in all addressing modes
 - [ ] Variable names follow label naming rules
 - [ ] Undefined variable usage produces clear error
@@ -359,11 +359,8 @@ SEND_CHAR:
 1. Should variables be case-sensitive or normalized to uppercase like labels?
    - **Decision**: Normalize to uppercase (consistent with labels)
 
-2. Should `.define` and `.equ` be synonyms or have different behavior?
-   - **Decision**: Synonyms (both do the same thing)
-
-3. Should variables support forward references?
+2. Should variables support forward references?
    - **Decision**: No (simpler implementation, defined-before-use is clear)
 
-4. What's the maximum value for a variable?
+3. What's the maximum value for a variable?
    - **Decision**: 16-bit (0-65535), same as addresses
