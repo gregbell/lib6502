@@ -248,10 +248,10 @@ Implement named constant support for the 6502 assembler using `NAME = VALUE` syn
 
 ### Tasks
 
-- [ ] T041 [P] Run full cargo test suite and verify all 935+ tests pass
-- [ ] T042 [P] Run Klaus functional test with --ignored flag and verify it passes
-- [ ] T043 Add integration test in tests/assembler_tests.rs for complex program with many constants
-- [ ] T044 Add integration test in tests/assembler_tests.rs for backward compatibility (existing code without constants)
+- [X] T041 [P] Run full cargo test suite and verify all 1460+ tests pass
+- [X] T042 [P] Run Klaus functional test with --ignored flag and verify it passes
+- [X] T043 Add integration test in tests/assembler_tests.rs for complex program with many constants
+- [X] T044 Add integration test in tests/assembler_tests.rs for backward compatibility (existing code without constants)
 
 **Validation**: All tests green, no regressions
 
@@ -270,8 +270,8 @@ Implement named constant support for the 6502 assembler using `NAME = VALUE` syn
 
 ### Tasks
 
-- [ ] T045 [P] Update CLAUDE.md in repository root with constant syntax and examples
-- [ ] T046 [P] Create examples/constants.rs demonstrating constant usage patterns
+- [X] T045 [P] Update CLAUDE.md in repository root with constant syntax and examples
+- [X] T046 [P] Create examples/constants.rs demonstrating constant usage patterns
 
 **Validation**: Documentation clear and examples run successfully
 

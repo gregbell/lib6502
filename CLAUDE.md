@@ -135,6 +135,67 @@ When adding new instructions:
 - **Cycle accuracy** - track exact cycle counts including page-crossing penalties
 
 <!-- MANUAL ADDITIONS START -->
+
+## Assembler Constants
+
+The assembler supports named constants for defining reusable values like screen addresses, character codes, and magic numbers.
+
+### Syntax
+
+Define constants using `NAME = VALUE` syntax:
+
+```assembly
+; I/O addresses
+UART_DATA = $8000
+SCREEN_ADDR = $4000
+
+; Character constants
+CHAR_CR = 13
+CHAR_LF = 10
+
+; Zero-page addresses
+ZP_TEMP = $20
+```
+
+### Usage
+
+Constants can be used anywhere in code:
+
+```assembly
+; Immediate mode
+    LDA #CHAR_CR        ; Loads 13
+
+; Zero-page addressing
+    STA ZP_TEMP         ; Stores to $20
+
+; Absolute addressing
+    STA SCREEN_ADDR     ; Stores to $4000
+
+; Indexed addressing
+    LDA UART_DATA,X     ; Indexed absolute
+    STA ZP_TEMP,Y       ; Indexed zero-page
+```
+
+### Rules
+
+- Constants must be defined before use (no forward references)
+- Names follow the same rules as labels (alphanumeric + underscore, start with letter)
+- Names are case-insensitive and normalized to UPPERCASE
+- Values can be decimal, hex ($XXXX), or binary (%XXXXXXXX)
+- Constants hold literal values, labels hold memory addresses
+- Name collisions between constants and labels are detected
+
+### Automatic Addressing Mode Selection
+
+The assembler automatically chooses the most efficient addressing mode:
+
+- Values 0-255: Zero-page addressing (2 bytes)
+- Values >255: Absolute addressing (3 bytes)
+
+### Examples
+
+See `examples/constants.rs` for a complete example program.
+
 <!-- MANUAL ADDITIONS END -->
 
 ## Active Technologies

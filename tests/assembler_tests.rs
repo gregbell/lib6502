@@ -1291,3 +1291,136 @@ ABS_IDX = $3000
     ];
     assert_eq!(output.bytes, expected);
 }
+
+// T043: Integration test for complex program with many constants
+#[test]
+fn test_complex_program_with_many_constants() {
+    let source = r#"
+; I/O addresses
+UART_DATA = $8000
+UART_STATUS = $8001
+SCREEN_BASE = $4000
+KEYBOARD_PORT = $8002
+
+; Character constants
+CHAR_CR = 13
+CHAR_LF = 10
+CHAR_SPACE = 32
+
+; System constants
+MAX_BUFFER = 128
+ZP_PTR = $40
+ZP_COUNTER = $42
+
+; Program
+START:
+    LDX #0
+    STX ZP_COUNTER
+
+MAIN_LOOP:
+    LDA UART_STATUS
+    AND #1
+    BEQ MAIN_LOOP
+
+    LDA UART_DATA
+    CMP #CHAR_CR
+    BEQ HANDLE_CR
+    CMP #CHAR_LF
+    BEQ HANDLE_LF
+
+    STA SCREEN_BASE,X
+    INX
+    CPX #MAX_BUFFER
+    BNE MAIN_LOOP
+
+HANDLE_CR:
+    LDA #CHAR_SPACE
+    STA SCREEN_BASE,X
+    JMP MAIN_LOOP
+
+HANDLE_LF:
+    INX
+    JMP MAIN_LOOP
+"#;
+
+    let result = assemble(source);
+    if result.is_err() {
+        eprintln!("Assembly errors: {:#?}", result.as_ref().unwrap_err());
+    }
+    assert!(
+        result.is_ok(),
+        "Complex program with many constants should assemble successfully"
+    );
+
+    let output = result.unwrap();
+
+    // Verify all constants exist
+    assert_eq!(output.lookup_symbol("UART_DATA").unwrap().value, 0x8000);
+    assert_eq!(output.lookup_symbol("CHAR_CR").unwrap().value, 13);
+    assert_eq!(output.lookup_symbol("MAX_BUFFER").unwrap().value, 128);
+    assert_eq!(output.lookup_symbol("ZP_PTR").unwrap().value, 0x40);
+
+    // Verify all constants have correct kind
+    assert_eq!(
+        output.lookup_symbol("UART_DATA").unwrap().kind,
+        lib6502::assembler::SymbolKind::Constant
+    );
+
+    // Verify all labels exist
+    assert!(output.lookup_symbol("START").is_some());
+    assert!(output.lookup_symbol("MAIN_LOOP").is_some());
+    assert!(output.lookup_symbol("HANDLE_CR").is_some());
+
+    // Verify labels have correct kind
+    assert_eq!(
+        output.lookup_symbol("START").unwrap().kind,
+        lib6502::assembler::SymbolKind::Label
+    );
+
+    // Verify program assembled successfully
+    assert!(!output.bytes.is_empty(), "Program should have assembled code");
+}
+
+// T044: Integration test for backward compatibility (existing code without constants)
+#[test]
+fn test_backward_compatibility_no_constants() {
+    // This is an existing test pattern that should continue to work unchanged
+    let source = r#"
+.org $8000
+
+START:
+    LDA #$42
+    STA $2000
+    LDX #$00
+
+LOOP:
+    LDA $2000,X
+    STA $4000,X
+    INX
+    CPX #$10
+    BNE LOOP
+
+    JMP START
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Existing assembly code without constants should work unchanged"
+    );
+
+    let output = result.unwrap();
+
+    // Verify labels still work as before
+    let start = output.lookup_symbol("START").unwrap();
+    assert_eq!(start.kind, lib6502::assembler::SymbolKind::Label);
+    assert_eq!(start.value, 0x8000);
+
+    let loop_label = output.lookup_symbol("LOOP").unwrap();
+    assert_eq!(loop_label.kind, lib6502::assembler::SymbolKind::Label);
+
+    // Verify code still assembles correctly
+    assert!(!output.bytes.is_empty());
+    assert_eq!(output.bytes[0], 0xA9); // LDA immediate
+    assert_eq!(output.bytes[1], 0x42); // value 0x42
+}
