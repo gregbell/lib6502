@@ -10,6 +10,7 @@
 ### Session 2025-11-18
 
 - Q: Should the interrupt mechanism mimic real 6502 hardware behavior (level-sensitive IRQ line, no queueing) or implement a modern queued interrupt controller? → A: Level-sensitive like real hardware: Single IRQ line, no queue. Multiple devices can pull IRQ low simultaneously. ISR polls device status registers to identify interrupt sources.
+- Q: How should devices be notified that their interrupt is being serviced? → A: Automatic notification: CPU automatically notifies all devices with pending interrupts when entering ISR (simplified but not hardware-accurate).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -77,7 +78,7 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 - **FR-002**: Devices MUST be able to signal interrupts to the CPU through a defined interface
 - **FR-003**: The CPU MUST respect the interrupt disable flag (I flag) and only process interrupts when I flag is clear
 - **FR-004**: The CPU MUST execute interrupt handlers by reading the interrupt vector from memory locations 0xFFFE-0xFFFF (IRQ vector)
-- **FR-005**: Devices MUST receive notification when the CPU begins processing their interrupt
+- **FR-005**: The CPU MUST automatically notify all devices with active interrupt requests when entering the interrupt service routine
 - **FR-006**: The system MUST support multiple independent interrupt sources
 - **FR-007**: The system MUST implement a level-sensitive IRQ line that remains active while any device has an unserviced interrupt request (multiple devices share the IRQ line via logical OR)
 - **FR-008**: The CPU MUST save processor state (program counter and status flags) on the stack when entering an interrupt handler
