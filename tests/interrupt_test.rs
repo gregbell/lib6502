@@ -7,7 +7,7 @@
 //! - Device interrupt acknowledgment
 //! - Multiple device coordination
 
-use lib6502::{CPU, Device, InterruptDevice, MappedMemory, MemoryBus, RamDevice};
+use lib6502::{Device, InterruptDevice, MappedMemory, MemoryBus, RamDevice, CPU};
 use std::any::Any;
 
 /// Mock interrupt device for testing.
@@ -57,14 +57,11 @@ impl Device for MockInterruptDevice {
     }
 
     fn write(&mut self, offset: u16, value: u8) {
-        match offset {
-            1 => {
-                // CONTROL register - acknowledge interrupt
-                if value & 0x80 != 0 {
-                    self.interrupt_pending = false;
-                }
+        if offset == 1 {
+            // CONTROL register - acknowledge interrupt
+            if value & 0x80 != 0 {
+                self.interrupt_pending = false;
             }
-            _ => {}
         }
     }
 
@@ -163,7 +160,7 @@ fn test_cpu_irq_pending_field() {
 
     // Access via memory (no direct getter for irq_pending in public API)
     // We verify behavior through IRQ servicing tests
-    assert_eq!(cpu.flag_i(), true); // I flag set on reset
+    assert!(cpu.flag_i()); // I flag set on reset
 }
 
 #[test]
@@ -183,7 +180,10 @@ fn test_interrupt_respects_i_flag() {
     cpu.memory_mut().write(0x8003, 0x80); // $8000 (high)
 
     // Trigger interrupt on device
-    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+    if let Some(dev) = cpu
+        .memory_mut()
+        .get_device_at_mut::<MockInterruptDevice>(0xD000)
+    {
         dev.trigger_interrupt();
     }
 
@@ -229,7 +229,10 @@ fn test_interrupt_serviced_when_i_flag_clear() {
     let cycles_after_cli = cpu.cycles();
 
     // Trigger interrupt
-    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+    if let Some(dev) = cpu
+        .memory_mut()
+        .get_device_at_mut::<MockInterruptDevice>(0xD000)
+    {
         dev.trigger_interrupt();
     }
 
@@ -277,7 +280,10 @@ fn test_interrupt_7_cycle_sequence() {
     let cycles_before = cpu.cycles();
 
     // Trigger interrupt
-    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+    if let Some(dev) = cpu
+        .memory_mut()
+        .get_device_at_mut::<MockInterruptDevice>(0xD000)
+    {
         dev.trigger_interrupt();
     }
 
@@ -317,7 +323,10 @@ fn test_interrupt_stack_layout() {
     let sp_before = cpu.sp(); // Should be 0xFD
 
     // Trigger interrupt
-    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+    if let Some(dev) = cpu
+        .memory_mut()
+        .get_device_at_mut::<MockInterruptDevice>(0xD000)
+    {
         dev.trigger_interrupt();
     }
 
@@ -330,7 +339,11 @@ fn test_interrupt_stack_layout() {
     // SP+2: PC low byte
     // SP+1: Status register
     let sp_after = cpu.sp();
-    assert_eq!(sp_after, sp_before.wrapping_sub(3), "SP should be decremented by 3");
+    assert_eq!(
+        sp_after,
+        sp_before.wrapping_sub(3),
+        "SP should be decremented by 3"
+    );
 
     let stack_base = 0x0100;
 
@@ -388,7 +401,10 @@ fn test_isr_device_acknowledgment() {
     cpu.step().unwrap();
 
     // Trigger interrupt
-    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+    if let Some(dev) = cpu
+        .memory_mut()
+        .get_device_at_mut::<MockInterruptDevice>(0xD000)
+    {
         dev.trigger_interrupt();
         assert!(dev.is_interrupt_pending());
     }
@@ -405,7 +421,10 @@ fn test_isr_device_acknowledgment() {
     cpu.step().unwrap();
 
     // Check that interrupt was acknowledged
-    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+    if let Some(dev) = cpu
+        .memory_mut()
+        .get_device_at_mut::<MockInterruptDevice>(0xD000)
+    {
         assert!(
             !dev.is_interrupt_pending(),
             "Interrupt should be cleared after ISR writes to CONTROL"

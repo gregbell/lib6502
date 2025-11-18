@@ -67,7 +67,9 @@ pub mod wasm;
 pub use addressing::AddressingMode;
 pub use assembler::{assemble, AssemblerError, AssemblerOutput, ErrorType, Symbol};
 pub use cpu::CPU;
-pub use devices::{Device, DeviceError, InterruptDevice, MappedMemory, RamDevice, RomDevice, Uart6551};
+pub use devices::{
+    Device, DeviceError, InterruptDevice, MappedMemory, RamDevice, RomDevice, Uart6551,
+};
 pub use disassembler::{disassemble, DisassemblyOptions, Instruction};
 pub use memory::{FlatMemory, MemoryBus};
 pub use opcodes::{OpcodeMetadata, OPCODE_TABLE};

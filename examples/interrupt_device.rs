@@ -342,7 +342,11 @@ fn main() {
 
     println!("Initial CPU state:");
     println!("  PC: 0x{:04X}", cpu.pc());
-    println!("  I flag: {} (interrupts {})", cpu.flag_i(), if cpu.flag_i() { "disabled" } else { "enabled" });
+    println!(
+        "  I flag: {} (interrupts {})",
+        cpu.flag_i(),
+        if cpu.flag_i() { "disabled" } else { "enabled" }
+    );
     println!();
 
     // Run for a number of cycles
@@ -358,17 +362,17 @@ fn main() {
                 println!("  Total cycles: {}", cpu.cycles());
 
                 // Access timer device to show state
-                if let Some(timer) = cpu
-                    .memory_mut()
-                    .get_device_at_mut::<TimerDevice>(0xD000)
-                {
+                if let Some(timer) = cpu.memory_mut().get_device_at_mut::<TimerDevice>(0xD000) {
                     // Tick timer for the cycles we just ran
                     for _ in 0..cycles {
                         timer.tick();
                     }
 
                     println!("  Timer counter: {}", timer.counter());
-                    println!("  Timer interrupt: {}", InterruptDevice::has_interrupt(timer));
+                    println!(
+                        "  Timer interrupt: {}",
+                        InterruptDevice::has_interrupt(timer)
+                    );
                 }
                 println!();
             }
