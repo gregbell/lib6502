@@ -1,0 +1,115 @@
+# Feature Specification: CPU Interrupt Support
+
+**Feature Branch**: `005-cpu-interrupt-support`
+**Created**: 2025-11-18
+**Status**: Draft
+**Input**: User description: "add true interrupt support to the CPU. I can imagine either a promise based solution where a device passes a promise in when it triggers an interrupt and then resolves it once it's done after being called by the CPU or some type of game/event loop. It would be awesome if you could write a device in JavaScript if required."
+
+## Clarifications
+
+### Session 2025-11-18
+
+- Q: Should the interrupt mechanism mimic real 6502 hardware behavior (level-sensitive IRQ line, no queueing) or implement a modern queued interrupt controller? → A: Level-sensitive like real hardware: Single IRQ line, no queue. Multiple devices can pull IRQ low simultaneously. ISR polls device status registers to identify interrupt sources.
+- Q: How should devices be notified that their interrupt is being serviced? → A: ISR acknowledges explicitly: Devices are acknowledged only when the ISR reads/writes their status/control registers (matches real hardware behavior).
+- Q: How should devices expose their interrupt status for ISR polling? → A: Memory-mapped status registers: Devices expose status via reads/writes to specific memory addresses. ISR polls by reading memory. Matches real hardware behavior.
+- Q: How should memory addresses be allocated for device status and control registers? → A: Device specifies at construction: Each device declares its required address range when created. System validates no overlap. Flexible and explicit.
+- Q: What is the cycle cost for interrupt processing? → A: 7 cycles
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 - External Device Signals CPU (Priority: P1)
+
+An external device (such as a timer, UART serial port, or keyboard controller) needs to notify the CPU that it requires attention. The device signals an interrupt, and the CPU responds by executing the appropriate interrupt handler at the next available opportunity.
+
+**Why this priority**: This is the fundamental capability that enables all interrupt-driven I/O. Without this, the emulator can only support polling-based I/O, which doesn't accurately reflect how real 6502 systems worked.
+
+**Independent Test**: Can be fully tested by creating a simple device that signals an interrupt after a timer expires, and verifying the CPU executes the interrupt vector and delivers value by enabling realistic device emulation.
+
+**Acceptance Scenarios**:
+
+1. **Given** a device is connected to the CPU and an interrupt handler is registered, **When** the device asserts its interrupt request, **Then** the CPU executes the interrupt handler at the next instruction boundary
+2. **Given** the interrupt disable flag (I flag) is set, **When** a device asserts an interrupt request, **Then** the CPU does not execute the interrupt handler until the I flag is cleared
+3. **Given** an interrupt has been signaled, **When** the ISR reads the device's status register, **Then** the device identifies itself as the interrupt source and clears its interrupt request flag when acknowledged
+
+---
+
+### User Story 2 - Multiple Device Interrupt Coordination (Priority: P2)
+
+Multiple devices connected to the CPU may signal interrupts independently. The system must handle these interrupts in a predictable order and ensure each device's interrupt is processed.
+
+**Why this priority**: Real systems have multiple interrupt sources. This enables emulating realistic systems with timers, UART, keyboard, and other peripherals all operating simultaneously.
+
+**Independent Test**: Can be tested by connecting multiple test devices, having them signal interrupts in a known sequence, and verifying each interrupt is handled correctly.
+
+**Acceptance Scenarios**:
+
+1. **Given** multiple devices assert their interrupt request simultaneously, **When** the CPU processes the interrupt, **Then** the IRQ line remains active until all devices clear their interrupt requests
+2. **Given** a device asserts an interrupt while the CPU is handling another interrupt, **When** the first interrupt handler completes and clears the I flag, **Then** the CPU immediately re-enters the interrupt handler if the IRQ line is still active
+3. **Given** multiple devices have asserted interrupt requests, **When** the interrupt handler executes, **Then** the handler can poll device status registers to identify which devices triggered interrupts
+
+---
+
+### Edge Cases
+
+- What happens when an interrupt is signaled but no interrupt handler is registered?
+- How does the system handle an interrupt signaled during the execution of an interrupt handler (nested interrupts)?
+- What happens when a device tries to signal an interrupt after it has been disconnected?
+- How does the system handle extremely high interrupt rates that could starve normal program execution?
+- What happens when the interrupt vector in memory points to invalid code?
+- What happens when a device declares a memory address range that overlaps with another device's range?
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+- **FR-001**: The CPU MUST check for pending interrupts at instruction boundaries (after each instruction completes)
+- **FR-002**: Devices MUST be able to signal interrupts to the CPU through a defined interface
+- **FR-003**: The CPU MUST respect the interrupt disable flag (I flag) and only process interrupts when I flag is clear
+- **FR-004**: The CPU MUST execute interrupt handlers by reading the interrupt vector from memory locations 0xFFFE-0xFFFF (IRQ vector)
+- **FR-005**: Devices MUST expose memory-mapped status and control registers that the ISR can read/write to identify and acknowledge interrupt sources
+- **FR-006**: The system MUST support multiple independent interrupt sources
+- **FR-007**: The system MUST implement a level-sensitive IRQ line that remains active while any device has an unserviced interrupt request (multiple devices share the IRQ line via logical OR)
+- **FR-008**: The CPU MUST save processor state (program counter and status flags) on the stack when entering an interrupt handler
+- **FR-009**: The CPU MUST set the interrupt disable flag when entering an interrupt handler to prevent nested interrupts (unless explicitly re-enabled)
+- **FR-010**: The interrupt processing sequence (checking IRQ line, pushing PC and status to stack, reading vector, jumping to handler) MUST consume exactly 7 CPU cycles matching real 6502 hardware
+- **FR-011**: The interrupt system MUST not block normal CPU execution when no interrupts are pending (zero overhead when idle)
+- **FR-012**: Devices MUST declare their required memory address range at construction time
+- **FR-013**: The system MUST validate that device memory address ranges do not overlap
+- **FR-014**: Devices MUST integrate with the MemoryBus trait to expose their status and control registers at their declared memory addresses
+- **FR-015**: When the ISR reads a device's status register or writes to its control register, the device MUST clear its interrupt request flag if appropriate
+
+### Key Entities
+
+- **IRQ Line**: Level-sensitive signal line shared by all devices; active (low) when any device has an unserviced interrupt request
+- **Device Interrupt State**: Each device maintains its own interrupt request flag that contributes to the shared IRQ line state
+- **Interrupt Handler (ISR)**: Code executed by the CPU in response to an active IRQ line, identified by the interrupt vector in memory; responsible for polling device status registers and acknowledging interrupts
+- **Device Status Register**: Memory-mapped register that the ISR reads to determine if a device has a pending interrupt
+- **Device Control Register**: Memory-mapped register that the ISR writes to acknowledge and clear a device's interrupt request
+- **Device Interface**: Abstract mechanism through which devices integrate with the MemoryBus to expose status/control registers and manage their interrupt request flag, independent of device implementation language
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: Devices can successfully trigger interrupts and the CPU processes them within one instruction cycle after the interrupt is signaled (when I flag is clear)
+- **SC-002**: The system correctly handles at least 10 different interrupt sources operating simultaneously
+- **SC-003**: The interrupt overhead when no interrupts are pending is unmeasurable (no performance degradation)
+- **SC-004**: All interrupt-driven 6502 test programs execute correctly with cycle-accurate timing
+- **SC-005**: The interrupt processing sequence completes in exactly 7 cycles as measured by the cycle counter
+
+## Assumptions
+
+- Interrupt handling follows the standard 6502 IRQ (Interrupt Request) behavior as documented in the MOS 6502 Programming Manual
+- The interrupt vector is read from memory addresses 0xFFFE (low byte) and 0xFFFF (high byte) as per 6502 specification
+- The IRQ line is level-sensitive (active low) matching real 6502 hardware; no interrupt priority or queueing mechanism needed
+- The BRK instruction's existing interrupt behavior (if implemented) will be preserved and is compatible with hardware interrupts
+- Devices are responsible for clearing their own interrupt request flags; the ISR must acknowledge the device to clear the IRQ line
+- The system does not need to support NMI (Non-Maskable Interrupt) in this initial implementation
+
+## Out of Scope
+
+- NMI (Non-Maskable Interrupt) support - this feature focuses only on maskable IRQ interrupts
+- Interrupt priority levels or queueing - the system uses a simple level-sensitive IRQ line like real hardware
+- Interrupt coalescing or batching optimizations
+- Hardware-specific interrupt controllers (e.g., VIC, PIA) - only the basic CPU IRQ line mechanism
+- Debugging or tracing tools for interrupt behavior

@@ -91,6 +91,16 @@ pub struct CPU<M: MemoryBus> {
     /// Total CPU cycles executed
     pub(crate) cycles: u64,
 
+    /// IRQ line state: true when any device has unserviced interrupt
+    ///
+    /// This field represents the level-sensitive IRQ (Interrupt Request) line
+    /// shared by all interrupt-capable devices. It is updated after each
+    /// instruction by checking all devices via the memory bus.
+    ///
+    /// Hardware behavior: Active LOW in real 6502 (represented as active HIGH
+    /// here for code clarity).
+    pub(crate) irq_pending: bool,
+
     /// Memory bus implementation
     pub(crate) memory: M,
 }
@@ -141,6 +151,7 @@ impl<M: MemoryBus> CPU<M> {
             flag_z: false,
             flag_c: false,
             cycles: 0,
+            irq_pending: false, // No interrupts pending on reset
             memory,
         }
     }
@@ -377,6 +388,14 @@ impl<M: MemoryBus> CPU<M> {
             }
         }
 
+        // Check for interrupts at instruction boundary (after instruction completes)
+        self.check_irq_line();
+
+        // Service interrupt if IRQ line active and interrupts enabled
+        if self.should_service_interrupt() {
+            self.service_interrupt()?;
+        }
+
         Ok(())
     }
 
@@ -426,6 +445,160 @@ impl<M: MemoryBus> CPU<M> {
         }
 
         Ok(self.cycles - start_cycles)
+    }
+
+    // ========== Interrupt Handling ==========
+
+    /// Check IRQ line and update internal irq_pending state.
+    ///
+    /// This method queries the memory bus to determine if any device has a
+    /// pending interrupt request. The result is cached in the `irq_pending`
+    /// field for use in interrupt servicing logic.
+    ///
+    /// Called after each instruction execution in `step()`.
+    fn check_irq_line(&mut self) {
+        self.irq_pending = self.memory.irq_active();
+    }
+
+    /// Determine if CPU should service an interrupt request.
+    ///
+    /// Returns `true` if all conditions for interrupt servicing are met:
+    /// - IRQ line is active (at least one device has pending interrupt)
+    /// - I flag is clear (interrupts are enabled)
+    ///
+    /// # Hardware Behavior
+    ///
+    /// Real 6502 hardware checks the IRQ line at the end of every instruction.
+    /// If IRQ is asserted and the I flag is clear, the CPU will service the
+    /// interrupt before fetching the next instruction.
+    ///
+    /// # Returns
+    ///
+    /// - `true` if interrupt should be serviced immediately
+    /// - `false` if no interrupt or interrupts are disabled
+    fn should_service_interrupt(&self) -> bool {
+        self.irq_pending && !self.flag_i
+    }
+
+    /// Add cycles to the cycle counter.
+    ///
+    /// Helper method for tracking CPU cycle consumption. Using this helper
+    /// instead of direct `self.cycles += N` makes cycle accounting explicit
+    /// and easier to audit for accuracy.
+    ///
+    /// # Arguments
+    ///
+    /// * `cycles` - Number of cycles to add
+    #[inline]
+    fn tick(&mut self, cycles: u64) {
+        self.cycles += cycles;
+    }
+
+    /// Push a byte onto the stack and consume 1 cycle.
+    ///
+    /// Combines `push_stack()` with cycle accounting for cleaner code.
+    /// The 6502 takes 1 cycle per stack push operation.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - Byte to push onto stack
+    #[inline]
+    fn push_stack_timed(&mut self, value: u8) {
+        self.push_stack(value);
+        self.tick(1);
+    }
+
+    /// Service a pending interrupt request with cycle-accurate 6502 IRQ sequence.
+    ///
+    /// Implements the 7-cycle hardware interrupt sequence:
+    /// 1. Push PC high byte to stack (1 cycle)
+    /// 2. Push PC low byte to stack (1 cycle)
+    /// 3. Push status register to stack (1 cycle)
+    /// 4. Set I flag to prevent nested interrupts (0 cycles, part of step 3)
+    /// 5. Read IRQ vector low byte from 0xFFFE (1 cycle)
+    /// 6. Read IRQ vector high byte from 0xFFFF (1 cycle)
+    /// 7. Set PC to vector address (2 cycles, internal operation)
+    ///
+    /// **Total: 7 cycles** (matches MOS 6502 specification)
+    ///
+    /// # Stack Layout After Service
+    ///
+    /// ```text
+    /// SP-2: PC high byte
+    /// SP-1: PC low byte
+    /// SP:   Status register (with I flag set)
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// Always returns `Ok(())` - the 6502 has no interrupt failure modes.
+    /// Stack overflow is not checked (matches hardware behavior).
+    fn service_interrupt(&mut self) -> Result<(), ExecutionError> {
+        // Cycle 1-2: Push PC high byte, then low byte to stack
+        let [pc_high, pc_low] = self.pc.to_be_bytes();
+        self.push_stack_timed(pc_high);
+        self.push_stack_timed(pc_low);
+
+        // Cycle 3: Push status register to stack
+        // Note: B flag is pushed as 0 for IRQ (differs from BRK which pushes 1)
+        let status = self.status() & !0b00010000; // Clear B flag for IRQ
+        self.push_stack_timed(status);
+
+        // Set I flag to prevent nested interrupts (0 cycles, part of above operation)
+        self.flag_i = true;
+
+        // Cycle 4-5: Read IRQ vector from 0xFFFE-0xFFFF
+        let vector_low = self.memory.read(0xFFFE) as u16;
+        self.tick(1);
+
+        let vector_high = self.memory.read(0xFFFF) as u16;
+        self.tick(1);
+
+        // Cycle 6-7: Set PC to vector address (2 cycles for internal operation)
+        let handler_address = (vector_high << 8) | vector_low;
+        self.pc = handler_address;
+        self.tick(2);
+
+        Ok(())
+    }
+
+    /// Push a byte onto the stack.
+    ///
+    /// The 6502 stack lives in page 0x0100-0x01FF and grows downward.
+    /// Stack pointer (SP) is decremented after each push.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - Byte to push onto stack
+    ///
+    /// # Stack Overflow
+    ///
+    /// Stack pointer wraps around (0x00 wraps to 0xFF) matching hardware behavior.
+    /// No overflow checking is performed.
+    fn push_stack(&mut self, value: u8) {
+        let stack_addr = 0x0100 | (self.sp as u16);
+        self.memory.write(stack_addr, value);
+        self.sp = self.sp.wrapping_sub(1);
+    }
+
+    /// Pull a byte from the stack.
+    ///
+    /// The 6502 stack lives in page 0x0100-0x01FF and grows downward.
+    /// Stack pointer (SP) is incremented before each pull.
+    ///
+    /// # Returns
+    ///
+    /// The byte value pulled from the stack
+    ///
+    /// # Stack Underflow
+    ///
+    /// Stack pointer wraps around (0xFF wraps to 0x00) matching hardware behavior.
+    /// No underflow checking is performed.
+    #[allow(dead_code)]
+    fn pull_stack(&mut self) -> u8 {
+        self.sp = self.sp.wrapping_add(1);
+        let stack_addr = 0x0100 | (self.sp as u16);
+        self.memory.read(stack_addr)
     }
 
     // ========== Register Getters ==========

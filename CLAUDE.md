@@ -136,6 +136,103 @@ When adding new instructions:
 
 <!-- MANUAL ADDITIONS START -->
 
+## Interrupt Support
+
+The emulator implements hardware-accurate IRQ (Interrupt Request) support matching real 6502 behavior.
+
+### Interrupt Model
+
+- **Level-sensitive IRQ line**: Shared among all interrupt-capable devices via logical OR
+- **No queuing**: Interrupt state reflects current device status (not edge-triggered)
+- **I flag respect**: Interrupts only serviced when I flag is clear
+- **7-cycle sequence**: Exact timing matching MOS 6502 specification
+- **Explicit acknowledgment**: ISR must read/write device registers to clear interrupts
+
+### Creating Interrupt-Capable Devices
+
+Devices implement both `Device` and `InterruptDevice` traits:
+
+```rust
+use lib6502::{Device, InterruptDevice};
+
+struct TimerDevice {
+    interrupt_pending: bool,
+    // ... device fields
+}
+
+impl InterruptDevice for TimerDevice {
+    fn has_interrupt(&self) -> bool {
+        self.interrupt_pending
+    }
+}
+
+impl Device for TimerDevice {
+    fn size(&self) -> u16 { 4 }  // Number of memory-mapped registers
+
+    fn read(&self, offset: u16) -> u8 {
+        match offset {
+            0 => if self.interrupt_pending { 0x80 } else { 0x00 },  // STATUS
+            // ... other registers
+            _ => 0x00
+        }
+    }
+
+    fn write(&mut self, offset: u16, value: u8) {
+        match offset {
+            1 if value & 0x80 != 0 => self.interrupt_pending = false,  // CONTROL
+            // ... other registers
+            _ => {}
+        }
+    }
+
+    // ... implement as_any(), as_any_mut()
+
+    fn has_interrupt(&self) -> bool {
+        <Self as InterruptDevice>::has_interrupt(self)  // Delegate to InterruptDevice
+    }
+}
+```
+
+### Interrupt Service Routine (ISR) Pattern
+
+```asm
+irq_handler:
+    pha                ; Save registers
+
+    lda $D000          ; Read device STATUS register
+    and #$80           ; Check interrupt pending (bit 7)
+    beq not_our_irq
+
+    lda #$80
+    sta $D001          ; Acknowledge interrupt (write CONTROL)
+
+not_our_irq:
+    pla
+    rti                ; Return from interrupt
+```
+
+### CPU Interrupt Sequence
+
+When `irq_active() && !flag_i`:
+
+1. Push PC high byte to stack (1 cycle)
+2. Push PC low byte to stack (1 cycle)
+3. Push status register to stack (1 cycle)
+4. Set I flag to prevent nested interrupts
+5. Read IRQ vector from 0xFFFE-0xFFFF (2 cycles)
+6. Jump to handler address (2 cycles)
+
+**Total: 7 cycles** (matches hardware)
+
+### Examples
+
+See `examples/interrupt_device.rs` for complete working timer device with:
+- Memory-mapped STATUS/CONTROL/COUNTER registers
+- Interrupt generation and acknowledgment
+- Sample ISR code
+- Full system integration example
+
+See `tests/interrupt_test.rs` for comprehensive test coverage.
 ## Assembler Constants
 
 The assembler supports named constants for defining reusable values like screen addresses, character codes, and magic numbers.
@@ -204,6 +301,7 @@ See `examples/constants.rs` for a complete example program.
 - Rust 1.75+ (for WASM compilation), HTML5/CSS3/JavaScript ES6+ (for frontend) (003-wasm-web-demo)
 - N/A (fully client-side, no persistence) (003-wasm-web-demo)
 - N/A (in-memory state only, no persistence) (004-memory-mapping-module)
+- N/A (in-memory CPU and device state only) (005-cpu-interrupt-support)
 
 ## Recent Changes
 - 002-assembler-disassembler: Added Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible)
