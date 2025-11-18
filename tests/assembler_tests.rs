@@ -991,3 +991,115 @@ START:
     // Verify the NOP instruction assembled correctly
     assert_eq!(output.bytes, vec![0xEA]); // NOP opcode
 }
+
+// T020: Integration test for immediate addressing with constant (LDA #MAX)
+#[test]
+fn test_constant_usage_immediate() {
+    let source = r#"
+MAX = 255
+SMALL = 42
+
+    LDA #MAX
+    LDX #SMALL
+    LDY #10
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Assembly with constants in immediate mode should succeed"
+    );
+
+    let output = result.unwrap();
+
+    // Verify assembled bytes
+    // LDA #255 = A9 FF
+    // LDX #42 = A2 2A
+    // LDY #10 = A0 0A
+    assert_eq!(output.bytes, vec![0xA9, 0xFF, 0xA2, 0x2A, 0xA0, 0x0A]);
+}
+
+// T021: Integration test for zero page with constant (LDA ZP_TEMP)
+#[test]
+fn test_constant_usage_zero_page() {
+    let source = r#"
+ZP_TEMP = $20
+ZP_PTR = $30
+
+    LDA ZP_TEMP
+    STA ZP_PTR
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Assembly with constants in zero page mode should succeed"
+    );
+
+    let output = result.unwrap();
+
+    // Verify assembled bytes
+    // LDA $20 = A5 20 (zero page)
+    // STA $30 = 85 30 (zero page)
+    assert_eq!(output.bytes, vec![0xA5, 0x20, 0x85, 0x30]);
+}
+
+// T022: Integration test for absolute with constant (STA SCREEN)
+#[test]
+fn test_constant_usage_absolute() {
+    let source = r#"
+SCREEN = $4000
+IO_PORT = $8000
+
+    LDA #$42
+    STA SCREEN
+    STX IO_PORT
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Assembly with constants in absolute mode should succeed"
+    );
+
+    let output = result.unwrap();
+
+    // Verify assembled bytes
+    // LDA #$42 = A9 42
+    // STA $4000 = 8D 00 40 (absolute, little-endian)
+    // STX $8000 = 8E 00 80 (absolute, little-endian)
+    assert_eq!(
+        output.bytes,
+        vec![0xA9, 0x42, 0x8D, 0x00, 0x40, 0x8E, 0x00, 0x80]
+    );
+}
+
+// T023: Integration test for indexed with constant (LDA IO_BASE,X)
+#[test]
+fn test_constant_usage_indexed() {
+    let source = r#"
+IO_BASE = $200
+BUFFER = $50
+
+    LDA IO_BASE,X
+    STA IO_BASE,Y
+    LDA BUFFER,X
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Assembly with constants in indexed mode should succeed"
+    );
+
+    let output = result.unwrap();
+
+    // Verify assembled bytes
+    // LDA $200,X = BD 00 02 (absolute,X - little-endian)
+    // STA $200,Y = 99 00 02 (absolute,Y - little-endian)
+    // LDA $50,X = B5 50 (zero page,X)
+    assert_eq!(
+        output.bytes,
+        vec![0xBD, 0x00, 0x02, 0x99, 0x00, 0x02, 0xB5, 0x50]
+    );
+}

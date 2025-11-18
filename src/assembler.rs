@@ -602,7 +602,67 @@ fn resolve_operand(
     // Check if this is a branch instruction
     let is_branch = is_branch_mnemonic(mnemonic);
 
-    // If it starts with a special character, it's not a plain label
+    // Special handling for immediate mode with constants (#CONSTANT)
+    if let Some(stripped) = operand_trimmed.strip_prefix('#') {
+        let inner = stripped.trim();
+
+        // Check if it's a constant reference (no $, %, or digit prefix)
+        if !inner.starts_with('$')
+            && !inner.starts_with('%')
+            && !inner.chars().next().is_some_and(|c| c.is_ascii_digit())
+        {
+            // Look up constant in symbol table
+            let constant_name = inner.to_uppercase();
+            if let Some(symbol) = symbol_table.lookup_symbol(&constant_name) {
+                // Check if it's actually a constant, not a label
+                if symbol.kind == SymbolKind::Constant {
+                    // Validate immediate value is in range
+                    if symbol.value > 0xFF {
+                        return Err(AssemblerError {
+                            error_type: ErrorType::RangeError,
+                            line: 0,
+                            column: 0,
+                            span: (0, 0),
+                            message: format!(
+                                "Constant '{}' value ${:04X} exceeds 8-bit range (0-255) for immediate mode",
+                                constant_name, symbol.value
+                            ),
+                        });
+                    }
+                    return Ok((crate::addressing::AddressingMode::Immediate, symbol.value));
+                } else {
+                    // Using a label in immediate mode - this is unusual but allowed
+                    // Treat label address as immediate value
+                    if symbol.value > 0xFF {
+                        return Err(AssemblerError {
+                            error_type: ErrorType::RangeError,
+                            line: 0,
+                            column: 0,
+                            span: (0, 0),
+                            message: format!(
+                                "Label '{}' address ${:04X} exceeds 8-bit range (0-255) for immediate mode",
+                                constant_name, symbol.value
+                            ),
+                        });
+                    }
+                    return Ok((crate::addressing::AddressingMode::Immediate, symbol.value));
+                }
+            }
+            // Not found in symbol table - will be caught as undefined later
+            // Fall through to normal parsing to get proper error
+        }
+
+        // Parse as normal immediate value
+        return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
+            error_type: ErrorType::InvalidOperand,
+            line: 0,
+            column: 0,
+            span: (0, 0),
+            message: format!("Invalid operand '{}': {}", operand, e),
+        });
+    }
+
+    // If it starts with a special character, it's not a plain label/constant
     if operand_trimmed.starts_with('$')
         || operand_trimmed.starts_with('#')
         || operand_trimmed.starts_with('(')
@@ -662,56 +722,135 @@ fn resolve_operand(
         });
     }
 
-    // Must be a label reference - look it up
-    // Labels are stored in uppercase, so convert operand to uppercase for lookup
-    let label_name = operand_trimmed.to_uppercase();
-    if let Some(symbol) = symbol_table.lookup_symbol(&label_name) {
-        let target_address = symbol.value;
+    // Check for indexed addressing with symbol (e.g., "IO_BASE,X" or "BUFFER,Y")
+    if operand_trimmed.contains(',') {
+        let parts: Vec<&str> = operand_trimmed.split(',').collect();
+        if parts.len() == 2 {
+            let base_part = parts[0].trim();
+            let index_part = parts[1].trim().to_uppercase();
 
-        // Determine if this is a branch instruction (needs relative addressing)
-        let is_branch = matches!(
-            mnemonic,
-            "BCC" | "BCS" | "BEQ" | "BMI" | "BNE" | "BPL" | "BVC" | "BVS"
-        );
+            // Check if base is a symbol reference (not a number)
+            if !base_part.starts_with('$')
+                && !base_part.starts_with('%')
+                && !base_part
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_digit())
+            {
+                let symbol_name = base_part.to_uppercase();
+                if let Some(symbol) = symbol_table.lookup_symbol(&symbol_name) {
+                    let value = symbol.value;
 
-        if is_branch {
-            // Calculate relative offset
-            // Branch offset is relative to the address of the next instruction
-            let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes
-            let offset = target_address as i32 - next_instruction_address as i32;
-
-            // Check if offset is in range (-128 to +127)
-            if !(-128..=127).contains(&offset) {
-                return Err(AssemblerError {
-                    error_type: ErrorType::RangeError,
-                    line: 0,
-                    column: 0,
-                    span: (0, 0),
-                    message: format!(
-                        "Branch to '{}' is out of range (offset: {}, must be -128 to +127)",
-                        operand_trimmed, offset
-                    ),
-                });
+                    // Determine indexed addressing mode based on index register
+                    match index_part.as_str() {
+                        "X" => {
+                            if value <= 0xFF {
+                                return Ok((crate::addressing::AddressingMode::ZeroPageX, value));
+                            } else {
+                                return Ok((crate::addressing::AddressingMode::AbsoluteX, value));
+                            }
+                        }
+                        "Y" => {
+                            if value <= 0xFF {
+                                return Ok((crate::addressing::AddressingMode::ZeroPageY, value));
+                            } else {
+                                return Ok((crate::addressing::AddressingMode::AbsoluteY, value));
+                            }
+                        }
+                        _ => {
+                            return Err(AssemblerError {
+                                error_type: ErrorType::InvalidOperand,
+                                line: 0,
+                                column: 0,
+                                span: (0, 0),
+                                message: format!(
+                                    "Invalid index register '{}' (must be X or Y)",
+                                    index_part
+                                ),
+                            });
+                        }
+                    }
+                }
+                // Symbol not found - fall through to error handling below
             }
+        }
+        // Has comma but not a valid symbol,index format - parse normally
+        return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
+            error_type: ErrorType::InvalidOperand,
+            line: 0,
+            column: 0,
+            span: (0, 0),
+            message: format!("Invalid operand '{}': {}", operand, e),
+        });
+    }
 
-            // Convert to unsigned byte (two's complement)
-            let offset_byte = (offset as i8) as u8;
-            Ok((
-                crate::addressing::AddressingMode::Relative,
-                offset_byte as u16,
-            ))
-        } else {
-            // Absolute addressing for JMP, JSR, etc.
-            Ok((crate::addressing::AddressingMode::Absolute, target_address))
+    // Must be a label/constant reference - look it up
+    // Symbols are stored in uppercase, so convert operand to uppercase for lookup
+    let symbol_name = operand_trimmed.to_uppercase();
+    if let Some(symbol) = symbol_table.lookup_symbol(&symbol_name) {
+        match symbol.kind {
+            SymbolKind::Constant => {
+                // For constants, use value directly and choose addressing mode based on value
+                let value = symbol.value;
+
+                // Determine addressing mode based on value range
+                // If value fits in zero page (0-255), use ZeroPage, otherwise Absolute
+                if value <= 0xFF {
+                    Ok((crate::addressing::AddressingMode::ZeroPage, value))
+                } else {
+                    Ok((crate::addressing::AddressingMode::Absolute, value))
+                }
+            }
+            SymbolKind::Label => {
+                // For labels, use value as memory address
+                let target_address = symbol.value;
+
+                // Determine if this is a branch instruction (needs relative addressing)
+                let is_branch = matches!(
+                    mnemonic,
+                    "BCC" | "BCS" | "BEQ" | "BMI" | "BNE" | "BPL" | "BVC" | "BVS"
+                );
+
+                if is_branch {
+                    // Calculate relative offset
+                    // Branch offset is relative to the address of the next instruction
+                    let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes
+                    let offset = target_address as i32 - next_instruction_address as i32;
+
+                    // Check if offset is in range (-128 to +127)
+                    if !(-128..=127).contains(&offset) {
+                        return Err(AssemblerError {
+                            error_type: ErrorType::RangeError,
+                            line: 0,
+                            column: 0,
+                            span: (0, 0),
+                            message: format!(
+                                "Branch to '{}' is out of range (offset: {}, must be -128 to +127)",
+                                operand_trimmed, offset
+                            ),
+                        });
+                    }
+
+                    // Convert to unsigned byte (two's complement)
+                    let offset_byte = (offset as i8) as u8;
+                    Ok((
+                        crate::addressing::AddressingMode::Relative,
+                        offset_byte as u16,
+                    ))
+                } else {
+                    // Absolute addressing for JMP, JSR, etc.
+                    Ok((crate::addressing::AddressingMode::Absolute, target_address))
+                }
+            }
         }
     } else {
-        // Undefined label
+        // Undefined symbol
         Err(AssemblerError {
             error_type: ErrorType::UndefinedLabel,
             line: 0,
             column: 0,
             span: (0, 0),
-            message: format!("Undefined label '{}'", label_name),
+            message: format!("Undefined symbol '{}'", symbol_name),
         })
     }
 }

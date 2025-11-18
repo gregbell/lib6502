@@ -141,15 +141,15 @@ Implement named constant support for the 6502 assembler using `NAME = VALUE` syn
 
 ### Tasks
 
-- [ ] T017 [P] [US2] Modify resolve_operand() in src/assembler/encoder.rs to look up identifiers in symbol table
-- [ ] T018 [US2] Add constant value substitution logic in src/assembler/encoder.rs (if SymbolKind::Constant, use value as literal)
-- [ ] T019 [US2] Ensure addressing mode detection works with resolved constant values in src/assembler/encoder.rs
+- [X] T017 [P] [US2] Modify resolve_operand() in src/assembler.rs to look up identifiers in symbol table
+- [X] T018 [US2] Add constant value substitution logic in src/assembler.rs (if SymbolKind::Constant, use value as literal)
+- [X] T019 [US2] Ensure addressing mode detection works with resolved constant values in src/assembler.rs
 
 **Tests**:
-- [ ] T020 [P] [US2] Add integration test in tests/assembler_tests.rs for immediate addressing with constant (LDA #MAX)
-- [ ] T021 [P] [US2] Add integration test in tests/assembler_tests.rs for zero page with constant (STA ZP_TEMP)
-- [ ] T022 [P] [US2] Add integration test in tests/assembler_tests.rs for absolute with constant (STA SCREEN)
-- [ ] T023 [P] [US2] Add integration test in tests/assembler_tests.rs for indexed with constant (STA IO_BASE,X)
+- [X] T020 [P] [US2] Add integration test in tests/assembler_tests.rs for immediate addressing with constant (LDA #MAX)
+- [X] T021 [P] [US2] Add integration test in tests/assembler_tests.rs for zero page with constant (STA ZP_TEMP)
+- [X] T022 [P] [US2] Add integration test in tests/assembler_tests.rs for absolute with constant (STA SCREEN)
+- [X] T023 [P] [US2] Add integration test in tests/assembler_tests.rs for indexed with constant (STA IO_BASE,X)
 
 **Validation**: Run `cargo test` and verify constants substitute correctly
 
