@@ -32,11 +32,13 @@ use crate::MemoryBus;
 use std::any::Any;
 
 // Device implementations
+pub mod interrupts;
 pub mod ram;
 pub mod rom;
 pub mod uart;
 
 // Re-export device types
+pub use interrupts::InterruptDevice;
 pub use ram::RamDevice;
 pub use rom::RomDevice;
 pub use uart::Uart6551;
@@ -124,6 +126,64 @@ pub trait Device {
     /// This method enables safe downcasting from `&mut dyn Device` to `&mut T`
     /// where `T` is the concrete device type.
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Check if this device has a pending interrupt request.
+    ///
+    /// This method is called by the memory mapper to determine the IRQ line state.
+    /// Devices that implement the `InterruptDevice` trait should override this
+    /// method to return their actual interrupt state.
+    ///
+    /// # Default Implementation
+    ///
+    /// Returns `false` for devices that don't support interrupts (RAM, ROM, etc.).
+    ///
+    /// # Returns
+    ///
+    /// - `true` if device has pending interrupt
+    /// - `false` if device has no pending interrupt or doesn't support interrupts
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use lib6502::Device;
+    /// use std::any::Any;
+    ///
+    /// // Non-interrupt device (uses default implementation)
+    /// struct RamDevice {
+    ///     data: Vec<u8>,
+    /// }
+    ///
+    /// impl Device for RamDevice {
+    ///     fn read(&self, offset: u16) -> u8 { self.data[offset as usize] }
+    ///     fn write(&mut self, offset: u16, value: u8) { self.data[offset as usize] = value; }
+    ///     fn size(&self) -> u16 { self.data.len() as u16 }
+    ///     fn as_any(&self) -> &dyn Any { self }
+    ///     fn as_any_mut(&mut self) -> &mut dyn Any { self }
+    ///     // has_interrupt() uses default: returns false
+    /// }
+    ///
+    /// // Interrupt-capable device (overrides)
+    /// struct TimerDevice {
+    ///     data: Vec<u8>,
+    ///     interrupt_pending: bool,
+    /// }
+    ///
+    /// impl Device for TimerDevice {
+    ///     fn read(&self, offset: u16) -> u8 { self.data[offset as usize] }
+    ///     fn write(&mut self, offset: u16, value: u8) { self.data[offset as usize] = value; }
+    ///     fn size(&self) -> u16 { self.data.len() as u16 }
+    ///     fn as_any(&self) -> &dyn Any { self }
+    ///     fn as_any_mut(&mut self) -> &mut dyn Any { self }
+    ///
+    ///     // Override to return actual interrupt state
+    ///     fn has_interrupt(&self) -> bool {
+    ///         self.interrupt_pending
+    ///     }
+    /// }
+    /// ```
+    fn has_interrupt(&self) -> bool {
+        false // Default: no interrupts
+    }
 }
 
 /// Helper for address range calculations and overlap detection.
@@ -489,6 +549,15 @@ impl MemoryBus for MappedMemory {
             device.write(offset, value);
         }
         // Unmapped writes are silently ignored (matching 6502 hardware behavior)
+    }
+
+    fn irq_active(&self) -> bool {
+        // Check all devices for pending interrupts
+        // This implements the level-sensitive IRQ line: active if ANY device has interrupt
+        // Returns true if at least one device has_interrupt() returns true
+        self.devices
+            .iter()
+            .any(|mapping| mapping.device.has_interrupt())
     }
 }
 

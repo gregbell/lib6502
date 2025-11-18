@@ -123,6 +123,52 @@ pub trait MemoryBus {
     /// assert_eq!(mem.read(0x1234), 0xFF);
     /// ```
     fn write(&mut self, addr: u16, value: u8);
+
+    /// Checks if the IRQ (Interrupt Request) line is active.
+    ///
+    /// This method returns `true` if any memory-mapped device has a pending
+    /// interrupt request. The CPU calls this method after each instruction
+    /// to determine if an interrupt should be serviced.
+    ///
+    /// # Hardware Semantics
+    ///
+    /// The IRQ line on the 6502 is **level-sensitive** and **shared** among
+    /// all devices:
+    ///
+    /// - **Level-sensitive**: IRQ reflects current device state, not edges
+    /// - **Logical OR**: IRQ is active if ANY device has pending interrupt
+    /// - **Active until cleared**: IRQ remains active until ALL devices clear
+    ///
+    /// # Default Implementation
+    ///
+    /// Returns `false` (no interrupts) for simple memory implementations
+    /// (like FlatMemory) that don't support interrupt-capable devices.
+    ///
+    /// Memory mappers with interrupt-capable devices should override this
+    /// to check all registered devices.
+    ///
+    /// # Returns
+    ///
+    /// - `true` if at least one device has a pending interrupt
+    /// - `false` if no devices have pending interrupts
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use lib6502::{MemoryBus, FlatMemory};
+    ///
+    /// let mem = FlatMemory::new();
+    /// // FlatMemory has no interrupt-capable devices
+    /// assert_eq!(mem.irq_active(), false);
+    /// ```
+    ///
+    /// # Performance
+    ///
+    /// This method is called after EVERY instruction, so implementations
+    /// should be efficient (typically O(1) or O(n) where n = device count).
+    fn irq_active(&self) -> bool {
+        false // Default: no interrupts
+    }
 }
 
 /// Simple 64KB flat memory implementation.
