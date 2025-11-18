@@ -19,20 +19,23 @@ impl SymbolTable {
     /// Add a symbol to the table
     ///
     /// Returns Ok(()) on success, Err with duplicate symbol if name already exists
+    ///
+    /// Takes &str and only allocates if insertion succeeds (optimization)
     pub fn add_symbol(
         &mut self,
-        name: String,
+        name: &str,
         value: u16,
         kind: crate::assembler::SymbolKind,
         defined_at: usize,
     ) -> Result<(), Symbol> {
         // Check for duplicates
-        if let Some(existing) = self.lookup_symbol(&name) {
+        if let Some(existing) = self.lookup_symbol(name) {
             return Err(existing.clone());
         }
 
+        // Only allocate String if we're actually inserting
         self.symbols.push(Symbol {
-            name,
+            name: name.to_string(),
             value,
             kind,
             defined_at,
@@ -41,9 +44,19 @@ impl SymbolTable {
         Ok(())
     }
 
-    /// Look up a symbol by name
+    /// Look up a symbol by name (case-sensitive)
     pub fn lookup_symbol(&self, name: &str) -> Option<&Symbol> {
         self.symbols.iter().find(|s| s.name == name)
+    }
+
+    /// Look up a symbol by name (case-insensitive, no allocation)
+    ///
+    /// This is more efficient than uppercasing the query and calling lookup_symbol
+    /// because it avoids allocating a new String.
+    pub fn lookup_symbol_ignore_case(&self, name: &str) -> Option<&Symbol> {
+        self.symbols
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case(name))
     }
 
     /// Get all symbols
@@ -67,20 +80,10 @@ mod tests {
         let mut table = SymbolTable::new();
 
         assert!(table
-            .add_symbol(
-                "START".to_string(),
-                0x8000,
-                crate::assembler::SymbolKind::Label,
-                1
-            )
+            .add_symbol("START", 0x8000, crate::assembler::SymbolKind::Label, 1)
             .is_ok());
         assert!(table
-            .add_symbol(
-                "LOOP".to_string(),
-                0x8010,
-                crate::assembler::SymbolKind::Label,
-                5
-            )
+            .add_symbol("LOOP", 0x8010, crate::assembler::SymbolKind::Label, 5)
             .is_ok());
 
         let start = table.lookup_symbol("START").unwrap();
@@ -98,19 +101,9 @@ mod tests {
         let mut table = SymbolTable::new();
 
         assert!(table
-            .add_symbol(
-                "START".to_string(),
-                0x8000,
-                crate::assembler::SymbolKind::Label,
-                1
-            )
+            .add_symbol("START", 0x8000, crate::assembler::SymbolKind::Label, 1)
             .is_ok());
-        let result = table.add_symbol(
-            "START".to_string(),
-            0x9000,
-            crate::assembler::SymbolKind::Label,
-            10,
-        );
+        let result = table.add_symbol("START", 0x9000, crate::assembler::SymbolKind::Label, 10);
         assert!(result.is_err());
 
         // Original symbol should still be there
@@ -124,12 +117,7 @@ mod tests {
         let mut table = SymbolTable::new();
 
         assert!(table
-            .add_symbol(
-                "MAX".to_string(),
-                255,
-                crate::assembler::SymbolKind::Constant,
-                1
-            )
+            .add_symbol("MAX", 255, crate::assembler::SymbolKind::Constant, 1)
             .is_ok());
 
         let constant = table.lookup_symbol("MAX").unwrap();
@@ -145,12 +133,7 @@ mod tests {
         let mut table = SymbolTable::new();
 
         assert!(table
-            .add_symbol(
-                "START".to_string(),
-                0x8000,
-                crate::assembler::SymbolKind::Label,
-                5
-            )
+            .add_symbol("START", 0x8000, crate::assembler::SymbolKind::Label, 5)
             .is_ok());
 
         let label = table.lookup_symbol("START").unwrap();
@@ -167,22 +150,12 @@ mod tests {
 
         // Add a constant
         table
-            .add_symbol(
-                "MAX".to_string(),
-                255,
-                crate::assembler::SymbolKind::Constant,
-                1,
-            )
+            .add_symbol("MAX", 255, crate::assembler::SymbolKind::Constant, 1)
             .unwrap();
 
         // Add a label
         table
-            .add_symbol(
-                "LOOP".to_string(),
-                0x1000,
-                crate::assembler::SymbolKind::Label,
-                10,
-            )
+            .add_symbol("LOOP", 0x1000, crate::assembler::SymbolKind::Label, 10)
             .unwrap();
 
         // Verify constant lookup

@@ -9,6 +9,13 @@ pub mod symbol_table;
 
 use crate::opcodes;
 
+// Addressing mode value range constants
+const IMMEDIATE_MODE_MAX: u16 = 0xFF;
+const ZERO_PAGE_MAX: u16 = 0xFF;
+const BRANCH_OFFSET_MIN: i32 = -128;
+const BRANCH_OFFSET_MAX: i32 = 127;
+const BRANCH_INSTRUCTION_SIZE: u16 = 2;
+
 /// Complete output from assembling source code
 #[derive(Debug, Clone)]
 pub struct AssemblerOutput {
@@ -272,7 +279,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
             } else {
                 // Add to symbol table
                 if let Err(existing) = symbol_table.add_symbol(
-                    label.clone(),
+                    label,
                     current_address,
                     SymbolKind::Label,
                     line.line_number,
@@ -322,7 +329,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                     Ok(value) => {
                         // Add to symbol table with Constant kind
                         if let Err(existing) = symbol_table.add_symbol(
-                            name.clone(),
+                            name,
                             value,
                             SymbolKind::Constant,
                             line.line_number,
@@ -516,16 +523,16 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 
         // Detect addressing mode and resolve operand value (including labels)
         let (mode, value) = if let Some(ref operand) = line.operand {
-            match resolve_operand(operand, &symbol_table, instruction_start_address, mnemonic) {
+            match resolve_operand(
+                operand,
+                &symbol_table,
+                instruction_start_address,
+                mnemonic,
+                (line.line_number, 0, line.span),
+            ) {
                 Ok((m, v)) => (m, v),
                 Err(e) => {
-                    errors.push(AssemblerError {
-                        error_type: e.error_type,
-                        line: line.line_number,
-                        column: 0,
-                        span: line.span,
-                        message: e.message,
-                    });
+                    errors.push(e);
                     continue; // Error recovery: skip this line
                 }
             }
@@ -628,13 +635,39 @@ pub fn assemble_with_origin(
     assemble(&source_with_origin)
 }
 
+/// Validate that a value fits in immediate mode (0-255)
+fn validate_immediate_value(value: u16, name: &str, kind: SymbolKind) -> Result<u16, String> {
+    if value > IMMEDIATE_MODE_MAX {
+        let kind_str = match kind {
+            SymbolKind::Constant => "Constant",
+            SymbolKind::Label => "Label",
+        };
+        Err(format!(
+            "{} '{}' value ${:04X} exceeds 8-bit range (expected $00-${:02X}) for immediate mode",
+            kind_str, name, value, IMMEDIATE_MODE_MAX
+        ))
+    } else {
+        Ok(value)
+    }
+}
+
 /// Resolve an operand, handling both numeric values and label references
+///
+/// # Arguments
+///
+/// * `operand` - The operand text to resolve
+/// * `symbol_table` - Symbol table for looking up labels and constants
+/// * `current_address` - Current assembly address for relative branches
+/// * `mnemonic` - Instruction mnemonic for context
+/// * `line_info` - Line number, column, and span for error reporting
 fn resolve_operand(
     operand: &str,
     symbol_table: &symbol_table::SymbolTable,
     current_address: u16,
     mnemonic: &str,
+    line_info: (usize, usize, (usize, usize)),
 ) -> Result<(crate::addressing::AddressingMode, u16), AssemblerError> {
+    let (line, column, span) = line_info;
     // Check if operand is a label reference (no prefix like $, #, (, etc.)
     let operand_trimmed = operand.trim();
 
@@ -655,50 +688,26 @@ fn resolve_operand(
             && !inner.starts_with('%')
             && !inner.chars().next().is_some_and(|c| c.is_ascii_digit())
         {
-            // Look up constant in symbol table
-            let constant_name = inner.to_uppercase();
-            if let Some(symbol) = symbol_table.lookup_symbol(&constant_name) {
-                // Check if it's actually a constant, not a label
-                if symbol.kind == SymbolKind::Constant {
-                    // Validate immediate value is in range
-                    if symbol.value > 0xFF {
-                        return Err(AssemblerError {
-                            error_type: ErrorType::RangeError,
-                            line: 0,
-                            column: 0,
-                            span: (0, 0),
-                            message: format!(
-                                "Constant '{}' value ${:04X} exceeds 8-bit range (0-255) for immediate mode",
-                                constant_name, symbol.value
-                            ),
-                        });
-                    }
-                    return Ok((crate::addressing::AddressingMode::Immediate, symbol.value));
-                } else {
-                    // Using a label in immediate mode - this is unusual but allowed
-                    // Treat label address as immediate value
-                    if symbol.value > 0xFF {
-                        return Err(AssemblerError {
-                            error_type: ErrorType::RangeError,
-                            line: 0,
-                            column: 0,
-                            span: (0, 0),
-                            message: format!(
-                                "Label '{}' address ${:04X} exceeds 8-bit range (0-255) for immediate mode",
-                                constant_name, symbol.value
-                            ),
-                        });
-                    }
-                    return Ok((crate::addressing::AddressingMode::Immediate, symbol.value));
-                }
+            // Look up constant in symbol table (case-insensitive, no allocation)
+            if let Some(symbol) = symbol_table.lookup_symbol_ignore_case(inner) {
+                // Validate immediate value is in range (works for both constants and labels)
+                let value = validate_immediate_value(symbol.value, &symbol.name, symbol.kind)
+                    .map_err(|msg| AssemblerError {
+                        error_type: ErrorType::RangeError,
+                        line,
+                        column,
+                        span,
+                        message: msg,
+                    })?;
+                return Ok((crate::addressing::AddressingMode::Immediate, value));
             } else {
                 // Symbol not found - return undefined error
                 return Err(AssemblerError {
                     error_type: ErrorType::UndefinedLabel,
-                    line: 0,
-                    column: 0,
-                    span: (0, 0),
-                    message: format!("Undefined symbol '{}'", constant_name),
+                    line,
+                    column,
+                    span,
+                    message: format!("Undefined symbol '{}'", inner.to_uppercase()),
                 });
             }
         }
@@ -706,9 +715,9 @@ fn resolve_operand(
         // Parse as normal immediate value
         return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
             error_type: ErrorType::InvalidOperand,
-            line: 0,
-            column: 0,
-            span: (0, 0),
+            line,
+            column,
+            span,
             message: format!("Invalid operand '{}': {}", operand, e),
         });
     }
@@ -731,26 +740,26 @@ fn resolve_operand(
             let target_address =
                 parser::parse_number(operand_trimmed).map_err(|e| AssemblerError {
                     error_type: ErrorType::InvalidOperand,
-                    line: 0,
-                    column: 0,
-                    span: (0, 0),
+                    line,
+                    column,
+                    span,
                     message: format!("Invalid branch target '{}': {}", operand, e),
                 })?;
 
             // Calculate relative offset
-            let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes
+            let next_instruction_address = current_address + BRANCH_INSTRUCTION_SIZE;
             let offset = target_address as i32 - next_instruction_address as i32;
 
-            // Check if offset is in range (-128 to +127)
-            if !(-128..=127).contains(&offset) {
+            // Check if offset is in range
+            if !(BRANCH_OFFSET_MIN..=BRANCH_OFFSET_MAX).contains(&offset) {
                 return Err(AssemblerError {
                     error_type: ErrorType::RangeError,
-                    line: 0,
-                    column: 0,
-                    span: (0, 0),
+                    line,
+                    column,
+                    span,
                     message: format!(
-                        "Branch to ${:04X} is out of range (offset: {}, must be -128 to +127)",
-                        target_address, offset
+                        "Branch to ${:04X} is out of range (offset: {}, expected {} to {})",
+                        target_address, offset, BRANCH_OFFSET_MIN, BRANCH_OFFSET_MAX
                     ),
                 });
             }
@@ -766,76 +775,69 @@ fn resolve_operand(
         // Parse as normal addressing mode (non-branch instructions or immediate/indirect modes)
         return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
             error_type: ErrorType::InvalidOperand,
-            line: 0,
-            column: 0,
-            span: (0, 0),
+            line,
+            column,
+            span,
             message: format!("Invalid operand '{}': {}", operand, e),
         });
     }
 
     // Check for indexed addressing with symbol (e.g., "IO_BASE,X" or "BUFFER,Y")
-    if operand_trimmed.contains(',') {
-        let parts: Vec<&str> = operand_trimmed.split(',').collect();
-        if parts.len() == 2 {
-            let base_part = parts[0].trim();
-            let index_part = parts[1].trim().to_uppercase();
+    // Use split_once for clarity and to reject malformed input
+    if let Some((base, index)) = operand_trimmed.split_once(',') {
+        let base_part = base.trim();
+        let index_part = index.trim();
 
-            // Check if base is a symbol reference (not a number)
-            if !base_part.starts_with('$')
-                && !base_part.starts_with('%')
-                && !base_part.chars().next().is_some_and(|c| c.is_ascii_digit())
-            {
-                let symbol_name = base_part.to_uppercase();
-                if let Some(symbol) = symbol_table.lookup_symbol(&symbol_name) {
-                    let value = symbol.value;
+        // Check if base is a symbol reference (not a number)
+        if !base_part.is_empty()
+            && !base_part.starts_with('$')
+            && !base_part.starts_with('%')
+            && !base_part.chars().next().is_some_and(|c| c.is_ascii_digit())
+        {
+            if let Some(symbol) = symbol_table.lookup_symbol_ignore_case(base_part) {
+                let value = symbol.value;
 
-                    // Determine indexed addressing mode based on index register
-                    match index_part.as_str() {
-                        "X" => {
-                            if value <= 0xFF {
-                                return Ok((crate::addressing::AddressingMode::ZeroPageX, value));
-                            } else {
-                                return Ok((crate::addressing::AddressingMode::AbsoluteX, value));
-                            }
-                        }
-                        "Y" => {
-                            if value <= 0xFF {
-                                return Ok((crate::addressing::AddressingMode::ZeroPageY, value));
-                            } else {
-                                return Ok((crate::addressing::AddressingMode::AbsoluteY, value));
-                            }
-                        }
-                        _ => {
-                            return Err(AssemblerError {
-                                error_type: ErrorType::InvalidOperand,
-                                line: 0,
-                                column: 0,
-                                span: (0, 0),
-                                message: format!(
-                                    "Invalid index register '{}' (must be X or Y)",
-                                    index_part
-                                ),
-                            });
-                        }
+                // Determine indexed addressing mode based on index register (case-insensitive)
+                if index_part.eq_ignore_ascii_case("X") {
+                    if value <= ZERO_PAGE_MAX {
+                        return Ok((crate::addressing::AddressingMode::ZeroPageX, value));
+                    } else {
+                        return Ok((crate::addressing::AddressingMode::AbsoluteX, value));
                     }
+                } else if index_part.eq_ignore_ascii_case("Y") {
+                    if value <= ZERO_PAGE_MAX {
+                        return Ok((crate::addressing::AddressingMode::ZeroPageY, value));
+                    } else {
+                        return Ok((crate::addressing::AddressingMode::AbsoluteY, value));
+                    }
+                } else {
+                    return Err(AssemblerError {
+                        error_type: ErrorType::InvalidOperand,
+                        line,
+                        column,
+                        span,
+                        message: format!(
+                            "Invalid index register '{}' (must be X or Y)",
+                            index_part
+                        ),
+                    });
                 }
-                // Symbol not found - fall through to error handling below
             }
+            // Symbol not found - fall through to error handling below
         }
+
         // Has comma but not a valid symbol,index format - parse normally
         return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
             error_type: ErrorType::InvalidOperand,
-            line: 0,
-            column: 0,
-            span: (0, 0),
+            line,
+            column,
+            span,
             message: format!("Invalid operand '{}': {}", operand, e),
         });
     }
 
-    // Must be a label/constant reference - look it up
-    // Symbols are stored in uppercase, so convert operand to uppercase for lookup
-    let symbol_name = operand_trimmed.to_uppercase();
-    if let Some(symbol) = symbol_table.lookup_symbol(&symbol_name) {
+    // Must be a label/constant reference - look it up (case-insensitive, no allocation)
+    if let Some(symbol) = symbol_table.lookup_symbol_ignore_case(operand_trimmed) {
         match symbol.kind {
             SymbolKind::Constant => {
                 // For constants, use value directly and choose addressing mode based on value
@@ -843,7 +845,7 @@ fn resolve_operand(
 
                 // Determine addressing mode based on value range
                 // If value fits in zero page (0-255), use ZeroPage, otherwise Absolute
-                if value <= 0xFF {
+                if value <= ZERO_PAGE_MAX {
                     Ok((crate::addressing::AddressingMode::ZeroPage, value))
                 } else {
                     Ok((crate::addressing::AddressingMode::Absolute, value))
@@ -854,27 +856,22 @@ fn resolve_operand(
                 let target_address = symbol.value;
 
                 // Determine if this is a branch instruction (needs relative addressing)
-                let is_branch = matches!(
-                    mnemonic,
-                    "BCC" | "BCS" | "BEQ" | "BMI" | "BNE" | "BPL" | "BVC" | "BVS"
-                );
-
                 if is_branch {
                     // Calculate relative offset
                     // Branch offset is relative to the address of the next instruction
-                    let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes
+                    let next_instruction_address = current_address + BRANCH_INSTRUCTION_SIZE;
                     let offset = target_address as i32 - next_instruction_address as i32;
 
-                    // Check if offset is in range (-128 to +127)
-                    if !(-128..=127).contains(&offset) {
+                    // Check if offset is in range
+                    if !(BRANCH_OFFSET_MIN..=BRANCH_OFFSET_MAX).contains(&offset) {
                         return Err(AssemblerError {
                             error_type: ErrorType::RangeError,
-                            line: 0,
-                            column: 0,
-                            span: (0, 0),
+                            line,
+                            column,
+                            span,
                             message: format!(
-                                "Branch to '{}' is out of range (offset: {}, must be -128 to +127)",
-                                operand_trimmed, offset
+                                "Branch to '{}' is out of range (offset: {}, expected {} to {})",
+                                operand_trimmed, offset, BRANCH_OFFSET_MIN, BRANCH_OFFSET_MAX
                             ),
                         });
                     }
@@ -895,10 +892,10 @@ fn resolve_operand(
         // Undefined symbol
         Err(AssemblerError {
             error_type: ErrorType::UndefinedLabel,
-            line: 0,
-            column: 0,
-            span: (0, 0),
-            message: format!("Undefined symbol '{}'", symbol_name),
+            line,
+            column,
+            span,
+            message: format!("Undefined symbol '{}'", operand_trimmed.to_uppercase()),
         })
     }
 }
