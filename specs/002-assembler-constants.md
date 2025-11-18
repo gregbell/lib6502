@@ -1,8 +1,8 @@
-# Feature Specification: Assembler Variables
+# Feature Specification: Assembler Constants
 
 ## Overview
 
-Add support for named constants (variables) in the 6502 assembler, allowing users to define reusable values at the top of assembly files and reference them throughout the code.
+Add support for named constants in the 6502 assembler, allowing users to define reusable values at the top of assembly files and reference them throughout the code.
 
 ## Background
 
@@ -23,9 +23,9 @@ As an assembly programmer, I want to:
 
 ## Syntax
 
-### Variable Declaration
+### Constant Declaration
 
-Variables are declared using simple assignment syntax:
+Constants are declared using simple assignment syntax:
 
 ```assembly
 ; Define constants
@@ -48,7 +48,7 @@ START:
 **Declaration:**
 - Syntax: `NAME = VALUE`
 - Must appear before first use
-- Variable name follows same rules as labels:
+- Constant name follows same rules as labels:
   - Start with letter [a-zA-Z]
   - Contain only alphanumeric + underscore [a-zA-Z0-9_]
   - Maximum 32 characters
@@ -98,7 +98,7 @@ LOOP:
     ; ... more code
 ```
 
-### Zero Page Variables
+### Zero Page Constants
 
 ```assembly
 ZP_TEMP = $80
@@ -113,7 +113,7 @@ ZP_POINTER = $82
 
 ## Design Decisions
 
-### 1. Variables vs. Labels
+### 1. Constants vs. Labels
 
 **Labels** (existing):
 - Defined with `:` suffix
@@ -121,11 +121,11 @@ ZP_POINTER = $82
 - Resolved during two-pass assembly
 - Type: `SymbolKind::Label`
 
-**Variables** (new):
+**Constants** (new):
 - Defined with `=` assignment syntax
 - Represent literal values
 - Resolved immediately (no forward references needed)
-- Type: `SymbolKind::Variable`
+- Type: `SymbolKind::Constant`
 
 ### 2. Symbol Table Changes
 
@@ -135,7 +135,7 @@ Extend `Symbol` struct:
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind {
     Label,      // Memory address (e.g., "START:")
-    Variable,   // Literal value (e.g., "FOO = 42")
+    Constant,   // Literal value (e.g., "FOO = 42")
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -150,25 +150,25 @@ pub struct Symbol {
 ### 3. Resolution Order
 
 **Pass 1:**
-1. Parse variable assignments (`NAME = VALUE`) immediately
-2. Add variables to symbol table as encountered
-3. Variables must be defined before use (no forward references)
+1. Parse constant assignments (`NAME = VALUE`) immediately
+2. Add constants to symbol table as encountered
+3. Constants must be defined before use (no forward references)
 4. Process labels as before (addresses calculated)
 
 **Pass 2:**
-- Resolve both variables and labels when encoding operands
-- Variables substitute their literal value
+- Resolve both constants and labels when encoding operands
+- Constants substitute their literal value
 - Labels resolve to their memory address
 
 ### 4. Name Collision Handling
 
-- Variables and labels share the same namespace
-- Error if same name used for both variable and label
-- Error if variable or label redefined
+- Constants and labels share the same namespace
+- Error if same name used for both constant and label
+- Error if constant or label redefined
 
 ### 5. Addressing Mode Interaction
 
-When a variable is used in an operand:
+When a constant is used in an operand:
 
 ```assembly
 VALUE = $42
@@ -180,7 +180,7 @@ LDA VALUE       ; Zero page or absolute, depends on value
 ```
 
 The assembler:
-1. Substitutes variable value
+1. Substitutes constant value
 2. Applies normal addressing mode detection
 3. Uses hex digit count heuristic (2 digits = ZP, 4 = absolute)
 
@@ -189,65 +189,65 @@ The assembler:
 ### Phase 1: Core Infrastructure
 
 1. **Extend parser** (`src/assembler/parser.rs`):
-   - Detect variable assignment syntax (`NAME = VALUE`)
-   - Parse variable name and value
-   - Validate variable names (same as labels)
+   - Detect constant assignment syntax (`NAME = VALUE`)
+   - Parse constant name and value
+   - Validate constant names (same as labels)
    - Distinguish from label definitions (which have `:`)
 
 2. **Extend symbol system** (`src/assembler/symbol_table.rs`):
    - Add `SymbolKind` enum
    - Update `Symbol` struct with `kind` field
    - Rename `address` to `value` for clarity
-   - Add methods: `add_variable()`, `lookup()`, `is_variable()`
+   - Add methods: `add_constant()`, `lookup()`, `is_constant()`
 
 3. **Update assembler** (`src/assembler.rs`):
-   - Process variable assignments in Pass 1
-   - Add variables to symbol table immediately
-   - Check for duplicate names (variable/label collision)
+   - Process constant assignments in Pass 1
+   - Add constants to symbol table immediately
+   - Check for duplicate names (constant/label collision)
 
 4. **Update operand resolution** (`src/assembler/encoder.rs`):
-   - When resolving operand, check if it's a variable name
-   - If variable, substitute value
+   - When resolving operand, check if it's a constant name
+   - If constant, substitute value
    - If label, use address (existing behavior)
    - Apply addressing mode detection to resolved value
 
 ### Phase 2: Error Handling
 
 1. **New error types**:
-   - `ErrorType::UndefinedVariable` - Variable used before definition
-   - `ErrorType::DuplicateVariable` - Variable defined twice
-   - `ErrorType::NameCollision` - Same name used for variable and label
-   - `ErrorType::InvalidVariableValue` - Value out of range
+   - `ErrorType::UndefinedConstant` - Constant used before definition
+   - `ErrorType::DuplicateConstant` - Constant defined twice
+   - `ErrorType::NameCollision` - Same name used for constant and label
+   - `ErrorType::InvalidConstantValue` - Value out of range
 
 2. **Error messages**:
-   - "Variable 'FOO' used but not defined"
-   - "Variable 'BAR' already defined at line X"
-   - "Name 'START' used as both variable and label"
+   - "Constant 'FOO' used but not defined"
+   - "Constant 'BAR' already defined at line X"
+   - "Name 'START' used as both constant and label"
 
 ### Phase 3: Testing
 
 **Unit tests** (in `src/assembler/parser.rs`):
-- Parse variable assignment (`NAME = VALUE`)
+- Parse constant assignment (`NAME = VALUE`)
 - Parse various value formats (hex, decimal, binary)
-- Validate variable names
+- Validate constant names
 - Reject invalid syntax
-- Distinguish variable assignment from label definition
+- Distinguish constant assignment from label definition
 
 **Integration tests** (in `tests/assembler_tests.rs`):
-- Basic variable definition and usage
-- Multiple variables
-- Variables with different number formats
-- Variables in different addressing modes
-- Variable name validation
+- Basic constant definition and usage
+- Multiple constants
+- Constants with different number formats
+- Constants in different addressing modes
+- Constant name validation
 - Error cases (undefined, duplicate, collision)
-- Variables with labels in same program
-- Complex program with many variables
+- Constants with labels in same program
+- Complex program with many constants
 
 **Example test case**:
 
 ```rust
 #[test]
-fn test_basic_variable_definition() {
+fn test_basic_constant_definition() {
     let source = r#"
         VALUE = $42
         LDA #VALUE
@@ -258,14 +258,14 @@ fn test_basic_variable_definition() {
 }
 
 #[test]
-fn test_undefined_variable_error() {
+fn test_undefined_constant_error() {
     let source = "LDA #UNDEFINED";
 
     let result = assemble(source);
     assert!(result.is_err());
 
     let errors = result.unwrap_err();
-    assert_eq!(errors[0].error_type, ErrorType::UndefinedVariable);
+    assert_eq!(errors[0].error_type, ErrorType::UndefinedConstant);
 }
 ```
 
@@ -277,12 +277,12 @@ fn test_undefined_variable_error() {
 2. **Arithmetic**: `RESULT = $1000 + $0020`
 3. **String constants**: `MSG = "HELLO"`
 4. **Preprocessor conditionals**: `.ifdef`, `.ifndef`
-5. **Local variables**: Variables scoped to labels
+5. **Local constants**: Constants scoped to labels
 
 ## Compatibility
 
 - Backwards compatible: existing assembly code works unchanged
-- New variable assignment syntax is optional
+- New constant assignment syntax is optional
 - No changes to existing assembler behavior
 - Symbol table extended but old fields preserved (renamed for clarity)
 
@@ -290,10 +290,10 @@ fn test_undefined_variable_error() {
 
 ### Test Coverage
 
-1. **Happy path**: Variables work in all addressing modes
+1. **Happy path**: Constants work in all addressing modes
 2. **Edge cases**: Boundary values (0, 255, 256, 65535)
 3. **Error handling**: All error types covered
-4. **Integration**: Variables + labels + directives together
+4. **Integration**: Constants + labels + directives together
 5. **Regression**: Existing assembler tests still pass
 
 ### Example Programs
@@ -335,20 +335,20 @@ SEND_CHAR:
 
 ## Success Criteria
 
-- [ ] Variables can be defined with `=` assignment syntax
-- [ ] Variables work in all addressing modes
-- [ ] Variable names follow label naming rules
-- [ ] Undefined variable usage produces clear error
-- [ ] Duplicate variable definition produces error
-- [ ] Variable/label name collision detected
+- [ ] Constants can be defined with `=` assignment syntax
+- [ ] Constants work in all addressing modes
+- [ ] Constant names follow label naming rules
+- [ ] Undefined constant usage produces clear error
+- [ ] Duplicate constant definition produces error
+- [ ] Constant/label name collision detected
 - [ ] All tests pass (unit + integration)
 - [ ] Documentation updated
 - [ ] Example programs provided
 
 ## Documentation Updates
 
-1. Update `CLAUDE.md` with variable syntax
-2. Add example to `examples/variables.rs`
+1. Update `CLAUDE.md` with constant syntax
+2. Add example to `examples/constants.rs`
 3. Update assembler module documentation
 4. Add to README if appropriate
 
@@ -356,11 +356,11 @@ SEND_CHAR:
 
 ## Open Questions
 
-1. Should variables be case-sensitive or normalized to uppercase like labels?
+1. Should constants be case-sensitive or normalized to uppercase like labels?
    - **Decision**: Normalize to uppercase (consistent with labels)
 
-2. Should variables support forward references?
+2. Should constants support forward references?
    - **Decision**: No (simpler implementation, defined-before-use is clear)
 
-3. What's the maximum value for a variable?
+3. What's the maximum value for a constant?
    - **Decision**: 16-bit (0-65535), same as addresses
