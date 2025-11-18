@@ -248,7 +248,7 @@ START:
     assert!(symbol.is_some(), "Should find START label");
     let symbol = symbol.unwrap();
     assert_eq!(symbol.name, "START");
-    assert_eq!(symbol.address, 0, "START should be at address 0");
+    assert_eq!(symbol.value, 0, "START should be at address 0");
 
     // Verify bytes: LDA #$42 (A9 42) + JMP $0000 (4C 00 00)
     assert_eq!(output.bytes, vec![0xA9, 0x42, 0x4C, 0x00, 0x00]);
@@ -277,7 +277,7 @@ END:
     assert!(symbol.is_some(), "Should find END label");
     let symbol = symbol.unwrap();
     assert_eq!(
-        symbol.address, 5,
+        symbol.value, 5,
         "END should be at address 5 (after JMP + LDA)"
     );
 
@@ -308,7 +308,7 @@ LOOP:
     // Verify symbol table
     let symbol = output.lookup_symbol("LOOP");
     assert!(symbol.is_some());
-    assert_eq!(symbol.unwrap().address, 0);
+    assert_eq!(symbol.unwrap().value, 0);
 
     // BEQ LOOP should branch back
     // From address 2 (after LDA #$42), branch to address 0
@@ -344,7 +344,7 @@ FORWARD:
         "FORWARD label should exist in symbol table"
     );
     assert_eq!(
-        symbol.unwrap().address,
+        symbol.unwrap().value,
         3,
         "FORWARD should be at address 3 (BEQ=2 bytes, NOP=1 byte)"
     );
@@ -931,4 +931,63 @@ LOOP:
     // Offset = $1000 - $1004 = -4 = $FC (two's complement)
     // RTS ($1004-$1005)
     assert_eq!(result.bytes, vec![0xEA, 0xEA, 0xD0, 0xFC, 0x60]);
+}
+
+// T016: Integration test for basic constant definition
+#[test]
+fn test_constant_definition_basic() {
+    let source = r#"
+MAX = 255
+SCREEN = $4000
+BITS = %11110000
+
+START:
+    NOP
+"#;
+
+    let result = assemble(source);
+    assert!(result.is_ok(), "Assembly with constants should succeed");
+
+    let output = result.unwrap();
+
+    // Verify constants are in symbol table
+    let max_symbol = output.lookup_symbol("MAX");
+    assert!(max_symbol.is_some(), "MAX constant should be in symbol table");
+    let max_symbol = max_symbol.unwrap();
+    assert_eq!(max_symbol.value, 255);
+    assert_eq!(max_symbol.kind, lib6502::assembler::SymbolKind::Constant);
+
+    let screen_symbol = output.lookup_symbol("SCREEN");
+    assert!(
+        screen_symbol.is_some(),
+        "SCREEN constant should be in symbol table"
+    );
+    let screen_symbol = screen_symbol.unwrap();
+    assert_eq!(screen_symbol.value, 0x4000);
+    assert_eq!(
+        screen_symbol.kind,
+        lib6502::assembler::SymbolKind::Constant
+    );
+
+    let bits_symbol = output.lookup_symbol("BITS");
+    assert!(
+        bits_symbol.is_some(),
+        "BITS constant should be in symbol table"
+    );
+    let bits_symbol = bits_symbol.unwrap();
+    assert_eq!(bits_symbol.value, 0b11110000);
+    assert_eq!(bits_symbol.kind, lib6502::assembler::SymbolKind::Constant);
+
+    // Verify label is also in symbol table with correct kind
+    let start_symbol = output.lookup_symbol("START");
+    assert!(
+        start_symbol.is_some(),
+        "START label should be in symbol table"
+    );
+    let start_symbol = start_symbol.unwrap();
+    assert_eq!(start_symbol.value, 0); // Address 0
+    assert_eq!(start_symbol.kind, lib6502::assembler::SymbolKind::Label);
+
+    // Verify the NOP instruction assembled correctly
+    assert_eq!(output.bytes, vec![0xEA]); // NOP opcode
 }

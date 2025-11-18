@@ -8,6 +8,9 @@ pub struct AssemblyLine {
     /// Line number in source file (1-indexed)
     pub line_number: usize,
 
+    /// Optional constant assignment (e.g., ("MAX", "255") from "MAX = 255")
+    pub constant: Option<(String, String)>,
+
     /// Optional label definition (e.g., "START" from "START:")
     pub label: Option<String>,
 
@@ -70,6 +73,7 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
     if let Some(stripped) = trimmed.strip_prefix(';') {
         return Some(AssemblyLine {
             line_number,
+            constant: None,
             label: None,
             mnemonic: None,
             operand: None,
@@ -91,6 +95,7 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
     if code_part.is_empty() {
         return Some(AssemblyLine {
             line_number,
+            constant: None,
             label: None,
             mnemonic: None,
             operand: None,
@@ -98,6 +103,26 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
             comment: comment_part,
             span: (0, line.len()),
         });
+    }
+
+    // Check for constant assignment (NAME = VALUE) - must be checked before label
+    if let Some(eq_pos) = code_part.find('=') {
+        let name_part = code_part[..eq_pos].trim();
+        let value_part = code_part[eq_pos + 1..].trim();
+
+        // Validate name: not empty and no internal whitespace
+        if !name_part.is_empty() && !name_part.contains(char::is_whitespace) {
+            return Some(AssemblyLine {
+                line_number,
+                constant: Some((name_part.to_uppercase(), value_part.to_string())),
+                label: None,
+                mnemonic: None,
+                operand: None,
+                directive: None,
+                comment: comment_part,
+                span: (0, line.len()),
+            });
+        }
     }
 
     // Check for label (ends with colon)
@@ -145,6 +170,7 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
 
     Some(AssemblyLine {
         line_number,
+        constant: None,
         label,
         mnemonic,
         operand,
@@ -603,6 +629,67 @@ mod tests {
         let result = parse_directive(".unknown $1234");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Unknown directive"));
+    }
+
+    // T013-T015: Unit tests for constant parsing
+
+    #[test]
+    fn test_parse_constant_simple() {
+        let line = parse_line("MAX = 255", 1).unwrap();
+        assert_eq!(line.constant, Some(("MAX".to_string(), "255".to_string())));
+        assert_eq!(line.label, None);
+        assert_eq!(line.mnemonic, None);
+        assert_eq!(line.operand, None);
+    }
+
+    #[test]
+    fn test_parse_constant_hex() {
+        let line = parse_line("SCREEN = $4000", 1).unwrap();
+        assert_eq!(
+            line.constant,
+            Some(("SCREEN".to_string(), "$4000".to_string()))
+        );
+        assert_eq!(line.label, None);
+        assert_eq!(line.mnemonic, None);
+    }
+
+    #[test]
+    fn test_parse_constant_binary() {
+        let line = parse_line("BITS = %11110000", 1).unwrap();
+        assert_eq!(
+            line.constant,
+            Some(("BITS".to_string(), "%11110000".to_string()))
+        );
+        assert_eq!(line.label, None);
+        assert_eq!(line.mnemonic, None);
+    }
+
+    #[test]
+    fn test_parse_constant_with_whitespace() {
+        let line = parse_line("  MAX   =   $FF", 1).unwrap();
+        assert_eq!(
+            line.constant,
+            Some(("MAX".to_string(), "$FF".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_constant_with_comment() {
+        let line = parse_line("PAGE_SIZE = 256  ; bytes per page", 1).unwrap();
+        assert_eq!(
+            line.constant,
+            Some(("PAGE_SIZE".to_string(), "256".to_string()))
+        );
+        assert_eq!(line.comment, Some("bytes per page".to_string()));
+    }
+
+    #[test]
+    fn test_parse_constant_lowercase_normalized() {
+        let line = parse_line("max = 100", 1).unwrap();
+        assert_eq!(
+            line.constant,
+            Some(("MAX".to_string(), "100".to_string()))
+        );
     }
 
     #[test]

@@ -53,8 +53,8 @@ Implement named constant support for the 6502 assembler using `NAME = VALUE` syn
 
 ### Tasks
 
-- [ ] T001 Run existing assembler test suite and verify all tests pass
-- [ ] T002 Run Klaus functional test and verify it passes
+- [X] T001 Run existing assembler test suite and verify all tests pass
+- [X] T002 Run Klaus functional test and verify it passes
 
 ---
 
@@ -74,12 +74,12 @@ Implement named constant support for the 6502 assembler using `NAME = VALUE` syn
 
 ### Tasks
 
-- [ ] T003 [P] Add SymbolKind enum to src/assembler.rs with Label and Constant variants
-- [ ] T004 [P] Extend Symbol struct in src/assembler.rs with kind: SymbolKind field
-- [ ] T005 Rename Symbol.address field to Symbol.value in src/assembler.rs
-- [ ] T006 Update all references to symbol.address to symbol.value in src/assembler.rs (5 locations)
-- [ ] T007 [P] Update references to symbol.address in src/assembler/symbol_table.rs (3 unit tests)
-- [ ] T008 [P] Update references to symbol.address in tests/assembler_tests.rs (4+ assertions)
+- [X] T003 [P] Add SymbolKind enum to src/assembler.rs with Label and Constant variants
+- [X] T004 [P] Extend Symbol struct in src/assembler.rs with kind: SymbolKind field
+- [X] T005 Rename Symbol.address field to Symbol.value in src/assembler.rs
+- [X] T006 Update all references to symbol.address to symbol.value in src/assembler.rs (5 locations)
+- [X] T007 [P] Update references to symbol.address in src/assembler/symbol_table.rs (3 unit tests)
+- [X] T008 [P] Update references to symbol.address in tests/assembler_tests.rs (4+ assertions)
 
 **Validation**: Run `cargo build` and ensure no compilation errors
 
@@ -106,16 +106,16 @@ Implement named constant support for the 6502 assembler using `NAME = VALUE` syn
 
 ### Tasks
 
-- [ ] T009 [P] [US1] Extend AssemblyLine struct in src/assembler/parser.rs with constant: Option<(String, String)> field
-- [ ] T010 [US1] Add constant detection logic in src/assembler/parser.rs before label detection (after comment stripping, line ~102)
-- [ ] T011 [P] [US1] Implement constant parsing logic in src/assembler/parser.rs (detect =, extract name/value, validate name format)
-- [ ] T012 [US1] Process constant assignments in Pass 1 of src/assembler.rs, adding to symbol table with SymbolKind::Constant
+- [X] T009 [P] [US1] Extend AssemblyLine struct in src/assembler/parser.rs with constant: Option<(String, String)> field
+- [X] T010 [US1] Add constant detection logic in src/assembler/parser.rs before label detection (after comment stripping, line ~102)
+- [X] T011 [P] [US1] Implement constant parsing logic in src/assembler/parser.rs (detect =, extract name/value, validate name format)
+- [X] T012 [US1] Process constant assignments in Pass 1 of src/assembler.rs, adding to symbol table with SymbolKind::Constant
 
 **Tests**:
-- [ ] T013 [P] [US1] Add unit test in src/assembler/parser.rs for parsing simple constant (MAX = 255)
-- [ ] T014 [P] [US1] Add unit test in src/assembler/parser.rs for parsing hex constant (SCREEN = $4000)
-- [ ] T015 [P] [US1] Add unit test in src/assembler/parser.rs for parsing binary constant (BITS = %11110000)
-- [ ] T016 [P] [US1] Add integration test in tests/assembler_tests.rs for basic constant definition
+- [X] T013 [P] [US1] Add unit test in src/assembler/parser.rs for parsing simple constant (MAX = 255)
+- [X] T014 [P] [US1] Add unit test in src/assembler/parser.rs for parsing hex constant (SCREEN = $4000)
+- [X] T015 [P] [US1] Add unit test in src/assembler/parser.rs for parsing binary constant (BITS = %11110000)
+- [X] T016 [P] [US1] Add integration test in tests/assembler_tests.rs for basic constant definition
 
 **Validation**: Run `cargo test` and verify new tests pass
 

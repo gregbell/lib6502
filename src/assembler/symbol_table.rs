@@ -22,7 +22,8 @@ impl SymbolTable {
     pub fn add_symbol(
         &mut self,
         name: String,
-        address: u16,
+        value: u16,
+        kind: crate::assembler::SymbolKind,
         defined_at: usize,
     ) -> Result<(), Symbol> {
         // Check for duplicates
@@ -32,7 +33,8 @@ impl SymbolTable {
 
         self.symbols.push(Symbol {
             name,
-            address,
+            value,
+            kind,
             defined_at,
         });
 
@@ -64,15 +66,29 @@ mod tests {
     fn test_symbol_table_add_lookup() {
         let mut table = SymbolTable::new();
 
-        assert!(table.add_symbol("START".to_string(), 0x8000, 1).is_ok());
-        assert!(table.add_symbol("LOOP".to_string(), 0x8010, 5).is_ok());
+        assert!(table
+            .add_symbol(
+                "START".to_string(),
+                0x8000,
+                crate::assembler::SymbolKind::Label,
+                1
+            )
+            .is_ok());
+        assert!(table
+            .add_symbol(
+                "LOOP".to_string(),
+                0x8010,
+                crate::assembler::SymbolKind::Label,
+                5
+            )
+            .is_ok());
 
         let start = table.lookup_symbol("START").unwrap();
         assert_eq!(start.name, "START");
-        assert_eq!(start.address, 0x8000);
+        assert_eq!(start.value, 0x8000);
 
         let loop_sym = table.lookup_symbol("LOOP").unwrap();
-        assert_eq!(loop_sym.address, 0x8010);
+        assert_eq!(loop_sym.value, 0x8010);
 
         assert!(table.lookup_symbol("UNDEFINED").is_none());
     }
@@ -81,12 +97,24 @@ mod tests {
     fn test_symbol_table_duplicate() {
         let mut table = SymbolTable::new();
 
-        assert!(table.add_symbol("START".to_string(), 0x8000, 1).is_ok());
-        let result = table.add_symbol("START".to_string(), 0x9000, 10);
+        assert!(table
+            .add_symbol(
+                "START".to_string(),
+                0x8000,
+                crate::assembler::SymbolKind::Label,
+                1
+            )
+            .is_ok());
+        let result = table.add_symbol(
+            "START".to_string(),
+            0x9000,
+            crate::assembler::SymbolKind::Label,
+            10,
+        );
         assert!(result.is_err());
 
         // Original symbol should still be there
         let start = table.lookup_symbol("START").unwrap();
-        assert_eq!(start.address, 0x8000);
+        assert_eq!(start.value, 0x8000);
     }
 }

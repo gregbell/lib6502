@@ -51,7 +51,7 @@ impl AssemblerOutput {
     /// assert_eq!(output.lookup_symbol_addr("START"), Some(0));
     /// ```
     pub fn lookup_symbol_addr(&self, name: &str) -> Option<u16> {
-        self.lookup_symbol(name).map(|symbol| symbol.address)
+        self.lookup_symbol(name).map(|symbol| symbol.value)
     }
 
     /// Get source location for a given instruction address
@@ -65,16 +65,29 @@ impl AssemblerOutput {
     }
 }
 
-/// A symbol table entry mapping a label to an address
+/// Symbol classification: label (memory address) or constant (literal value)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymbolKind {
+    /// Memory address (defined with ':' suffix)
+    Label,
+
+    /// Literal value (defined with '=' assignment)
+    Constant,
+}
+
+/// A symbol table entry mapping a name to a value (address or constant)
 #[derive(Debug, Clone, PartialEq)]
 pub struct Symbol {
-    /// Label name (case-sensitive after normalization)
+    /// Symbol name (case-sensitive after normalization)
     pub name: String,
 
-    /// Resolved memory address for this label
-    pub address: u16,
+    /// Value: memory address for labels, literal value for constants
+    pub value: u16,
 
-    /// Source line where label was defined
+    /// Symbol classification (label or constant)
+    pub kind: SymbolKind,
+
+    /// Source line where symbol was defined
     pub defined_at: usize,
 }
 
@@ -242,9 +255,12 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                 });
             } else {
                 // Add to symbol table
-                if let Err(existing) =
-                    symbol_table.add_symbol(label.clone(), current_address, line.line_number)
-                {
+                if let Err(existing) = symbol_table.add_symbol(
+                    label.clone(),
+                    current_address,
+                    SymbolKind::Label,
+                    line.line_number,
+                ) {
                     errors.push(AssemblerError {
                         error_type: ErrorType::DuplicateLabel,
                         line: line.line_number,
@@ -257,6 +273,55 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                     });
                 }
             }
+        }
+
+        // Check for constant assignment
+        if let Some((ref name, ref value_str)) = line.constant {
+            // Validate constant name (same rules as labels)
+            if let Err(e) = validate_label(name) {
+                errors.push(AssemblerError {
+                    error_type: ErrorType::InvalidLabel,
+                    line: line.line_number,
+                    column: 0,
+                    span: line.span,
+                    message: format!("Invalid constant name: {}", e),
+                });
+            } else {
+                // Parse the constant value
+                match parser::parse_number(value_str) {
+                    Ok(value) => {
+                        // Add to symbol table with Constant kind
+                        if let Err(existing) = symbol_table.add_symbol(
+                            name.clone(),
+                            value,
+                            SymbolKind::Constant,
+                            line.line_number,
+                        ) {
+                            errors.push(AssemblerError {
+                                error_type: ErrorType::DuplicateLabel,
+                                line: line.line_number,
+                                column: 0,
+                                span: line.span,
+                                message: format!(
+                                    "Duplicate constant '{}' (previously defined at line {})",
+                                    name, existing.defined_at
+                                ),
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        errors.push(AssemblerError {
+                            error_type: ErrorType::InvalidOperand,
+                            line: line.line_number,
+                            column: 0,
+                            span: line.span,
+                            message: format!("Invalid constant value '{}': {}", value_str, e),
+                        });
+                    }
+                }
+            }
+            // Constants don't consume address space
+            continue;
         }
 
         // Handle directives
@@ -508,7 +573,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 ///
 /// let source = "START:\n    LDA #$42";
 /// let output = assemble_with_origin(source, 0x8000).unwrap();
-/// assert_eq!(output.symbol_table[0].address, 0x8000);
+/// assert_eq!(output.symbol_table[0].value, 0x8000);
 /// ```
 pub fn assemble_with_origin(
     source: &str,
@@ -601,7 +666,7 @@ fn resolve_operand(
     // Labels are stored in uppercase, so convert operand to uppercase for lookup
     let label_name = operand_trimmed.to_uppercase();
     if let Some(symbol) = symbol_table.lookup_symbol(&label_name) {
-        let target_address = symbol.address;
+        let target_address = symbol.value;
 
         // Determine if this is a branch instruction (needs relative addressing)
         let is_branch = matches!(
@@ -771,7 +836,7 @@ mod tests {
         // Check that the label has the correct address
         assert_eq!(output.symbol_table.len(), 1);
         assert_eq!(output.symbol_table[0].name, "START");
-        assert_eq!(output.symbol_table[0].address, 0x8000);
+        assert_eq!(output.symbol_table[0].value, 0x8000);
 
         // Check assembled bytes (LDA immediate)
         assert_eq!(output.bytes.len(), 2);
@@ -789,8 +854,8 @@ mod tests {
         let start = output.lookup_symbol("START").unwrap();
         let loop_label = output.lookup_symbol("LOOP").unwrap();
 
-        assert_eq!(start.address, 0x1000);
-        assert_eq!(loop_label.address, 0x1001); // After one NOP
+        assert_eq!(start.value, 0x1000);
+        assert_eq!(loop_label.value, 0x1001); // After one NOP
     }
 
     #[test]
@@ -832,7 +897,7 @@ mod tests {
         assert!(symbol.is_some());
         let symbol = symbol.unwrap();
         assert_eq!(symbol.name, "START");
-        assert_eq!(symbol.address, 0);
+        assert_eq!(symbol.value, 0);
         assert_eq!(symbol.defined_at, 1);
     }
 }
