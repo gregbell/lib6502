@@ -217,12 +217,12 @@ Implement named constant support for the 6502 assembler using `NAME = VALUE` syn
 
 ### Tasks
 
-- [ ] T035 [P] [US4] Add unit test in src/assembler/symbol_table.rs for adding constant to table
-- [ ] T036 [P] [US4] Add unit test in src/assembler/symbol_table.rs for adding label to table
-- [ ] T037 [P] [US4] Add unit test in src/assembler/symbol_table.rs for lookup returning correct kind
-- [ ] T038 [P] [US4] Add integration test in tests/assembler_tests.rs for mixed constants and labels in same program
-- [ ] T039 [P] [US4] Add integration test in tests/assembler_tests.rs for constants in all addressing modes
-- [ ] T040 [P] [US4] Verify existing Klaus functional test still passes with new symbol table changes
+- [X] T035 [P] [US4] Add unit test in src/assembler/symbol_table.rs for adding constant to table
+- [X] T036 [P] [US4] Add unit test in src/assembler/symbol_table.rs for adding label to table
+- [X] T037 [P] [US4] Add unit test in src/assembler/symbol_table.rs for lookup returning correct kind
+- [X] T038 [P] [US4] Add integration test in tests/assembler_tests.rs for mixed constants and labels in same program
+- [X] T039 [P] [US4] Add integration test in tests/assembler_tests.rs for constants in all addressing modes
+- [X] T040 [P] [US4] Verify existing Klaus functional test still passes with new symbol table changes
 
 **Validation**: Run full test suite including Klaus functional test
 

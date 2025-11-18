@@ -1175,3 +1175,119 @@ BAR = 100
     assert!(errors[0].message.contains("BAR"));
     assert!(errors[0].message.contains("already defined as a label"));
 }
+
+// T038: Integration test for mixed constants and labels in same program
+#[test]
+fn test_mixed_constants_and_labels() {
+    let source = r#"
+; Define constants
+MAX_LIVES = 3
+SCREEN_ADDR = $4000
+ZP_TEMP = $20
+
+; Define labels and code
+START:
+    LDA #MAX_LIVES
+    STA ZP_TEMP
+
+LOOP:
+    LDA ZP_TEMP
+    STA SCREEN_ADDR
+    JMP LOOP
+"#;
+
+    let result = assemble(source);
+    assert!(
+        result.is_ok(),
+        "Should successfully assemble mixed constants and labels"
+    );
+
+    let output = result.unwrap();
+
+    // Verify constants are in symbol table
+    let max_lives = output.lookup_symbol("MAX_LIVES").unwrap();
+    assert_eq!(max_lives.kind, lib6502::assembler::SymbolKind::Constant);
+    assert_eq!(max_lives.value, 3);
+
+    let screen = output.lookup_symbol("SCREEN_ADDR").unwrap();
+    assert_eq!(screen.kind, lib6502::assembler::SymbolKind::Constant);
+    assert_eq!(screen.value, 0x4000);
+
+    let zp = output.lookup_symbol("ZP_TEMP").unwrap();
+    assert_eq!(zp.kind, lib6502::assembler::SymbolKind::Constant);
+    assert_eq!(zp.value, 0x20);
+
+    // Verify labels are in symbol table
+    let start = output.lookup_symbol("START").unwrap();
+    assert_eq!(start.kind, lib6502::assembler::SymbolKind::Label);
+    assert_eq!(start.value, 0); // Address 0
+
+    let loop_label = output.lookup_symbol("LOOP").unwrap();
+    assert_eq!(loop_label.kind, lib6502::assembler::SymbolKind::Label);
+    // LOOP address depends on instruction sizes - just verify it exists
+
+    // Verify program assembled successfully
+    assert!(!output.bytes.is_empty());
+    assert_eq!(output.bytes[0], 0xA9); // LDA immediate
+    assert_eq!(output.bytes[1], 0x03); // value 3
+}
+
+// T039: Integration test for constants in all addressing modes
+#[test]
+fn test_constants_all_addressing_modes() {
+    let source = r#"
+; Define test constants
+IMM_VAL = 42
+ZP_ADDR = $50
+ABS_ADDR = $2000
+ZP_IDX = $60
+ABS_IDX = $3000
+
+    ; Immediate mode
+    LDA #IMM_VAL
+
+    ; Zero page
+    STA ZP_ADDR
+
+    ; Absolute
+    STA ABS_ADDR
+
+    ; Zero page indexed
+    LDA ZP_IDX,X
+    LDX ZP_IDX,Y  ; LDX supports ZP,Y
+
+    ; Absolute indexed
+    STA ABS_IDX,X
+    STA ABS_IDX,Y
+"#;
+
+    let result = assemble(source);
+    if result.is_err() {
+        eprintln!("Assembly errors: {:#?}", result.as_ref().unwrap_err());
+    }
+    assert!(
+        result.is_ok(),
+        "Should successfully use constants in all addressing modes"
+    );
+
+    let output = result.unwrap();
+
+    // Verify all constants are in symbol table
+    assert_eq!(output.lookup_symbol("IMM_VAL").unwrap().value, 42);
+    assert_eq!(output.lookup_symbol("ZP_ADDR").unwrap().value, 0x50);
+    assert_eq!(output.lookup_symbol("ABS_ADDR").unwrap().value, 0x2000);
+    assert_eq!(output.lookup_symbol("ZP_IDX").unwrap().value, 0x60);
+    assert_eq!(output.lookup_symbol("ABS_IDX").unwrap().value, 0x3000);
+
+    // Verify assembled bytes
+    let expected = vec![
+        0xA9, 0x2A, // LDA #42
+        0x85, 0x50, // STA $50 (zero page)
+        0x8D, 0x00, 0x20, // STA $2000 (absolute)
+        0xB5, 0x60, // LDA $60,X (zero page,X)
+        0xB6, 0x60, // LDX $60,Y (zero page,Y)
+        0x9D, 0x00, 0x30, // STA $3000,X (absolute,X)
+        0x99, 0x00, 0x30, // STA $3000,Y (absolute,Y)
+    ];
+    assert_eq!(output.bytes, expected);
+}

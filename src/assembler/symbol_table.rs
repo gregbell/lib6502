@@ -117,4 +117,82 @@ mod tests {
         let start = table.lookup_symbol("START").unwrap();
         assert_eq!(start.value, 0x8000);
     }
+
+    // T035: Unit test for adding constant to table
+    #[test]
+    fn test_add_constant() {
+        let mut table = SymbolTable::new();
+
+        assert!(table
+            .add_symbol(
+                "MAX".to_string(),
+                255,
+                crate::assembler::SymbolKind::Constant,
+                1
+            )
+            .is_ok());
+
+        let constant = table.lookup_symbol("MAX").unwrap();
+        assert_eq!(constant.name, "MAX");
+        assert_eq!(constant.value, 255);
+        assert_eq!(constant.kind, crate::assembler::SymbolKind::Constant);
+        assert_eq!(constant.defined_at, 1);
+    }
+
+    // T036: Unit test for adding label to table
+    #[test]
+    fn test_add_label() {
+        let mut table = SymbolTable::new();
+
+        assert!(table
+            .add_symbol(
+                "START".to_string(),
+                0x8000,
+                crate::assembler::SymbolKind::Label,
+                5
+            )
+            .is_ok());
+
+        let label = table.lookup_symbol("START").unwrap();
+        assert_eq!(label.name, "START");
+        assert_eq!(label.value, 0x8000);
+        assert_eq!(label.kind, crate::assembler::SymbolKind::Label);
+        assert_eq!(label.defined_at, 5);
+    }
+
+    // T037: Unit test for lookup returning correct kind
+    #[test]
+    fn test_lookup_returns_correct_kind() {
+        let mut table = SymbolTable::new();
+
+        // Add a constant
+        table
+            .add_symbol(
+                "MAX".to_string(),
+                255,
+                crate::assembler::SymbolKind::Constant,
+                1,
+            )
+            .unwrap();
+
+        // Add a label
+        table
+            .add_symbol(
+                "LOOP".to_string(),
+                0x1000,
+                crate::assembler::SymbolKind::Label,
+                10,
+            )
+            .unwrap();
+
+        // Verify constant lookup
+        let max = table.lookup_symbol("MAX").unwrap();
+        assert_eq!(max.kind, crate::assembler::SymbolKind::Constant);
+        assert_eq!(max.value, 255);
+
+        // Verify label lookup
+        let loop_label = table.lookup_symbol("LOOP").unwrap();
+        assert_eq!(loop_label.kind, crate::assembler::SymbolKind::Label);
+        assert_eq!(loop_label.value, 0x1000);
+    }
 }
