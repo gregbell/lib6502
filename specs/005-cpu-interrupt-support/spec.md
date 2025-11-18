@@ -13,6 +13,7 @@
 - Q: How should devices be notified that their interrupt is being serviced? → A: ISR acknowledges explicitly: Devices are acknowledged only when the ISR reads/writes their status/control registers (matches real hardware behavior).
 - Q: How should devices expose their interrupt status for ISR polling? → A: Memory-mapped status registers: Devices expose status via reads/writes to specific memory addresses. ISR polls by reading memory. Matches real hardware behavior.
 - Q: How should memory addresses be allocated for device status and control registers? → A: Device specifies at construction: Each device declares its required address range when created. System validates no overlap. Flexible and explicit.
+- Q: What is the cycle cost for interrupt processing? → A: 7 cycles
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -48,22 +49,6 @@ Multiple devices connected to the CPU may signal interrupts independently. The s
 
 ---
 
-### User Story 3 - Cross-Language Device Support (Priority: P3)
-
-A developer writes a device emulator in JavaScript that needs to signal interrupts to the Rust-based CPU when running in a WASM environment. The device should be able to trigger interrupts and receive notification when they are handled.
-
-**Why this priority**: This enables the web demo to have interactive devices written in JavaScript, making the emulator more accessible and easier to extend for educational purposes.
-
-**Independent Test**: Can be tested by creating a JavaScript-based timer device in the WASM demo that signals periodic interrupts and logs when they are handled.
-
-**Acceptance Scenarios**:
-
-1. **Given** a JavaScript device is connected to the WASM CPU, **When** the device asserts its interrupt request, **Then** the CPU processes the interrupt identically to native devices
-2. **Given** the ISR is handling an interrupt from a JavaScript device, **When** the ISR reads the device's memory-mapped status register, **Then** the JavaScript device correctly reports its interrupt status
-3. **Given** a JavaScript device needs to assert an interrupt, **When** the device uses the provided interface, **Then** the interrupt request is registered without blocking JavaScript execution
-
----
-
 ### Edge Cases
 
 - What happens when an interrupt is signaled but no interrupt handler is registered?
@@ -86,7 +71,7 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 - **FR-007**: The system MUST implement a level-sensitive IRQ line that remains active while any device has an unserviced interrupt request (multiple devices share the IRQ line via logical OR)
 - **FR-008**: The CPU MUST save processor state (program counter and status flags) on the stack when entering an interrupt handler
 - **FR-009**: The CPU MUST set the interrupt disable flag when entering an interrupt handler to prevent nested interrupts (unless explicitly re-enabled)
-- **FR-010**: The interrupt mechanism MUST work across language boundaries in WASM (JavaScript devices → Rust CPU)
+- **FR-010**: The interrupt processing sequence (checking IRQ line, pushing PC and status to stack, reading vector, jumping to handler) MUST consume exactly 7 CPU cycles matching real 6502 hardware
 - **FR-011**: The interrupt system MUST not block normal CPU execution when no interrupts are pending (zero overhead when idle)
 - **FR-012**: Devices MUST declare their required memory address range at construction time
 - **FR-013**: The system MUST validate that device memory address ranges do not overlap
@@ -108,9 +93,9 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 
 - **SC-001**: Devices can successfully trigger interrupts and the CPU processes them within one instruction cycle after the interrupt is signaled (when I flag is clear)
 - **SC-002**: The system correctly handles at least 10 different interrupt sources operating simultaneously
-- **SC-003**: JavaScript-based devices in the WASM demo can trigger interrupts with the same reliability as native Rust devices (100% delivery rate)
-- **SC-004**: The interrupt overhead when no interrupts are pending is unmeasurable (no performance degradation)
-- **SC-005**: All interrupt-driven 6502 test programs execute correctly with cycle-accurate timing
+- **SC-003**: The interrupt overhead when no interrupts are pending is unmeasurable (no performance degradation)
+- **SC-004**: All interrupt-driven 6502 test programs execute correctly with cycle-accurate timing
+- **SC-005**: The interrupt processing sequence completes in exactly 7 cycles as measured by the cycle counter
 
 ## Assumptions
 
