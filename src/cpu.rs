@@ -480,6 +480,34 @@ impl<M: MemoryBus> CPU<M> {
         self.irq_pending && !self.flag_i
     }
 
+    /// Add cycles to the cycle counter.
+    ///
+    /// Helper method for tracking CPU cycle consumption. Using this helper
+    /// instead of direct `self.cycles += N` makes cycle accounting explicit
+    /// and easier to audit for accuracy.
+    ///
+    /// # Arguments
+    ///
+    /// * `cycles` - Number of cycles to add
+    #[inline]
+    fn tick(&mut self, cycles: u64) {
+        self.cycles += cycles;
+    }
+
+    /// Push a byte onto the stack and consume 1 cycle.
+    ///
+    /// Combines `push_stack()` with cycle accounting for cleaner code.
+    /// The 6502 takes 1 cycle per stack push operation.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - Byte to push onto stack
+    #[inline]
+    fn push_stack_timed(&mut self, value: u8) {
+        self.push_stack(value);
+        self.tick(1);
+    }
+
     /// Service a pending interrupt request with cycle-accurate 6502 IRQ sequence.
     ///
     /// Implements the 7-cycle hardware interrupt sequence:
@@ -507,35 +535,29 @@ impl<M: MemoryBus> CPU<M> {
     /// Stack overflow is not checked (matches hardware behavior).
     fn service_interrupt(&mut self) -> Result<(), ExecutionError> {
         // Cycle 1-2: Push PC high byte, then low byte to stack
-        let pc_high = (self.pc >> 8) as u8;
-        let pc_low = (self.pc & 0xFF) as u8;
-
-        self.push_stack(pc_high);
-        self.cycles += 1;
-
-        self.push_stack(pc_low);
-        self.cycles += 1;
+        let [pc_high, pc_low] = self.pc.to_be_bytes();
+        self.push_stack_timed(pc_high);
+        self.push_stack_timed(pc_low);
 
         // Cycle 3: Push status register to stack
         // Note: B flag is pushed as 0 for IRQ (differs from BRK which pushes 1)
         let status = self.status() & !0b00010000; // Clear B flag for IRQ
-        self.push_stack(status);
-        self.cycles += 1;
+        self.push_stack_timed(status);
 
-        // Cycle 4: Set I flag to prevent nested interrupts (0 cycles, part of above operation)
+        // Set I flag to prevent nested interrupts (0 cycles, part of above operation)
         self.flag_i = true;
 
-        // Cycle 5-6: Read IRQ vector from 0xFFFE-0xFFFF
+        // Cycle 4-5: Read IRQ vector from 0xFFFE-0xFFFF
         let vector_low = self.memory.read(0xFFFE) as u16;
-        self.cycles += 1;
+        self.tick(1);
 
         let vector_high = self.memory.read(0xFFFF) as u16;
-        self.cycles += 1;
+        self.tick(1);
 
-        // Cycle 7: Set PC to vector address (2 cycles for internal operation)
+        // Cycle 6-7: Set PC to vector address (2 cycles for internal operation)
         let handler_address = (vector_high << 8) | vector_low;
         self.pc = handler_address;
-        self.cycles += 2;
+        self.tick(2);
 
         Ok(())
     }

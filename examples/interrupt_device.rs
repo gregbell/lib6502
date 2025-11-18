@@ -260,11 +260,8 @@ impl Device for TimerDevice {
         self
     }
 
-    // Note: has_interrupt() is implemented via InterruptDevice trait
-    // We override Device::has_interrupt() to delegate to InterruptDevice implementation
-    fn has_interrupt(&self) -> bool {
-        // Delegate to InterruptDevice trait implementation
-        <Self as InterruptDevice>::has_interrupt(self)
+    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
+        Some(self)
     }
 }
 
@@ -505,11 +502,8 @@ impl Device for UartDevice {
         self
     }
 
-    // Note: has_interrupt() is implemented via InterruptDevice trait
-    // We override Device::has_interrupt() to delegate to InterruptDevice implementation
-    fn has_interrupt(&self) -> bool {
-        // Delegate to InterruptDevice trait implementation
-        <Self as InterruptDevice>::has_interrupt(self)
+    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
+        Some(self)
     }
 }
 

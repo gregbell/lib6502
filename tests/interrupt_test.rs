@@ -20,6 +20,14 @@ struct MockInterruptDevice {
 }
 
 impl MockInterruptDevice {
+    // Register offsets
+    const STATUS_REG: u16 = 0;
+    const CONTROL_REG: u16 = 1;
+
+    // Bit positions
+    const INTERRUPT_PENDING_BIT: u8 = 7;
+    const INTERRUPT_ACK_BIT: u8 = 7;
+
     fn new() -> Self {
         Self {
             interrupt_pending: false,
@@ -44,12 +52,11 @@ impl InterruptDevice for MockInterruptDevice {
 impl Device for MockInterruptDevice {
     fn read(&self, offset: u16) -> u8 {
         match offset {
-            0 => {
-                // STATUS register
+            Self::STATUS_REG => {
                 if self.interrupt_pending {
-                    0x80 // Bit 7 set
+                    1 << Self::INTERRUPT_PENDING_BIT
                 } else {
-                    0x00
+                    0
                 }
             }
             _ => 0x00,
@@ -57,11 +64,8 @@ impl Device for MockInterruptDevice {
     }
 
     fn write(&mut self, offset: u16, value: u8) {
-        if offset == 1 {
-            // CONTROL register - acknowledge interrupt
-            if value & 0x80 != 0 {
-                self.interrupt_pending = false;
-            }
+        if offset == Self::CONTROL_REG && value & (1 << Self::INTERRUPT_ACK_BIT) != 0 {
+            self.interrupt_pending = false;
         }
     }
 
@@ -77,9 +81,8 @@ impl Device for MockInterruptDevice {
         self
     }
 
-    fn has_interrupt(&self) -> bool {
-        // Delegate to InterruptDevice implementation
-        <Self as InterruptDevice>::has_interrupt(self)
+    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
+        Some(self)
     }
 }
 
