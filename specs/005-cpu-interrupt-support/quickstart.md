@@ -68,10 +68,27 @@ impl InterruptDevice for TimerDevice {
     fn has_interrupt(&self) -> bool {
         self.interrupt_pending
     }
+}
 
-    fn address_range(&self) -> (u16, u16) {
-        // Timer uses 4 bytes: status, control, counter_lo, counter_hi
-        (self.base_address, self.base_address + 3)
+impl Device for TimerDevice {
+    fn size(&self) -> u16 {
+        4  // Four registers: status, control, counter_lo, counter_hi
+    }
+
+    fn read(&self, offset: u16) -> u8 {
+        self.read(self.base_address + offset)  // Delegate to MemoryBus implementation
+    }
+
+    fn write(&mut self, offset: u16, value: u8) {
+        self.write(self.base_address + offset, value)  // Delegate to MemoryBus implementation
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -164,20 +181,47 @@ impl InterruptDevice for MyDevice {
     fn has_interrupt(&self) -> bool {
         self.interrupt_pending
     }
-
-    fn address_range(&self) -> (u16, u16) {
-        // Return (start, end_inclusive) for your register range
-        (self.base_address, self.base_address + N)
-    }
 }
 ```
 
 **Requirements**:
 - `has_interrupt()` MUST return current `interrupt_pending` value
-- `address_range()` MUST return unique range not overlapping other devices
-- Range size depends on how many registers your device needs
+- This is the ONLY method needed in InterruptDevice trait
 
-### Step 3: Implement MemoryBus Trait
+### Step 3: Implement Device Trait
+
+```rust
+impl Device for MyDevice {
+    fn size(&self) -> u16 {
+        N  // How many bytes your device needs (e.g., 4 for four registers)
+    }
+
+    fn read(&self, offset: u16) -> u8 {
+        // Delegate to your MemoryBus implementation
+        self.read(self.base_address + offset)
+    }
+
+    fn write(&mut self, offset: u16, value: u8) {
+        // Delegate to your MemoryBus implementation
+        self.write(self.base_address + offset, value)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+```
+
+**Requirements**:
+- `size()` MUST return how many bytes your device needs (number of registers)
+- Address range is calculated from: `(base_addr, base_addr + size() - 1)`
+- Base address is specified during `add_device()` registration
+
+### Step 4: Implement MemoryBus Trait
 
 ```rust
 impl MemoryBus for MyDevice {
@@ -238,54 +282,50 @@ impl MyDevice {
 - CPU will check IRQ line after each instruction
 - ISR will eventually poll your device's STATUS register
 
-### Step 5: Integrate with Memory Mapper
+### Step 5: Register Device with MappedMemory
+
+The existing `MappedMemory` system already handles device registration and routing. Simply register your device:
 
 ```rust
-pub struct MemoryMapper {
-    devices: Vec<Box<dyn InterruptDevice + MemoryBus>>,
-}
+use lib6502::MappedMemory;
 
-impl MemoryMapper {
-    pub fn add_device(&mut self, device: Box<dyn InterruptDevice + MemoryBus>) {
-        // Validate address range doesn't overlap
-        let new_range = device.address_range();
-        for existing in &self.devices {
-            let existing_range = existing.address_range();
-            if ranges_overlap(new_range, existing_range) {
-                panic!("Device address ranges overlap!");
-            }
-        }
-        self.devices.push(device);
-    }
+// Create memory mapper
+let mut memory = MappedMemory::new();
 
-    pub fn irq_active(&self) -> bool {
-        self.devices.iter().any(|d| d.has_interrupt())
-    }
-}
+// Add your interrupt device at base address 0xD000
+memory.add_device(
+    0xD000,  // Base address where device registers appear
+    Box::new(MyDevice::new(0xD000))
+)?;
 
-impl MemoryBus for MemoryMapper {
-    fn read(&self, addr: u16) -> u8 {
-        for device in &self.devices {
-            let (start, end) = device.address_range();
-            if addr >= start && addr <= end {
-                return device.read(addr);
-            }
-        }
-        // Fall through to RAM or other memory
-        0
-    }
+// The memory mapper automatically:
+// - Validates no address overlap (using base_addr + device.size())
+// - Routes read/write calls to your device
+// - Provides irq_active() that checks all devices' has_interrupt()
+```
 
-    fn write(&mut self, addr: u16, value: u8) {
-        for device in &mut self.devices {
-            let (start, end) = device.address_range();
-            if addr >= start && addr <= end {
-                device.write(addr, value);
-                return;
-            }
-        }
-        // Fall through to RAM or other memory
-    }
-}
+**How It Works**:
+1. `add_device(0xD000, device)` stores the base address (0xD000) and device reference
+2. Address range calculated as: `0xD000` to `0xD000 + device.size() - 1`
+3. Overlap detection prevents conflicts with other devices
+4. Memory reads/writes automatically routed based on address range
+5. `memory.irq_active()` returns true if ANY device's `has_interrupt()` is true
+
+**Example with Multiple Devices**:
+```rust
+let mut memory = MappedMemory::new();
+
+// RAM at 0x0000-0x7FFF (32KB)
+memory.add_device(0x0000, Box::new(RamDevice::new(32768)))?;
+
+// Your timer device at 0xD000-0xD003 (4 bytes)
+memory.add_device(0xD000, Box::new(TimerDevice::new(0xD000)))?;
+
+// UART device at 0xD100-0xD103 (4 bytes)
+memory.add_device(0xD100, Box::new(UartDevice::new(0xD100)))?;
+
+// ROM at 0x8000-0xFFFF (32KB)
+memory.add_device(0x8000, Box::new(RomDevice::new(rom_data)))?;
 ```
 
 ---

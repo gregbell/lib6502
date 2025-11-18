@@ -121,16 +121,15 @@ impl<M: MemoryBus> CPU<M> {
 pub trait InterruptDevice {
     /// Check if device has pending interrupt
     fn has_interrupt(&self) -> bool;
-
-    /// Get the memory address range this device responds to
-    fn address_range(&self) -> (u16, u16); // (start, end inclusive)
 }
 ```
 
 **Requirements**:
 - Devices MUST implement `InterruptDevice` trait
-- Devices MUST also implement `MemoryBus` trait (or be wrapped by memory mapper)
-- Devices MUST declare unique, non-overlapping address ranges
+- Devices MUST also implement `Device` trait (providing `size()` method)
+- Address ranges are declared via `MappedMemory::add_device(base_addr, device)` registration
+- The existing `Device::size()` method combined with registration base address defines the device's address range
+- Overlap detection happens automatically during `add_device()` call
 
 ---
 
