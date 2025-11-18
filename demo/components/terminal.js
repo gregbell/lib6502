@@ -64,7 +64,13 @@ export class Terminal {
         // Setup event listeners
         this.setupEventListeners();
 
-        // Display welcome message indicating ready state
+        // Terminal Ready State Indication (User Story 2)
+        // Display welcome message to indicate terminal is ready for serial I/O.
+        // This provides immediate visual feedback that:
+        // - The terminal component initialized successfully
+        // - UART communication is available at memory addresses $A000-$A003
+        // - User can start typing to send characters to the 6502 emulator
+        // - 6502 programs can write to $A000 to output text here
         this.write('6502 Serial Terminal Ready\r\n');
         this.write('UART: $A000-$A003\r\n');
         this.write('\r\n');

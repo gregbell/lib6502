@@ -42,8 +42,11 @@ class App {
             this.terminal = new Terminal('terminal-container');
 
             // Create emulator with UART transmit callback
+            // User Story 2: Terminal State Visibility - Immediate Character Display
+            // This callback is invoked synchronously when the 6502 writes to UART ($A000).
+            // Characters appear immediately in the terminal with no buffering, providing
+            // real-time visual feedback of serial output for debugging and interaction.
             this.emulator = new Emulator6502((char) => {
-                // Called when 6502 program writes to UART - display in terminal
                 this.terminal.write(char);
             });
 
