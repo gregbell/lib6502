@@ -5,6 +5,12 @@
 **Status**: Draft
 **Input**: User description: "add true interrupt support to the CPU. I can imagine either a promise based solution where a device passes a promise in when it triggers an interrupt and then resolves it once it's done after being called by the CPU or some type of game/event loop. It would be awesome if you could write a device in JavaScript if required."
 
+## Clarifications
+
+### Session 2025-11-18
+
+- Q: Should the interrupt mechanism mimic real 6502 hardware behavior (level-sensitive IRQ line, no queueing) or implement a modern queued interrupt controller? → A: Level-sensitive like real hardware: Single IRQ line, no queue. Multiple devices can pull IRQ low simultaneously. ISR polls device status registers to identify interrupt sources.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - External Device Signals CPU (Priority: P1)
@@ -33,9 +39,9 @@ Multiple devices connected to the CPU may signal interrupts independently. The s
 
 **Acceptance Scenarios**:
 
-1. **Given** multiple devices signal interrupts simultaneously, **When** the CPU processes interrupts, **Then** each interrupt is handled in the order they were signaled (FIFO)
-2. **Given** a device signals an interrupt while the CPU is handling another interrupt, **When** the first interrupt handler completes, **Then** the second interrupt is processed
-3. **Given** multiple devices have signaled interrupts, **When** each interrupt handler executes, **Then** the handler can identify which device triggered the interrupt
+1. **Given** multiple devices assert their interrupt request simultaneously, **When** the CPU processes the interrupt, **Then** the IRQ line remains active until all devices clear their interrupt requests
+2. **Given** a device asserts an interrupt while the CPU is handling another interrupt, **When** the first interrupt handler completes and clears the I flag, **Then** the CPU immediately re-enters the interrupt handler if the IRQ line is still active
+3. **Given** multiple devices have asserted interrupt requests, **When** the interrupt handler executes, **Then** the handler can poll device status registers to identify which devices triggered interrupts
 
 ---
 
@@ -49,9 +55,9 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 
 **Acceptance Scenarios**:
 
-1. **Given** a JavaScript device is connected to the WASM CPU, **When** the device signals an interrupt, **Then** the CPU processes the interrupt identically to native devices
-2. **Given** the CPU begins handling an interrupt from a JavaScript device, **When** the interrupt handler executes, **Then** the JavaScript device receives notification
-3. **Given** a JavaScript device needs to signal an interrupt, **When** the device uses the provided interface, **Then** the interrupt is queued without blocking JavaScript execution
+1. **Given** a JavaScript device is connected to the WASM CPU, **When** the device asserts its interrupt request, **Then** the CPU processes the interrupt identically to native devices
+2. **Given** the CPU begins handling an interrupt from a JavaScript device, **When** the interrupt handler executes, **Then** the JavaScript device receives acknowledgment notification
+3. **Given** a JavaScript device needs to assert an interrupt, **When** the device uses the provided interface, **Then** the interrupt request is registered without blocking JavaScript execution
 
 ---
 
@@ -73,7 +79,7 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 - **FR-004**: The CPU MUST execute interrupt handlers by reading the interrupt vector from memory locations 0xFFFE-0xFFFF (IRQ vector)
 - **FR-005**: Devices MUST receive notification when the CPU begins processing their interrupt
 - **FR-006**: The system MUST support multiple independent interrupt sources
-- **FR-007**: The system MUST process interrupts in the order they were signaled (FIFO) when multiple interrupts are pending
+- **FR-007**: The system MUST implement a level-sensitive IRQ line that remains active while any device has an unserviced interrupt request (multiple devices share the IRQ line via logical OR)
 - **FR-008**: The CPU MUST save processor state (program counter and status flags) on the stack when entering an interrupt handler
 - **FR-009**: The CPU MUST set the interrupt disable flag when entering an interrupt handler to prevent nested interrupts (unless explicitly re-enabled)
 - **FR-010**: The interrupt mechanism MUST work across language boundaries in WASM (JavaScript devices → Rust CPU)
@@ -82,10 +88,10 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 
 ### Key Entities
 
-- **Interrupt Signal**: Represents a device's request for CPU attention, including device identifier and any associated data
-- **Interrupt Queue**: Holds pending interrupt signals in FIFO order until the CPU can process them
-- **Interrupt Handler**: Code executed by the CPU in response to an interrupt, identified by the interrupt vector in memory
-- **Device Interface**: Abstract mechanism through which devices signal interrupts and receive notifications, independent of device implementation language
+- **IRQ Line**: Level-sensitive signal line shared by all devices; active (low) when any device has an unserviced interrupt request
+- **Device Interrupt State**: Each device maintains its own interrupt request flag that contributes to the shared IRQ line state
+- **Interrupt Handler**: Code executed by the CPU in response to an active IRQ line, identified by the interrupt vector in memory
+- **Device Interface**: Abstract mechanism through which devices assert/clear their interrupt request and receive acknowledgment from the CPU, independent of device implementation language
 
 ## Success Criteria *(mandatory)*
 
@@ -101,15 +107,15 @@ A developer writes a device emulator in JavaScript that needs to signal interrup
 
 - Interrupt handling follows the standard 6502 IRQ (Interrupt Request) behavior as documented in the MOS 6502 Programming Manual
 - The interrupt vector is read from memory addresses 0xFFFE (low byte) and 0xFFFF (high byte) as per 6502 specification
-- FIFO ordering is sufficient for interrupt priority (no priority levels needed)
+- The IRQ line is level-sensitive (active low) matching real 6502 hardware; no interrupt priority or queueing mechanism needed
 - The BRK instruction's existing interrupt behavior (if implemented) will be preserved and is compatible with hardware interrupts
-- Devices are responsible for clearing their own interrupt conditions; the CPU only acknowledges receipt
+- Devices are responsible for clearing their own interrupt request flags; the ISR must acknowledge the device to clear the IRQ line
 - The system does not need to support NMI (Non-Maskable Interrupt) in this initial implementation
 
 ## Out of Scope
 
 - NMI (Non-Maskable Interrupt) support - this feature focuses only on maskable IRQ interrupts
-- Interrupt priority levels - all interrupts are handled FIFO
+- Interrupt priority levels or queueing - the system uses a simple level-sensitive IRQ line like real hardware
 - Interrupt coalescing or batching optimizations
-- Hardware-specific interrupt controllers (e.g., VIC, PIA) - only the basic CPU interrupt mechanism
+- Hardware-specific interrupt controllers (e.g., VIC, PIA) - only the basic CPU IRQ line mechanism
 - Debugging or tracing tools for interrupt behavior
