@@ -1,0 +1,465 @@
+//! Integration tests for CPU interrupt support.
+//!
+//! These tests verify the hardware-accurate interrupt implementation including:
+//! - IRQ line checking after instruction execution
+//! - 7-cycle interrupt service sequence
+//! - I flag respect (interrupts disabled when I flag set)
+//! - Device interrupt acknowledgment
+//! - Multiple device coordination
+
+use lib6502::{CPU, Device, InterruptDevice, MappedMemory, MemoryBus, RamDevice};
+use std::any::Any;
+
+/// Mock interrupt device for testing.
+///
+/// This device exposes a simple memory-mapped interface:
+/// - Offset 0 (STATUS): Read interrupt pending (bit 7)
+/// - Offset 1 (CONTROL): Write to clear interrupt (bit 7)
+struct MockInterruptDevice {
+    interrupt_pending: bool,
+}
+
+impl MockInterruptDevice {
+    fn new() -> Self {
+        Self {
+            interrupt_pending: false,
+        }
+    }
+
+    fn trigger_interrupt(&mut self) {
+        self.interrupt_pending = true;
+    }
+
+    fn is_interrupt_pending(&self) -> bool {
+        self.interrupt_pending
+    }
+}
+
+impl InterruptDevice for MockInterruptDevice {
+    fn has_interrupt(&self) -> bool {
+        self.interrupt_pending
+    }
+}
+
+impl Device for MockInterruptDevice {
+    fn read(&self, offset: u16) -> u8 {
+        match offset {
+            0 => {
+                // STATUS register
+                if self.interrupt_pending {
+                    0x80 // Bit 7 set
+                } else {
+                    0x00
+                }
+            }
+            _ => 0x00,
+        }
+    }
+
+    fn write(&mut self, offset: u16, value: u8) {
+        match offset {
+            1 => {
+                // CONTROL register - acknowledge interrupt
+                if value & 0x80 != 0 {
+                    self.interrupt_pending = false;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn size(&self) -> u16 {
+        2 // STATUS and CONTROL registers
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn has_interrupt(&self) -> bool {
+        // Delegate to InterruptDevice implementation
+        <Self as InterruptDevice>::has_interrupt(self)
+    }
+}
+
+/// Helper function to create a test CPU with mapped memory.
+fn create_test_cpu() -> CPU<MappedMemory> {
+    let mut memory = MappedMemory::new();
+
+    // Add 48KB RAM
+    memory
+        .add_device(0x0000, Box::new(RamDevice::new(0xC000)))
+        .unwrap();
+
+    // Set reset vector to 0x8000
+    memory.write(0xFFFC, 0x00);
+    memory.write(0xFFFD, 0x80);
+
+    // Set IRQ vector to 0xC000
+    memory.write(0xFFFE, 0x00);
+    memory.write(0xFFFF, 0xC0);
+
+    CPU::new(memory)
+}
+
+#[test]
+fn test_interrupt_device_trait() {
+    // Test that mock device correctly implements InterruptDevice
+    let mut device = MockInterruptDevice::new();
+
+    assert!(!InterruptDevice::has_interrupt(&device));
+
+    device.trigger_interrupt();
+    assert!(InterruptDevice::has_interrupt(&device));
+}
+
+#[test]
+fn test_memory_bus_irq_active_no_devices() {
+    // FlatMemory should return false for irq_active (no interrupt-capable devices)
+    let memory = lib6502::FlatMemory::new();
+    assert!(!memory.irq_active());
+}
+
+#[test]
+fn test_memory_bus_irq_active_single_device() {
+    // Test that MappedMemory correctly reports IRQ line state
+    let mut memory = MappedMemory::new();
+
+    // Add RAM (no interrupts)
+    memory
+        .add_device(0x0000, Box::new(RamDevice::new(0xC000)))
+        .unwrap();
+
+    // Add interrupt device at 0xD000
+    let device = MockInterruptDevice::new();
+    memory.add_device(0xD000, Box::new(device)).unwrap();
+
+    // Initially no interrupt
+    assert!(!memory.irq_active());
+
+    // Trigger interrupt on device
+    if let Some(dev) = memory.get_device_at_mut::<MockInterruptDevice>(0xD000) {
+        dev.trigger_interrupt();
+    }
+
+    // IRQ line should now be active
+    assert!(memory.irq_active());
+
+    // Clear interrupt
+    memory.write(0xD001, 0x80); // Write to CONTROL register
+
+    // IRQ line should be inactive again
+    assert!(!memory.irq_active());
+}
+
+#[test]
+fn test_cpu_irq_pending_field() {
+    // Test that CPU initializes with irq_pending = false
+    let cpu = create_test_cpu();
+
+    // Access via memory (no direct getter for irq_pending in public API)
+    // We verify behavior through IRQ servicing tests
+    assert_eq!(cpu.flag_i(), true); // I flag set on reset
+}
+
+#[test]
+fn test_interrupt_respects_i_flag() {
+    // When I flag is set, interrupts should not be serviced
+    let mut cpu = create_test_cpu();
+
+    // Add interrupt device
+    cpu.memory_mut()
+        .add_device(0xD000, Box::new(MockInterruptDevice::new()))
+        .unwrap();
+
+    // Write a simple program: NOP loop
+    cpu.memory_mut().write(0x8000, 0xEA); // NOP
+    cpu.memory_mut().write(0x8001, 0x4C); // JMP
+    cpu.memory_mut().write(0x8002, 0x00); // $8000 (low)
+    cpu.memory_mut().write(0x8003, 0x80); // $8000 (high)
+
+    // Trigger interrupt on device
+    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+        dev.trigger_interrupt();
+    }
+
+    // I flag is set on reset - interrupt should NOT be serviced
+    let initial_pc = cpu.pc();
+    let initial_cycles = cpu.cycles();
+
+    // Step CPU (execute NOP)
+    cpu.step().unwrap();
+
+    // PC should advance to next instruction (not jump to IRQ handler)
+    assert_eq!(cpu.pc(), initial_pc + 1);
+
+    // Cycles should be NOP cycles only (2 cycles), not interrupt cycles (7)
+    assert_eq!(cpu.cycles(), initial_cycles + 2);
+
+    // I flag should still be set
+    assert!(cpu.flag_i());
+}
+
+#[test]
+fn test_interrupt_serviced_when_i_flag_clear() {
+    // When I flag is clear and interrupt pending, CPU should service interrupt
+    let mut cpu = create_test_cpu();
+
+    // Add interrupt device
+    cpu.memory_mut()
+        .add_device(0xD000, Box::new(MockInterruptDevice::new()))
+        .unwrap();
+
+    // Write IRQ handler at 0xC000: just RTI
+    cpu.memory_mut().write(0xC000, 0x40); // RTI
+
+    // Write main program at 0x8000
+    cpu.memory_mut().write(0x8000, 0x58); // CLI (clear I flag)
+    cpu.memory_mut().write(0x8001, 0xEA); // NOP
+
+    // Execute CLI instruction
+    let cli_result = cpu.step();
+    assert!(cli_result.is_ok());
+    assert!(!cpu.flag_i()); // I flag should be clear now
+
+    let cycles_after_cli = cpu.cycles();
+
+    // Trigger interrupt
+    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+        dev.trigger_interrupt();
+    }
+
+    // Execute NOP - should service interrupt before NOP
+    let nop_result = cpu.step();
+    assert!(nop_result.is_ok());
+
+    // After interrupt service:
+    // - PC should point to IRQ handler (0xC000)
+    // - I flag should be set (interrupt servicing sets it)
+    // - Exactly 7 cycles consumed for interrupt + 2 for NOP = 9 total since CLI
+    assert_eq!(cpu.pc(), 0xC000); // Jump to IRQ handler
+    assert!(cpu.flag_i()); // I flag set during interrupt service
+    assert_eq!(
+        cpu.cycles() - cycles_after_cli,
+        7 + 2,
+        "Should consume exactly 7 cycles for interrupt + 2 for NOP"
+    );
+
+    // Stack should contain return address and status
+    // SP starts at 0xFD, after pushing 3 bytes (PC high, PC low, status), SP should be 0xFA
+    assert_eq!(cpu.sp(), 0xFA);
+}
+
+#[test]
+fn test_interrupt_7_cycle_sequence() {
+    // Verify exactly 7 cycles are consumed by interrupt servicing
+    let mut cpu = create_test_cpu();
+
+    // Add interrupt device
+    cpu.memory_mut()
+        .add_device(0xD000, Box::new(MockInterruptDevice::new()))
+        .unwrap();
+
+    // Write IRQ handler: RTI
+    cpu.memory_mut().write(0xC000, 0x40); // RTI
+
+    // Write program: CLI, then trigger interrupt
+    cpu.memory_mut().write(0x8000, 0x58); // CLI
+    cpu.memory_mut().write(0x8001, 0xEA); // NOP (interrupt will occur after this)
+
+    // Execute CLI
+    cpu.step().unwrap();
+
+    let cycles_before = cpu.cycles();
+
+    // Trigger interrupt
+    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+        dev.trigger_interrupt();
+    }
+
+    // Execute instruction - should service interrupt
+    cpu.step().unwrap();
+
+    // Check cycles: NOP (2) + interrupt service (7) = 9 total
+    let cycles_consumed = cpu.cycles() - cycles_before;
+    assert_eq!(
+        cycles_consumed, 9,
+        "Expected 2 cycles for NOP + 7 for interrupt, got {}",
+        cycles_consumed
+    );
+}
+
+#[test]
+fn test_interrupt_stack_layout() {
+    // Verify interrupt service sequence pushes correct values to stack
+    let mut cpu = create_test_cpu();
+
+    // Add interrupt device
+    cpu.memory_mut()
+        .add_device(0xD000, Box::new(MockInterruptDevice::new()))
+        .unwrap();
+
+    // Write IRQ handler: RTI
+    cpu.memory_mut().write(0xC000, 0x40); // RTI
+
+    // Write program
+    cpu.memory_mut().write(0x8000, 0x58); // CLI
+    cpu.memory_mut().write(0x8001, 0xEA); // NOP
+
+    // Execute CLI
+    cpu.step().unwrap();
+
+    let pc_before_nop = cpu.pc(); // Should be 0x8001
+    let sp_before = cpu.sp(); // Should be 0xFD
+
+    // Trigger interrupt
+    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+        dev.trigger_interrupt();
+    }
+
+    // Execute NOP - interrupt will be serviced
+    cpu.step().unwrap();
+
+    // Check stack contents
+    // Stack layout after interrupt:
+    // SP+3: PC high byte (return address after NOP = 0x8002)
+    // SP+2: PC low byte
+    // SP+1: Status register
+    let sp_after = cpu.sp();
+    assert_eq!(sp_after, sp_before.wrapping_sub(3), "SP should be decremented by 3");
+
+    let stack_base = 0x0100;
+
+    // Read pushed values from stack
+    let status = cpu.memory_mut().read(stack_base + sp_after as u16 + 1);
+    let pc_low = cpu.memory_mut().read(stack_base + sp_after as u16 + 2);
+    let pc_high = cpu.memory_mut().read(stack_base + sp_after as u16 + 3);
+
+    let return_address = ((pc_high as u16) << 8) | (pc_low as u16);
+
+    // Return address should be PC after NOP (0x8002)
+    assert_eq!(
+        return_address,
+        pc_before_nop + 1,
+        "Return address should point after NOP"
+    );
+
+    // Status register should have I flag set (bit 2)
+    assert!(
+        status & 0b00000100 != 0,
+        "Status on stack should have I flag set"
+    );
+}
+
+#[test]
+fn test_isr_device_acknowledgment() {
+    // Test that ISR can read device status and acknowledge interrupt
+    let mut cpu = create_test_cpu();
+
+    // Add interrupt device at 0xD000
+    cpu.memory_mut()
+        .add_device(0xD000, Box::new(MockInterruptDevice::new()))
+        .unwrap();
+
+    // Write IRQ handler at 0xC000:
+    // LDA $D000 (read STATUS)
+    // LDA #$80
+    // STA $D001 (write CONTROL to acknowledge)
+    // RTI
+    let handler = [
+        0xAD, 0x00, 0xD0, // LDA $D000
+        0xA9, 0x80, // LDA #$80
+        0x8D, 0x01, 0xD0, // STA $D001
+        0x40, // RTI
+    ];
+    for (i, &byte) in handler.iter().enumerate() {
+        cpu.memory_mut().write(0xC000 + i as u16, byte);
+    }
+
+    // Write main program
+    cpu.memory_mut().write(0x8000, 0x58); // CLI
+    cpu.memory_mut().write(0x8001, 0xEA); // NOP
+
+    // Execute CLI
+    cpu.step().unwrap();
+
+    // Trigger interrupt
+    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+        dev.trigger_interrupt();
+        assert!(dev.is_interrupt_pending());
+    }
+
+    // Execute NOP - interrupt serviced, jumps to handler
+    cpu.step().unwrap();
+
+    // Execute handler instructions until RTI
+    // LDA $D000
+    cpu.step().unwrap();
+    // LDA #$80
+    cpu.step().unwrap();
+    // STA $D001 - this should clear the interrupt
+    cpu.step().unwrap();
+
+    // Check that interrupt was acknowledged
+    if let Some(dev) = cpu.memory_mut().get_device_at_mut::<MockInterruptDevice>(0xD000) {
+        assert!(
+            !dev.is_interrupt_pending(),
+            "Interrupt should be cleared after ISR writes to CONTROL"
+        );
+    }
+
+    // IRQ line should be inactive now
+    assert!(!cpu.memory_mut().irq_active());
+}
+
+#[test]
+fn test_multiple_devices_irq_line() {
+    // Test that IRQ line remains active until ALL devices clear their interrupts
+    let mut memory = MappedMemory::new();
+
+    // Add RAM
+    memory
+        .add_device(0x0000, Box::new(RamDevice::new(0xC000)))
+        .unwrap();
+
+    // Add two interrupt devices
+    memory
+        .add_device(0xD000, Box::new(MockInterruptDevice::new()))
+        .unwrap();
+    memory
+        .add_device(0xD100, Box::new(MockInterruptDevice::new()))
+        .unwrap();
+
+    // Initially no interrupts
+    assert!(!memory.irq_active());
+
+    // Trigger interrupt on first device
+    if let Some(dev1) = memory.get_device_at_mut::<MockInterruptDevice>(0xD000) {
+        dev1.trigger_interrupt();
+    }
+    assert!(memory.irq_active());
+
+    // Trigger interrupt on second device
+    if let Some(dev2) = memory.get_device_at_mut::<MockInterruptDevice>(0xD100) {
+        dev2.trigger_interrupt();
+    }
+    assert!(memory.irq_active());
+
+    // Clear first device - IRQ line should still be active (second device still pending)
+    memory.write(0xD001, 0x80);
+    assert!(
+        memory.irq_active(),
+        "IRQ line should remain active while any device has pending interrupt"
+    );
+
+    // Clear second device - IRQ line should now be inactive
+    memory.write(0xD101, 0x80);
+    assert!(
+        !memory.irq_active(),
+        "IRQ line should be inactive when all devices cleared"
+    );
+}
