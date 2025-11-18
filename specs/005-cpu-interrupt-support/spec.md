@@ -1,6 +1,6 @@
 # Feature Specification: CPU Interrupt Support
 
-**Feature Branch**: `001-cpu-interrupt-support`
+**Feature Branch**: `005-cpu-interrupt-support`
 **Created**: 2025-11-18
 **Status**: Draft
 **Input**: User description: "add true interrupt support to the CPU. I can imagine either a promise based solution where a device passes a promise in when it triggers an interrupt and then resolves it once it's done after being called by the CPU or some type of game/event loop. It would be awesome if you could write a device in JavaScript if required."
