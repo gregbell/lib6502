@@ -11,10 +11,12 @@ import { MemoryViewer } from './components/memory.js';
 import { ControlPanel } from './components/controls.js';
 import { ErrorDisplay } from './components/error.js';
 import { ExampleSelector } from './components/examples.js';
+import { Terminal } from './components/terminal.js';
 
 class App {
     constructor() {
         this.emulator = null;
+        this.terminal = null;
         this.editor = null;
         this.registerDisplay = null;
         this.flagsDisplay = null;
@@ -35,7 +37,15 @@ class App {
         try {
             // Initialize WASM module
             await init();
-            this.emulator = new Emulator6502();
+
+            // Create terminal BEFORE emulator so we can pass transmit callback
+            this.terminal = new Terminal('terminal-container');
+
+            // Create emulator with UART transmit callback
+            this.emulator = new Emulator6502((char) => {
+                // Called when 6502 program writes to UART - display in terminal
+                this.terminal.write(char);
+            });
 
             // Initialize UI components
             this.editor = new CodeEditor('editor-container');
@@ -70,6 +80,9 @@ class App {
         document.addEventListener('stop-clicked', () => this.handleStop());
         document.addEventListener('reset-clicked', () => this.handleReset());
         document.addEventListener('speed-changed', (e) => this.handleSpeedChange(e.detail.speed));
+
+        // Terminal events
+        document.addEventListener('terminal-data', (e) => this.handleTerminalInput(e.detail.data));
 
         // Editor events
         document.addEventListener('code-changed', () => {
@@ -210,12 +223,25 @@ class App {
         this.controlPanel.setMode('idle');
         this.updateDisplay();
         this.errorDisplay.clear();
+
+        // Clear terminal and show reset message
+        this.terminal.clear();
+        this.terminal.write('CPU Reset\r\n\r\n');
+
         console.log('✓ CPU reset');
     }
 
     handleSpeedChange(speed) {
         this.speed = speed;
         console.log(`Speed changed to ${speed === -1 ? 'unlimited' : (speed / 1000000) + ' MHz'}`);
+    }
+
+    handleTerminalInput(data) {
+        // Convert each character in the input string to a byte and send to UART
+        for (let i = 0; i < data.length; i++) {
+            const byte = data.charCodeAt(i);
+            this.emulator.receive_char(byte);
+        }
     }
 
     showError(message) {

@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sixtyfour&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <!-- xterm.js Terminal CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
 </head>
 <body>
     <header>
@@ -40,12 +42,21 @@
                 <h2>Memory Viewer</h2>
                 <div id="memory-container"></div>
             </div>
+
+            <div class="panel terminal-panel">
+                <h2>Serial Terminal</h2>
+                <div id="terminal-container"></div>
+            </div>
         </section>
     </main>
 
     <footer>
         <p>Built with <a href="https://github.com/your-org/6502" target="_blank">lib6502</a> | WebAssembly powered</p>
     </footer>
+
+    <!-- xterm.js Terminal JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
 
     <script type="module" src="app.js"></script>
 </body>
