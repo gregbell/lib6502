@@ -667,10 +667,7 @@ mod tests {
     #[test]
     fn test_parse_constant_with_whitespace() {
         let line = parse_line("  MAX   =   $FF", 1).unwrap();
-        assert_eq!(
-            line.constant,
-            Some(("MAX".to_string(), "$FF".to_string()))
-        );
+        assert_eq!(line.constant, Some(("MAX".to_string(), "$FF".to_string())));
     }
 
     #[test]
@@ -686,10 +683,7 @@ mod tests {
     #[test]
     fn test_parse_constant_lowercase_normalized() {
         let line = parse_line("max = 100", 1).unwrap();
-        assert_eq!(
-            line.constant,
-            Some(("MAX".to_string(), "100".to_string()))
-        );
+        assert_eq!(line.constant, Some(("MAX".to_string(), "100".to_string())));
     }
 
     #[test]

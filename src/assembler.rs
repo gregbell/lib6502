@@ -783,10 +783,7 @@ fn resolve_operand(
             // Check if base is a symbol reference (not a number)
             if !base_part.starts_with('$')
                 && !base_part.starts_with('%')
-                && !base_part
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_digit())
+                && !base_part.chars().next().is_some_and(|c| c.is_ascii_digit())
             {
                 let symbol_name = base_part.to_uppercase();
                 if let Some(symbol) = symbol_table.lookup_symbol(&symbol_name) {

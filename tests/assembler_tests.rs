@@ -952,7 +952,10 @@ START:
 
     // Verify constants are in symbol table
     let max_symbol = output.lookup_symbol("MAX");
-    assert!(max_symbol.is_some(), "MAX constant should be in symbol table");
+    assert!(
+        max_symbol.is_some(),
+        "MAX constant should be in symbol table"
+    );
     let max_symbol = max_symbol.unwrap();
     assert_eq!(max_symbol.value, 255);
     assert_eq!(max_symbol.kind, lib6502::assembler::SymbolKind::Constant);
@@ -964,10 +967,7 @@ START:
     );
     let screen_symbol = screen_symbol.unwrap();
     assert_eq!(screen_symbol.value, 0x4000);
-    assert_eq!(
-        screen_symbol.kind,
-        lib6502::assembler::SymbolKind::Constant
-    );
+    assert_eq!(screen_symbol.kind, lib6502::assembler::SymbolKind::Constant);
 
     let bits_symbol = output.lookup_symbol("BITS");
     assert!(
@@ -1378,7 +1378,10 @@ HANDLE_LF:
     );
 
     // Verify program assembled successfully
-    assert!(!output.bytes.is_empty(), "Program should have assembled code");
+    assert!(
+        !output.bytes.is_empty(),
+        "Program should have assembled code"
+    );
 }
 
 // T044: Integration test for backward compatibility (existing code without constants)
