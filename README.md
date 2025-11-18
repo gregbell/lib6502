@@ -215,10 +215,21 @@ cargo run --example simple_ram
 An interactive 6502 assembly playground is available at the [GitHub Pages demo](https://your-org.github.io/6502/) (or run locally from the `demo/` directory).
 
 The demo features:
-- Live assembly editor
-- Real-time CPU state visualization
-- Memory viewer
-- Cycle-accurate execution
+- **Live Assembly Editor** - Write and edit 6502 assembly code
+- **Real-time CPU State** - View registers, flags, and program counter
+- **Memory Viewer** - Inspect memory contents at any address
+- **Serial Terminal** - Interactive xterm.js terminal connected to UART at $A000-$A003
+- **Example Programs** - Pre-loaded examples including UART I/O demos
+- **Cycle-accurate Execution** - Step through code or run at configurable speeds
+
+### UART Examples
+
+The demo includes example programs demonstrating serial I/O:
+- **UART Echo** - Type characters in the terminal and see them echoed back
+- **UART Hello World** - Outputs "Hello, 6502!" to the terminal
+- **UART Polling** - Demonstrates proper status register polling techniques
+
+Try typing in the terminal after loading the echo example to interact with the 6502!
 
 ## Development
 
@@ -340,8 +351,11 @@ CI runs both suites to ensure correctness while keeping local development fast.
 - [x] Assembler and disassembler
 - [x] WebAssembly support
 - [x] Interactive web demo
+- [x] Memory-mapped devices (MappedMemory architecture)
+- [x] UART serial device (W65C51 ACIA emulation)
+- [x] Serial terminal integration (xterm.js in demo)
 - [ ] Debugger interface
-- [ ] Additional memory implementations (ROM, banked memory)
+- [ ] Additional memory-mapped devices (VIA, PPT)
 - [ ] Performance optimizations
 - [ ] CMOS 65C02 support
 
