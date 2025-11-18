@@ -1,6 +1,6 @@
 # Feature Specification: Assembler Lexer and Parser Architecture
 
-**Feature Branch**: `001-assembler-lexer`
+**Feature Branch**: `006-assembler-lexer`
 **Created**: 2025-11-18
 **Status**: Draft
 **Input**: User description: "I want create a proper lexing layer in the assembler to dramatically simplify the code. The parser should become much simpler too. Let's introduce proper assembler architecture."
