@@ -8,6 +8,9 @@ pub struct AssemblyLine {
     /// Line number in source file (1-indexed)
     pub line_number: usize,
 
+    /// Optional constant assignment (e.g., ("MAX", "255") from "MAX = 255")
+    pub constant: Option<(String, String)>,
+
     /// Optional label definition (e.g., "START" from "START:")
     pub label: Option<String>,
 
@@ -70,6 +73,7 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
     if let Some(stripped) = trimmed.strip_prefix(';') {
         return Some(AssemblyLine {
             line_number,
+            constant: None,
             label: None,
             mnemonic: None,
             operand: None,
@@ -91,6 +95,7 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
     if code_part.is_empty() {
         return Some(AssemblyLine {
             line_number,
+            constant: None,
             label: None,
             mnemonic: None,
             operand: None,
@@ -98,6 +103,26 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
             comment: comment_part,
             span: (0, line.len()),
         });
+    }
+
+    // Check for constant assignment (NAME = VALUE) - must be checked before label
+    if let Some(eq_pos) = code_part.find('=') {
+        let name_part = code_part[..eq_pos].trim();
+        let value_part = code_part[eq_pos + 1..].trim();
+
+        // Validate name: not empty and no internal whitespace
+        if !name_part.is_empty() && !name_part.contains(char::is_whitespace) {
+            return Some(AssemblyLine {
+                line_number,
+                constant: Some((name_part.to_uppercase(), value_part.to_string())),
+                label: None,
+                mnemonic: None,
+                operand: None,
+                directive: None,
+                comment: comment_part,
+                span: (0, line.len()),
+            });
+        }
     }
 
     // Check for label (ends with colon)
@@ -145,6 +170,7 @@ pub fn parse_line(line: &str, line_number: usize) -> Option<AssemblyLine> {
 
     Some(AssemblyLine {
         line_number,
+        constant: None,
         label,
         mnemonic,
         operand,
@@ -184,6 +210,44 @@ pub fn parse_org_directive(args: &str) -> Result<crate::assembler::AssemblerDire
     Ok(crate::assembler::AssemblerDirective::Origin { address })
 }
 
+/// Parse a directive value (either a literal number or a symbol reference)
+fn parse_directive_value(arg: &str) -> Result<crate::assembler::DirectiveValue, String> {
+    let trimmed = arg.trim();
+
+    // Check if it looks like a number (starts with $, %, or digit)
+    if trimmed.starts_with('$')
+        || trimmed.starts_with('%')
+        || trimmed.chars().next().is_some_and(|c| c.is_ascii_digit())
+    {
+        // Parse as number
+        let val = parse_number(trimmed)?;
+        Ok(crate::assembler::DirectiveValue::Literal(val))
+    } else {
+        // Treat as symbol reference
+        // Validate it looks like a valid identifier
+        if trimmed.is_empty() {
+            return Err("Empty symbol name".to_string());
+        }
+
+        // Check first character is a letter
+        if !trimmed.chars().next().unwrap().is_ascii_alphabetic() {
+            return Err(format!("Symbol '{}' must start with a letter", trimmed));
+        }
+
+        // Check all characters are alphanumeric or underscore
+        if !trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(format!("Symbol '{}' contains invalid characters", trimmed));
+        }
+
+        Ok(crate::assembler::DirectiveValue::Symbol(
+            trimmed.to_uppercase(),
+        ))
+    }
+}
+
 /// Parse .byte directive
 pub fn parse_byte_directive(args: &str) -> Result<crate::assembler::AssemblerDirective, String> {
     if args.is_empty() {
@@ -192,14 +256,19 @@ pub fn parse_byte_directive(args: &str) -> Result<crate::assembler::AssemblerDir
 
     let mut values = Vec::new();
     for arg in args.split(',') {
-        let val = parse_number(arg.trim())?;
-        if val > 0xFF {
-            return Err(format!(
-                "Byte value ${:04X} is too large (must be 0-255)",
-                val
-            ));
+        let directive_val = parse_directive_value(arg)?;
+
+        // For literals, validate they fit in a byte
+        if let crate::assembler::DirectiveValue::Literal(val) = directive_val {
+            if val > 0xFF {
+                return Err(format!(
+                    "Byte value ${:04X} is too large (must be 0-255)",
+                    val
+                ));
+            }
         }
-        values.push(val as u8);
+
+        values.push(directive_val);
     }
 
     if values.is_empty() {
@@ -217,8 +286,8 @@ pub fn parse_word_directive(args: &str) -> Result<crate::assembler::AssemblerDir
 
     let mut values = Vec::new();
     for arg in args.split(',') {
-        let val = parse_number(arg.trim())?;
-        values.push(val);
+        let directive_val = parse_directive_value(arg)?;
+        values.push(directive_val);
     }
 
     if values.is_empty() {
@@ -538,7 +607,14 @@ mod tests {
         let result = parse_byte_directive("$42, $43, $44").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Byte { values } => {
-                assert_eq!(values, vec![0x42, 0x43, 0x44]);
+                assert_eq!(
+                    values,
+                    vec![
+                        crate::assembler::DirectiveValue::Literal(0x42),
+                        crate::assembler::DirectiveValue::Literal(0x43),
+                        crate::assembler::DirectiveValue::Literal(0x44)
+                    ]
+                );
             }
             _ => panic!("Expected Byte directive"),
         }
@@ -549,7 +625,10 @@ mod tests {
         let result = parse_byte_directive("$FF").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Byte { values } => {
-                assert_eq!(values, vec![0xFF]);
+                assert_eq!(
+                    values,
+                    vec![crate::assembler::DirectiveValue::Literal(0xFF)]
+                );
             }
             _ => panic!("Expected Byte directive"),
         }
@@ -574,7 +653,13 @@ mod tests {
         let result = parse_word_directive("$1234, $5678").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Word { values } => {
-                assert_eq!(values, vec![0x1234, 0x5678]);
+                assert_eq!(
+                    values,
+                    vec![
+                        crate::assembler::DirectiveValue::Literal(0x1234),
+                        crate::assembler::DirectiveValue::Literal(0x5678)
+                    ]
+                );
             }
             _ => panic!("Expected Word directive"),
         }
@@ -585,7 +670,10 @@ mod tests {
         let result = parse_word_directive("$ABCD").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Word { values } => {
-                assert_eq!(values, vec![0xABCD]);
+                assert_eq!(
+                    values,
+                    vec![crate::assembler::DirectiveValue::Literal(0xABCD)]
+                );
             }
             _ => panic!("Expected Word directive"),
         }
@@ -605,6 +693,61 @@ mod tests {
         assert!(result.unwrap_err().contains("Unknown directive"));
     }
 
+    // T013-T015: Unit tests for constant parsing
+
+    #[test]
+    fn test_parse_constant_simple() {
+        let line = parse_line("MAX = 255", 1).unwrap();
+        assert_eq!(line.constant, Some(("MAX".to_string(), "255".to_string())));
+        assert_eq!(line.label, None);
+        assert_eq!(line.mnemonic, None);
+        assert_eq!(line.operand, None);
+    }
+
+    #[test]
+    fn test_parse_constant_hex() {
+        let line = parse_line("SCREEN = $4000", 1).unwrap();
+        assert_eq!(
+            line.constant,
+            Some(("SCREEN".to_string(), "$4000".to_string()))
+        );
+        assert_eq!(line.label, None);
+        assert_eq!(line.mnemonic, None);
+    }
+
+    #[test]
+    fn test_parse_constant_binary() {
+        let line = parse_line("BITS = %11110000", 1).unwrap();
+        assert_eq!(
+            line.constant,
+            Some(("BITS".to_string(), "%11110000".to_string()))
+        );
+        assert_eq!(line.label, None);
+        assert_eq!(line.mnemonic, None);
+    }
+
+    #[test]
+    fn test_parse_constant_with_whitespace() {
+        let line = parse_line("  MAX   =   $FF", 1).unwrap();
+        assert_eq!(line.constant, Some(("MAX".to_string(), "$FF".to_string())));
+    }
+
+    #[test]
+    fn test_parse_constant_with_comment() {
+        let line = parse_line("PAGE_SIZE = 256  ; bytes per page", 1).unwrap();
+        assert_eq!(
+            line.constant,
+            Some(("PAGE_SIZE".to_string(), "256".to_string()))
+        );
+        assert_eq!(line.comment, Some("bytes per page".to_string()));
+    }
+
+    #[test]
+    fn test_parse_constant_lowercase_normalized() {
+        let line = parse_line("max = 100", 1).unwrap();
+        assert_eq!(line.constant, Some(("MAX".to_string(), "100".to_string())));
+    }
+
     #[test]
     fn test_parse_directive_integration() {
         let result = parse_directive(".org $8000").unwrap();
@@ -618,7 +761,13 @@ mod tests {
         let result = parse_directive(".byte $42, $43").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Byte { values } => {
-                assert_eq!(values, vec![0x42, 0x43]);
+                assert_eq!(
+                    values,
+                    vec![
+                        crate::assembler::DirectiveValue::Literal(0x42),
+                        crate::assembler::DirectiveValue::Literal(0x43)
+                    ]
+                );
             }
             _ => panic!("Expected Byte directive"),
         }
@@ -626,7 +775,10 @@ mod tests {
         let result = parse_directive(".word $1234").unwrap();
         match result {
             crate::assembler::AssemblerDirective::Word { values } => {
-                assert_eq!(values, vec![0x1234]);
+                assert_eq!(
+                    values,
+                    vec![crate::assembler::DirectiveValue::Literal(0x1234)]
+                );
             }
             _ => panic!("Expected Word directive"),
         }
