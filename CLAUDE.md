@@ -204,6 +204,8 @@ See `examples/constants.rs` for a complete example program.
 - Rust 1.75+ (for WASM compilation), HTML5/CSS3/JavaScript ES6+ (for frontend) (003-wasm-web-demo)
 - N/A (fully client-side, no persistence) (003-wasm-web-demo)
 - N/A (in-memory state only, no persistence) (004-memory-mapping-module)
+- Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible per Constitution) (006-assembler-lexer)
+- N/A (operates on in-memory strings and produces byte vectors) (006-assembler-lexer)
 
 ## Recent Changes
 - 002-assembler-disassembler: Added Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible)
