@@ -522,3 +522,90 @@ IO_BASE = $8000
     assert_eq!(output.bytes[0], 0x00); // Low byte of $8000
     assert_eq!(output.bytes[1], 0x80); // High byte of $8000
 }
+
+// =============================================================================
+// String Literals in .byte Directive
+// =============================================================================
+
+#[test]
+fn test_string_literal_in_byte_directive() {
+    let source = r#"
+        .org $8000
+        .byte "Hello"
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // "Hello" = 5 bytes (H, e, l, l, o)
+    assert_eq!(result.bytes.len(), 5);
+    assert_eq!(result.bytes[0], b'H');
+    assert_eq!(result.bytes[1], b'e');
+    assert_eq!(result.bytes[2], b'l');
+    assert_eq!(result.bytes[3], b'l');
+    assert_eq!(result.bytes[4], b'o');
+}
+
+#[test]
+fn test_string_literal_with_escape_sequences() {
+    let source = r#"
+        .org $8000
+        .byte "Line1\nLine2\tTab"
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // "Line1\nLine2\tTab" = L, i, n, e, 1, \n, L, i, n, e, 2, \t, T, a, b
+    assert_eq!(result.bytes.len(), 15);
+    assert_eq!(result.bytes[0], b'L');
+    assert_eq!(result.bytes[5], b'\n');
+    assert_eq!(result.bytes[11], b'\t');
+}
+
+#[test]
+fn test_string_literal_with_numbers() {
+    let source = r#"
+        .org $8000
+        .byte "Hello", $0D, $0A, "World"
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // "Hello" + $0D + $0A + "World" = 5 + 1 + 1 + 5 = 12 bytes
+    assert_eq!(result.bytes.len(), 12);
+    assert_eq!(result.bytes[0], b'H');
+    assert_eq!(result.bytes[4], b'o');
+    assert_eq!(result.bytes[5], 0x0D);
+    assert_eq!(result.bytes[6], 0x0A);
+    assert_eq!(result.bytes[7], b'W');
+    assert_eq!(result.bytes[11], b'd');
+}
+
+#[test]
+fn test_empty_string_literal() {
+    let source = r#"
+        .org $8000
+        .byte ""
+    "#;
+
+    let result = assemble(source).unwrap();
+
+    // Empty string contributes 0 bytes
+    assert_eq!(result.bytes.len(), 0);
+}
+
+#[test]
+fn test_string_in_word_directive_should_error() {
+    let source = r#"
+        .org $8000
+        .word "test"
+    "#;
+
+    let result = assemble(source);
+
+    // String literals should not be allowed in .word directive
+    assert!(result.is_err());
+    let errors = result.unwrap_err();
+    assert!(errors[0]
+        .message
+        .contains("String literals are not supported in .word directive"));
+}
