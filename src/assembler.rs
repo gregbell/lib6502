@@ -9,10 +9,30 @@ pub mod symbol_table;
 
 use crate::opcodes;
 
+// Addressing mode value range constants
+const IMMEDIATE_MODE_MAX: u16 = 0xFF;
+const ZERO_PAGE_MAX: u16 = 0xFF;
+const BRANCH_OFFSET_MIN: i32 = -128;
+const BRANCH_OFFSET_MAX: i32 = 127;
+const BRANCH_INSTRUCTION_SIZE: u16 = 2;
+
+/// A segment of code at a specific address
+///
+/// Segments are created each time the assembler encounters a `.org` directive
+/// or at the start of assembly. They track where code is located in memory.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodeSegment {
+    /// Starting address of this segment in memory
+    pub address: u16,
+
+    /// Number of bytes in this segment
+    pub length: u16,
+}
+
 /// Complete output from assembling source code
 #[derive(Debug, Clone)]
 pub struct AssemblerOutput {
-    /// Assembled machine code bytes
+    /// Assembled machine code bytes (flat array, no gaps)
     pub bytes: Vec<u8>,
 
     /// Symbol table with all defined labels
@@ -23,6 +43,12 @@ pub struct AssemblerOutput {
 
     /// Non-fatal warnings encountered during assembly
     pub warnings: Vec<AssemblerWarning>,
+
+    /// Code segments tracking address layout
+    ///
+    /// Each segment represents a contiguous block of code at a specific address.
+    /// Segments are created when `.org` directives change the assembly address.
+    pub segments: Vec<CodeSegment>,
 }
 
 impl AssemblerOutput {
@@ -51,7 +77,7 @@ impl AssemblerOutput {
     /// assert_eq!(output.lookup_symbol_addr("START"), Some(0));
     /// ```
     pub fn lookup_symbol_addr(&self, name: &str) -> Option<u16> {
-        self.lookup_symbol(name).map(|symbol| symbol.address)
+        self.lookup_symbol(name).map(|symbol| symbol.value)
     }
 
     /// Get source location for a given instruction address
@@ -63,18 +89,117 @@ impl AssemblerOutput {
     pub fn get_address_range(&self, line: usize) -> Option<source_map::AddressRange> {
         self.source_map.get_address_range(line)
     }
+
+    /// Convert flat bytes to a ROM image with proper address layout
+    ///
+    /// This method creates a contiguous ROM image from the assembled bytes,
+    /// filling gaps between segments with the specified fill byte.
+    ///
+    /// # Arguments
+    ///
+    /// * `fill_byte` - Value to use for uninitialized memory (typically 0xFF or 0x00)
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<u8>` containing the full ROM image from the lowest to highest address.
+    /// The returned vector starts at the address of the first segment and ends at
+    /// the last byte of the last segment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use lib6502::assembler::assemble;
+    ///
+    /// let source = r#"
+    /// .org $8000
+    /// START:
+    ///     LDA #$42
+    ///
+    /// .org $FFFC
+    /// .word START
+    /// "#;
+    ///
+    /// let output = assemble(source).unwrap();
+    /// let rom = output.to_rom_image(0xFF);
+    ///
+    /// // ROM starts at $8000 and ends at $FFFD (inclusive)
+    /// // Length is $FFFD - $8000 + 1 = $7FFE = 32766 bytes
+    /// assert_eq!(rom.len(), 0x7FFE);
+    ///
+    /// // First bytes are the program
+    /// assert_eq!(rom[0], 0xA9); // LDA #$42 opcode
+    /// assert_eq!(rom[1], 0x42);
+    ///
+    /// // Gap is filled with 0xFF
+    /// assert_eq!(rom[2], 0xFF);
+    ///
+    /// // Reset vector at the end
+    /// assert_eq!(rom[0x7FFC], 0x00); // Low byte of $8000
+    /// assert_eq!(rom[0x7FFD], 0x80); // High byte of $8000
+    /// ```
+    pub fn to_rom_image(&self, fill_byte: u8) -> Vec<u8> {
+        if self.segments.is_empty() {
+            return Vec::new();
+        }
+
+        // Find min and max addresses
+        let min_address = self.segments.first().unwrap().address;
+        let last_segment = self.segments.last().unwrap();
+
+        // Calculate max_address safely (last byte of last segment)
+        // Note: address + length gives us one past the last byte
+        let max_address = last_segment
+            .address
+            .wrapping_add(last_segment.length)
+            .wrapping_sub(1);
+
+        // Calculate ROM size - handle wraparound case
+        let rom_size = if max_address < min_address {
+            // Wraparound case (e.g., ends at $FFFF)
+            (0x10000 - min_address as usize) + (max_address as usize + 1)
+        } else {
+            (max_address as usize - min_address as usize) + 1
+        };
+
+        // Create ROM buffer filled with fill_byte
+        let mut rom = vec![fill_byte; rom_size];
+
+        // Copy each segment to its proper location
+        let mut byte_offset = 0;
+        for segment in &self.segments {
+            let rom_offset = (segment.address - min_address) as usize;
+            let segment_bytes = &self.bytes[byte_offset..byte_offset + segment.length as usize];
+            rom[rom_offset..rom_offset + segment.length as usize].copy_from_slice(segment_bytes);
+            byte_offset += segment.length as usize;
+        }
+
+        rom
+    }
 }
 
-/// A symbol table entry mapping a label to an address
+/// Symbol classification: label (memory address) or constant (literal value)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymbolKind {
+    /// Memory address (defined with ':' suffix)
+    Label,
+
+    /// Literal value (defined with '=' assignment)
+    Constant,
+}
+
+/// A symbol table entry mapping a name to a value (address or constant)
 #[derive(Debug, Clone, PartialEq)]
 pub struct Symbol {
-    /// Label name (case-sensitive after normalization)
+    /// Symbol name (case-sensitive after normalization)
     pub name: String,
 
-    /// Resolved memory address for this label
-    pub address: u16,
+    /// Value: memory address for labels, literal value for constants
+    pub value: u16,
 
-    /// Source line where label was defined
+    /// Symbol classification (label or constant)
+    pub kind: SymbolKind,
+
+    /// Source line where symbol was defined
     pub defined_at: usize,
 }
 
@@ -160,6 +285,18 @@ pub enum ErrorType {
 
     /// Invalid directive usage
     InvalidDirective,
+
+    /// Undefined constant reference
+    UndefinedConstant,
+
+    /// Duplicate constant definition
+    DuplicateConstant,
+
+    /// Name collision (constant and label with same name)
+    NameCollision,
+
+    /// Invalid constant value (out of range, not literal)
+    InvalidConstantValue,
 }
 
 impl std::fmt::Display for AssemblerError {
@@ -178,10 +315,24 @@ impl std::fmt::Display for AssemblerError {
                 ErrorType::InvalidOperand => "Invalid Operand",
                 ErrorType::RangeError => "Range Error",
                 ErrorType::InvalidDirective => "Invalid Directive",
+                ErrorType::UndefinedConstant => "Undefined Constant",
+                ErrorType::DuplicateConstant => "Duplicate Constant",
+                ErrorType::NameCollision => "Name Collision",
+                ErrorType::InvalidConstantValue => "Invalid Constant Value",
             },
             self.message
         )
     }
+}
+
+/// Value in a directive argument (either a literal or a symbol reference)
+#[derive(Debug, Clone, PartialEq)]
+pub enum DirectiveValue {
+    /// Literal numeric value
+    Literal(u16),
+
+    /// Symbol reference (label or constant name)
+    Symbol(String),
 }
 
 /// Assembler directive types
@@ -191,10 +342,12 @@ pub enum AssemblerDirective {
     Origin { address: u16 },
 
     /// Insert literal bytes (.byte $XX, $YY, ...)
-    Byte { values: Vec<u8> },
+    /// Values can be literals (0-255) or symbol references
+    Byte { values: Vec<DirectiveValue> },
 
     /// Insert literal 16-bit words (.word $XXXX, $YYYY, ...)
-    Word { values: Vec<u16> },
+    /// Values can be literals (0-65535) or symbol references
+    Word { values: Vec<DirectiveValue> },
 }
 
 /// Helper to detect if a mnemonic is a branch instruction
@@ -242,21 +395,101 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                 });
             } else {
                 // Add to symbol table
-                if let Err(existing) =
-                    symbol_table.add_symbol(label.clone(), current_address, line.line_number)
-                {
-                    errors.push(AssemblerError {
-                        error_type: ErrorType::DuplicateLabel,
-                        line: line.line_number,
-                        column: 0,
-                        span: line.span,
-                        message: format!(
-                            "Duplicate label '{}' (previously defined at line {})",
-                            label, existing.defined_at
-                        ),
-                    });
+                if let Err(existing) = symbol_table.add_symbol(
+                    label,
+                    current_address,
+                    SymbolKind::Label,
+                    line.line_number,
+                ) {
+                    // Check if it's a collision with a different kind or a duplicate label
+                    if existing.kind == SymbolKind::Label {
+                        errors.push(AssemblerError {
+                            error_type: ErrorType::DuplicateLabel,
+                            line: line.line_number,
+                            column: 0,
+                            span: line.span,
+                            message: format!(
+                                "Duplicate label '{}' (previously defined at line {})",
+                                label, existing.defined_at
+                            ),
+                        });
+                    } else {
+                        errors.push(AssemblerError {
+                            error_type: ErrorType::NameCollision,
+                            line: line.line_number,
+                            column: 0,
+                            span: line.span,
+                            message: format!(
+                                "Name collision: '{}' is already defined as a constant at line {}",
+                                label, existing.defined_at
+                            ),
+                        });
+                    }
                 }
             }
+        }
+
+        // Check for constant assignment
+        if let Some((ref name, ref value_str)) = line.constant {
+            // Validate constant name (same rules as labels)
+            if let Err(e) = validate_label(name) {
+                errors.push(AssemblerError {
+                    error_type: ErrorType::InvalidLabel,
+                    line: line.line_number,
+                    column: 0,
+                    span: line.span,
+                    message: format!("Invalid constant name: {}", e),
+                });
+            } else {
+                // Parse the constant value
+                match parser::parse_number(value_str) {
+                    Ok(value) => {
+                        // Add to symbol table with Constant kind
+                        if let Err(existing) = symbol_table.add_symbol(
+                            name,
+                            value,
+                            SymbolKind::Constant,
+                            line.line_number,
+                        ) {
+                            // Check if it's a collision with a different kind or a duplicate constant
+                            if existing.kind == SymbolKind::Constant {
+                                errors.push(AssemblerError {
+                                    error_type: ErrorType::DuplicateConstant,
+                                    line: line.line_number,
+                                    column: 0,
+                                    span: line.span,
+                                    message: format!(
+                                        "Duplicate constant '{}' (previously defined at line {})",
+                                        name, existing.defined_at
+                                    ),
+                                });
+                            } else {
+                                errors.push(AssemblerError {
+                                    error_type: ErrorType::NameCollision,
+                                    line: line.line_number,
+                                    column: 0,
+                                    span: line.span,
+                                    message: format!(
+                                        "Name collision: '{}' is already defined as a label at line {}",
+                                        name, existing.defined_at
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        errors.push(AssemblerError {
+                            error_type: ErrorType::InvalidConstantValue,
+                            line: line.line_number,
+                            column: 0,
+                            span: line.span,
+                            message: format!("Invalid constant value '{}': {}", value_str, e),
+                        });
+                    }
+                }
+            }
+            // Constants don't consume address space
+            continue;
         }
 
         // Handle directives
@@ -318,20 +551,80 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     // Pass 2: Encode instructions with label resolution
     let mut bytes = Vec::new();
     let mut source_map = source_map::SourceMap::new();
+    let mut segments: Vec<CodeSegment> = Vec::new();
     current_address = 0u16;
+
+    // Track current segment
+    let mut current_segment_start = 0u16;
+    let mut current_segment_length = 0u16;
 
     for line in &parsed_lines {
         // Handle directives
         if let Some(ref directive) = line.directive {
             match directive {
                 AssemblerDirective::Origin { address } => {
+                    // Finalize previous segment if it has any bytes
+                    if current_segment_length > 0 {
+                        segments.push(CodeSegment {
+                            address: current_segment_start,
+                            length: current_segment_length,
+                        });
+                    }
+
+                    // Start new segment
                     current_address = *address;
+                    current_segment_start = *address;
+                    current_segment_length = 0;
                 }
                 AssemblerDirective::Byte { values } => {
                     let instruction_start_address = current_address;
 
-                    // Add bytes directly to output
-                    bytes.extend(values);
+                    // Resolve values (handle both literals and symbol references)
+                    let mut resolved_bytes = Vec::new();
+                    for val in values {
+                        let resolved = match val {
+                            DirectiveValue::Literal(lit) => *lit,
+                            DirectiveValue::Symbol(name) => {
+                                // Look up symbol in symbol table
+                                match symbol_table.lookup_symbol_ignore_case(name) {
+                                    Some(sym) => sym.value,
+                                    None => {
+                                        errors.push(AssemblerError {
+                                            error_type: ErrorType::UndefinedLabel,
+                                            line: line.line_number,
+                                            column: 0,
+                                            span: line.span,
+                                            message: format!(
+                                                "Undefined symbol '{}' in .byte directive",
+                                                name
+                                            ),
+                                        });
+                                        continue;
+                                    }
+                                }
+                            }
+                        };
+
+                        // Validate it fits in a byte
+                        if resolved > 0xFF {
+                            errors.push(AssemblerError {
+                                error_type: ErrorType::RangeError,
+                                line: line.line_number,
+                                column: 0,
+                                span: line.span,
+                                message: format!(
+                                    "Value ${:04X} in .byte directive exceeds 8-bit range (max $FF)",
+                                    resolved
+                                ),
+                            });
+                            continue;
+                        }
+
+                        resolved_bytes.push(resolved as u8);
+                    }
+
+                    // Add bytes to output
+                    bytes.extend(&resolved_bytes);
 
                     // Add to source map
                     source_map.add_mapping(
@@ -346,17 +639,48 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                         line.line_number,
                         source_map::AddressRange {
                             start: instruction_start_address,
-                            end: instruction_start_address.wrapping_add(values.len() as u16),
+                            end: instruction_start_address
+                                .wrapping_add(resolved_bytes.len() as u16),
                         },
                     );
 
-                    current_address = current_address.wrapping_add(values.len() as u16);
+                    current_address = current_address.wrapping_add(resolved_bytes.len() as u16);
+                    current_segment_length =
+                        current_segment_length.wrapping_add(resolved_bytes.len() as u16);
                 }
                 AssemblerDirective::Word { values } => {
                     let instruction_start_address = current_address;
 
+                    // Resolve values (handle both literals and symbol references)
+                    let mut resolved_words = Vec::new();
+                    for val in values {
+                        let resolved = match val {
+                            DirectiveValue::Literal(lit) => *lit,
+                            DirectiveValue::Symbol(name) => {
+                                // Look up symbol in symbol table
+                                match symbol_table.lookup_symbol_ignore_case(name) {
+                                    Some(sym) => sym.value,
+                                    None => {
+                                        errors.push(AssemblerError {
+                                            error_type: ErrorType::UndefinedLabel,
+                                            line: line.line_number,
+                                            column: 0,
+                                            span: line.span,
+                                            message: format!(
+                                                "Undefined symbol '{}' in .word directive",
+                                                name
+                                            ),
+                                        });
+                                        continue;
+                                    }
+                                }
+                            }
+                        };
+                        resolved_words.push(resolved);
+                    }
+
                     // Add words in little-endian format
-                    for word in values {
+                    for word in resolved_words.iter() {
                         bytes.push((word & 0xFF) as u8); // Low byte
                         bytes.push(((word >> 8) & 0xFF) as u8); // High byte
                     }
@@ -374,11 +698,15 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                         line.line_number,
                         source_map::AddressRange {
                             start: instruction_start_address,
-                            end: instruction_start_address.wrapping_add((values.len() * 2) as u16),
+                            end: instruction_start_address
+                                .wrapping_add((resolved_words.len() * 2) as u16),
                         },
                     );
 
-                    current_address = current_address.wrapping_add((values.len() * 2) as u16);
+                    current_address =
+                        current_address.wrapping_add((resolved_words.len() * 2) as u16);
+                    current_segment_length =
+                        current_segment_length.wrapping_add((resolved_words.len() * 2) as u16);
                 }
             }
             continue;
@@ -407,16 +735,16 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 
         // Detect addressing mode and resolve operand value (including labels)
         let (mode, value) = if let Some(ref operand) = line.operand {
-            match resolve_operand(operand, &symbol_table, instruction_start_address, mnemonic) {
+            match resolve_operand(
+                operand,
+                &symbol_table,
+                instruction_start_address,
+                mnemonic,
+                (line.line_number, 0, line.span),
+            ) {
                 Ok((m, v)) => (m, v),
                 Err(e) => {
-                    errors.push(AssemblerError {
-                        error_type: e.error_type,
-                        line: line.line_number,
-                        column: 0,
-                        span: line.span,
-                        message: e.message,
-                    });
+                    errors.push(e);
                     continue; // Error recovery: skip this line
                 }
             }
@@ -450,6 +778,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 
                 bytes.extend(instruction_bytes);
                 current_address = current_address.wrapping_add(instruction_size);
+                current_segment_length = current_segment_length.wrapping_add(instruction_size);
             }
             Err(mut e) => {
                 // Update error with correct line info
@@ -472,6 +801,14 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         }
     }
 
+    // Finalize the last segment if it has any bytes
+    if current_segment_length > 0 {
+        segments.push(CodeSegment {
+            address: current_segment_start,
+            length: current_segment_length,
+        });
+    }
+
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -484,6 +821,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         symbol_table: symbol_table.symbols().to_vec(),
         source_map,
         warnings: Vec::new(),
+        segments,
     })
 }
 
@@ -508,7 +846,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
 ///
 /// let source = "START:\n    LDA #$42";
 /// let output = assemble_with_origin(source, 0x8000).unwrap();
-/// assert_eq!(output.symbol_table[0].address, 0x8000);
+/// assert_eq!(output.symbol_table[0].value, 0x8000);
 /// ```
 pub fn assemble_with_origin(
     source: &str,
@@ -519,13 +857,39 @@ pub fn assemble_with_origin(
     assemble(&source_with_origin)
 }
 
+/// Validate that a value fits in immediate mode (0-255)
+fn validate_immediate_value(value: u16, name: &str, kind: SymbolKind) -> Result<u16, String> {
+    if value > IMMEDIATE_MODE_MAX {
+        let kind_str = match kind {
+            SymbolKind::Constant => "Constant",
+            SymbolKind::Label => "Label",
+        };
+        Err(format!(
+            "{} '{}' value ${:04X} exceeds 8-bit range (expected $00-${:02X}) for immediate mode",
+            kind_str, name, value, IMMEDIATE_MODE_MAX
+        ))
+    } else {
+        Ok(value)
+    }
+}
+
 /// Resolve an operand, handling both numeric values and label references
+///
+/// # Arguments
+///
+/// * `operand` - The operand text to resolve
+/// * `symbol_table` - Symbol table for looking up labels and constants
+/// * `current_address` - Current assembly address for relative branches
+/// * `mnemonic` - Instruction mnemonic for context
+/// * `line_info` - Line number, column, and span for error reporting
 fn resolve_operand(
     operand: &str,
     symbol_table: &symbol_table::SymbolTable,
     current_address: u16,
     mnemonic: &str,
+    line_info: (usize, usize, (usize, usize)),
 ) -> Result<(crate::addressing::AddressingMode, u16), AssemblerError> {
+    let (line, column, span) = line_info;
     // Check if operand is a label reference (no prefix like $, #, (, etc.)
     let operand_trimmed = operand.trim();
 
@@ -537,7 +901,50 @@ fn resolve_operand(
     // Check if this is a branch instruction
     let is_branch = is_branch_mnemonic(mnemonic);
 
-    // If it starts with a special character, it's not a plain label
+    // Special handling for immediate mode with constants (#CONSTANT)
+    if let Some(stripped) = operand_trimmed.strip_prefix('#') {
+        let inner = stripped.trim();
+
+        // Check if it's a constant reference (no $, %, or digit prefix)
+        if !inner.starts_with('$')
+            && !inner.starts_with('%')
+            && !inner.chars().next().is_some_and(|c| c.is_ascii_digit())
+        {
+            // Look up constant in symbol table (case-insensitive, no allocation)
+            if let Some(symbol) = symbol_table.lookup_symbol_ignore_case(inner) {
+                // Validate immediate value is in range (works for both constants and labels)
+                let value = validate_immediate_value(symbol.value, &symbol.name, symbol.kind)
+                    .map_err(|msg| AssemblerError {
+                        error_type: ErrorType::RangeError,
+                        line,
+                        column,
+                        span,
+                        message: msg,
+                    })?;
+                return Ok((crate::addressing::AddressingMode::Immediate, value));
+            } else {
+                // Symbol not found - return undefined error
+                return Err(AssemblerError {
+                    error_type: ErrorType::UndefinedLabel,
+                    line,
+                    column,
+                    span,
+                    message: format!("Undefined symbol '{}'", inner.to_uppercase()),
+                });
+            }
+        }
+
+        // Parse as normal immediate value
+        return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
+            error_type: ErrorType::InvalidOperand,
+            line,
+            column,
+            span,
+            message: format!("Invalid operand '{}': {}", operand, e),
+        });
+    }
+
+    // If it starts with a special character, it's not a plain label/constant
     if operand_trimmed.starts_with('$')
         || operand_trimmed.starts_with('#')
         || operand_trimmed.starts_with('(')
@@ -555,26 +962,26 @@ fn resolve_operand(
             let target_address =
                 parser::parse_number(operand_trimmed).map_err(|e| AssemblerError {
                     error_type: ErrorType::InvalidOperand,
-                    line: 0,
-                    column: 0,
-                    span: (0, 0),
+                    line,
+                    column,
+                    span,
                     message: format!("Invalid branch target '{}': {}", operand, e),
                 })?;
 
             // Calculate relative offset
-            let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes
+            let next_instruction_address = current_address + BRANCH_INSTRUCTION_SIZE;
             let offset = target_address as i32 - next_instruction_address as i32;
 
-            // Check if offset is in range (-128 to +127)
-            if !(-128..=127).contains(&offset) {
+            // Check if offset is in range
+            if !(BRANCH_OFFSET_MIN..=BRANCH_OFFSET_MAX).contains(&offset) {
                 return Err(AssemblerError {
                     error_type: ErrorType::RangeError,
-                    line: 0,
-                    column: 0,
-                    span: (0, 0),
+                    line,
+                    column,
+                    span,
                     message: format!(
-                        "Branch to ${:04X} is out of range (offset: {}, must be -128 to +127)",
-                        target_address, offset
+                        "Branch to ${:04X} is out of range (offset: {}, expected {} to {})",
+                        target_address, offset, BRANCH_OFFSET_MIN, BRANCH_OFFSET_MAX
                     ),
                 });
             }
@@ -590,63 +997,127 @@ fn resolve_operand(
         // Parse as normal addressing mode (non-branch instructions or immediate/indirect modes)
         return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
             error_type: ErrorType::InvalidOperand,
-            line: 0,
-            column: 0,
-            span: (0, 0),
+            line,
+            column,
+            span,
             message: format!("Invalid operand '{}': {}", operand, e),
         });
     }
 
-    // Must be a label reference - look it up
-    // Labels are stored in uppercase, so convert operand to uppercase for lookup
-    let label_name = operand_trimmed.to_uppercase();
-    if let Some(symbol) = symbol_table.lookup_symbol(&label_name) {
-        let target_address = symbol.address;
+    // Check for indexed addressing with symbol (e.g., "IO_BASE,X" or "BUFFER,Y")
+    // Use split_once for clarity and to reject malformed input
+    if let Some((base, index)) = operand_trimmed.split_once(',') {
+        let base_part = base.trim();
+        let index_part = index.trim();
 
-        // Determine if this is a branch instruction (needs relative addressing)
-        let is_branch = matches!(
-            mnemonic,
-            "BCC" | "BCS" | "BEQ" | "BMI" | "BNE" | "BPL" | "BVC" | "BVS"
-        );
+        // Check if base is a symbol reference (not a number)
+        if !base_part.is_empty()
+            && !base_part.starts_with('$')
+            && !base_part.starts_with('%')
+            && !base_part.chars().next().is_some_and(|c| c.is_ascii_digit())
+        {
+            if let Some(symbol) = symbol_table.lookup_symbol_ignore_case(base_part) {
+                let value = symbol.value;
 
-        if is_branch {
-            // Calculate relative offset
-            // Branch offset is relative to the address of the next instruction
-            let next_instruction_address = current_address + 2; // Branch instructions are 2 bytes
-            let offset = target_address as i32 - next_instruction_address as i32;
-
-            // Check if offset is in range (-128 to +127)
-            if !(-128..=127).contains(&offset) {
-                return Err(AssemblerError {
-                    error_type: ErrorType::RangeError,
-                    line: 0,
-                    column: 0,
-                    span: (0, 0),
-                    message: format!(
-                        "Branch to '{}' is out of range (offset: {}, must be -128 to +127)",
-                        operand_trimmed, offset
-                    ),
-                });
+                // Determine indexed addressing mode based on index register (case-insensitive)
+                if index_part.eq_ignore_ascii_case("X") {
+                    if value <= ZERO_PAGE_MAX {
+                        return Ok((crate::addressing::AddressingMode::ZeroPageX, value));
+                    } else {
+                        return Ok((crate::addressing::AddressingMode::AbsoluteX, value));
+                    }
+                } else if index_part.eq_ignore_ascii_case("Y") {
+                    if value <= ZERO_PAGE_MAX {
+                        return Ok((crate::addressing::AddressingMode::ZeroPageY, value));
+                    } else {
+                        return Ok((crate::addressing::AddressingMode::AbsoluteY, value));
+                    }
+                } else {
+                    return Err(AssemblerError {
+                        error_type: ErrorType::InvalidOperand,
+                        line,
+                        column,
+                        span,
+                        message: format!(
+                            "Invalid index register '{}' (must be X or Y)",
+                            index_part
+                        ),
+                    });
+                }
             }
+            // Symbol not found - fall through to error handling below
+        }
 
-            // Convert to unsigned byte (two's complement)
-            let offset_byte = (offset as i8) as u8;
-            Ok((
-                crate::addressing::AddressingMode::Relative,
-                offset_byte as u16,
-            ))
-        } else {
-            // Absolute addressing for JMP, JSR, etc.
-            Ok((crate::addressing::AddressingMode::Absolute, target_address))
+        // Has comma but not a valid symbol,index format - parse normally
+        return parser::detect_addressing_mode(operand).map_err(|e| AssemblerError {
+            error_type: ErrorType::InvalidOperand,
+            line,
+            column,
+            span,
+            message: format!("Invalid operand '{}': {}", operand, e),
+        });
+    }
+
+    // Must be a label/constant reference - look it up (case-insensitive, no allocation)
+    if let Some(symbol) = symbol_table.lookup_symbol_ignore_case(operand_trimmed) {
+        match symbol.kind {
+            SymbolKind::Constant => {
+                // For constants, use value directly and choose addressing mode based on value
+                let value = symbol.value;
+
+                // Determine addressing mode based on value range
+                // If value fits in zero page (0-255), use ZeroPage, otherwise Absolute
+                if value <= ZERO_PAGE_MAX {
+                    Ok((crate::addressing::AddressingMode::ZeroPage, value))
+                } else {
+                    Ok((crate::addressing::AddressingMode::Absolute, value))
+                }
+            }
+            SymbolKind::Label => {
+                // For labels, use value as memory address
+                let target_address = symbol.value;
+
+                // Determine if this is a branch instruction (needs relative addressing)
+                if is_branch {
+                    // Calculate relative offset
+                    // Branch offset is relative to the address of the next instruction
+                    let next_instruction_address = current_address + BRANCH_INSTRUCTION_SIZE;
+                    let offset = target_address as i32 - next_instruction_address as i32;
+
+                    // Check if offset is in range
+                    if !(BRANCH_OFFSET_MIN..=BRANCH_OFFSET_MAX).contains(&offset) {
+                        return Err(AssemblerError {
+                            error_type: ErrorType::RangeError,
+                            line,
+                            column,
+                            span,
+                            message: format!(
+                                "Branch to '{}' is out of range (offset: {}, expected {} to {})",
+                                operand_trimmed, offset, BRANCH_OFFSET_MIN, BRANCH_OFFSET_MAX
+                            ),
+                        });
+                    }
+
+                    // Convert to unsigned byte (two's complement)
+                    let offset_byte = (offset as i8) as u8;
+                    Ok((
+                        crate::addressing::AddressingMode::Relative,
+                        offset_byte as u16,
+                    ))
+                } else {
+                    // Absolute addressing for JMP, JSR, etc.
+                    Ok((crate::addressing::AddressingMode::Absolute, target_address))
+                }
+            }
         }
     } else {
-        // Undefined label
+        // Undefined symbol
         Err(AssemblerError {
             error_type: ErrorType::UndefinedLabel,
-            line: 0,
-            column: 0,
-            span: (0, 0),
-            message: format!("Undefined label '{}'", label_name),
+            line,
+            column,
+            span,
+            message: format!("Undefined symbol '{}'", operand_trimmed.to_uppercase()),
         })
     }
 }
@@ -771,7 +1242,7 @@ mod tests {
         // Check that the label has the correct address
         assert_eq!(output.symbol_table.len(), 1);
         assert_eq!(output.symbol_table[0].name, "START");
-        assert_eq!(output.symbol_table[0].address, 0x8000);
+        assert_eq!(output.symbol_table[0].value, 0x8000);
 
         // Check assembled bytes (LDA immediate)
         assert_eq!(output.bytes.len(), 2);
@@ -789,8 +1260,8 @@ mod tests {
         let start = output.lookup_symbol("START").unwrap();
         let loop_label = output.lookup_symbol("LOOP").unwrap();
 
-        assert_eq!(start.address, 0x1000);
-        assert_eq!(loop_label.address, 0x1001); // After one NOP
+        assert_eq!(start.value, 0x1000);
+        assert_eq!(loop_label.value, 0x1001); // After one NOP
     }
 
     #[test]
@@ -832,7 +1303,7 @@ mod tests {
         assert!(symbol.is_some());
         let symbol = symbol.unwrap();
         assert_eq!(symbol.name, "START");
-        assert_eq!(symbol.address, 0);
+        assert_eq!(symbol.value, 0);
         assert_eq!(symbol.defined_at, 1);
     }
 }

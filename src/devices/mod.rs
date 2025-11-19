@@ -32,11 +32,13 @@ use crate::MemoryBus;
 use std::any::Any;
 
 // Device implementations
+pub mod interrupts;
 pub mod ram;
 pub mod rom;
 pub mod uart;
 
 // Re-export device types
+pub use interrupts::InterruptDevice;
 pub use ram::RamDevice;
 pub use rom::RomDevice;
 pub use uart::Uart6551;
@@ -124,54 +126,111 @@ pub trait Device {
     /// This method enables safe downcasting from `&mut dyn Device` to `&mut T`
     /// where `T` is the concrete device type.
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Cast this device to an `InterruptDevice` trait object if it supports interrupts.
+    ///
+    /// This method provides a clean way for the memory bus to check if a device
+    /// is interrupt-capable without requiring all devices to implement interrupt
+    /// functionality.
+    ///
+    /// # Default Implementation
+    ///
+    /// Returns `None` for devices that don't support interrupts (RAM, ROM, etc.).
+    /// Interrupt-capable devices should override this to return `Some(self)`.
+    ///
+    /// # Returns
+    ///
+    /// - `Some(&dyn InterruptDevice)` if device supports interrupts
+    /// - `None` if device doesn't support interrupts
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use lib6502::{Device, InterruptDevice};
+    /// use std::any::Any;
+    ///
+    /// // Interrupt-capable device
+    /// struct TimerDevice {
+    ///     interrupt_pending: bool,
+    /// }
+    ///
+    /// impl InterruptDevice for TimerDevice {
+    ///     fn has_interrupt(&self) -> bool {
+    ///         self.interrupt_pending
+    ///     }
+    /// }
+    ///
+    /// impl Device for TimerDevice {
+    ///     fn read(&self, offset: u16) -> u8 { 0 }
+    ///     fn write(&mut self, offset: u16, value: u8) { }
+    ///     fn size(&self) -> u16 { 4 }
+    ///     fn as_any(&self) -> &dyn Any { self }
+    ///     fn as_any_mut(&mut self) -> &mut dyn Any { self }
+    ///
+    ///     // Override to expose interrupt capability
+    ///     fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
+    ///         Some(self)
+    ///     }
+    /// }
+    /// ```
+    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
+        None // Default: device doesn't support interrupts
+    }
 }
 
 /// Helper for address range calculations and overlap detection.
 ///
-/// Encapsulates logic for working with memory address ranges, including
-/// overflow handling and overlap detection.
-#[derive(Debug, Clone, Copy)]
-struct AddressRange {
-    base: u16,
-    size: u16,
-}
+/// Wraps a `RangeInclusive<u16>` to represent memory address ranges.
+/// Uses inclusive ranges to properly handle devices that extend to 0xFFFF
+/// without special overflow handling.
+///
+/// # Invariants
+///
+/// - The range is always non-empty (size >= 1)
+/// - The range is inclusive on both ends: [start, end]
+#[derive(Debug, Clone)]
+struct AddressRange(std::ops::RangeInclusive<u16>);
 
 impl AddressRange {
-    /// Create a new address range.
-    fn new(base: u16, size: u16) -> Self {
-        Self { base, size }
-    }
-
-    /// Get the end address (exclusive) and overflow flag.
+    /// Create a new address range from base address and size.
     ///
-    /// Returns (end_addr, overflow) where overflow indicates the range
-    /// extends to 0xFFFF (inclusive).
-    fn end(&self) -> (u16, bool) {
-        self.base.overflowing_add(self.size)
+    /// # Arguments
+    ///
+    /// * `base` - Starting address of the range
+    /// * `size` - Number of bytes in the range (must be > 0)
+    ///
+    /// # Returns
+    ///
+    /// An inclusive range [base, base+size-1]. Handles overflow correctly
+    /// (e.g., base=0xE000, size=0x2000 creates range [0xE000, 0xFFFF]).
+    fn new(base: u16, size: u16) -> Self {
+        let (end_plus_one, overflowed) = base.overflowing_add(size);
+        let end = if overflowed {
+            // Device extends to end of address space
+            0xFFFF
+        } else {
+            // Normal case: base+size-1
+            end_plus_one.wrapping_sub(1)
+        };
+        Self(base..=end)
     }
 
     /// Check if an address falls within this range.
+    #[inline]
     fn contains(&self, addr: u16) -> bool {
-        let (end_addr, overflow) = self.end();
-
-        if overflow {
-            // Device extends to 0xFFFF (inclusive)
-            addr >= self.base
-        } else {
-            // Device extends to end_addr (exclusive)
-            addr >= self.base && addr < end_addr
-        }
+        self.0.contains(&addr)
     }
 
     /// Check if this range overlaps with another range.
+    ///
+    /// Two ranges overlap if they share any addresses. This is true when:
+    /// - The start of one range is <= the end of the other, AND
+    /// - The end of one range is >= the start of the other
+    ///
+    /// This works correctly for all cases, including ranges at 0xFFFF.
     fn overlaps(&self, other: &AddressRange) -> bool {
-        let (self_end, _) = self.end();
-        let (other_end, _) = other.end();
-
-        // Range 1: [self.base, self_end)
-        // Range 2: [other.base, other_end)
-        // Overlap if: self.base < other_end AND self_end > other.base
-        self.base < other_end && self_end > other.base
+        // Standard interval overlap test: [a,b] overlaps [c,d] iff a <= d && b >= c
+        self.0.start() <= other.0.end() && self.0.end() >= other.0.start()
     }
 }
 
@@ -314,6 +373,7 @@ impl MappedMemory {
     /// let result = memory.add_device(0x1000, Box::new(RamDevice::new(1024)));
     /// assert!(result.is_err());
     /// ```
+    #[must_use = "ignoring device registration errors can lead to silent failures"]
     pub fn add_device(
         &mut self,
         base_addr: u16,
@@ -490,6 +550,62 @@ impl MemoryBus for MappedMemory {
         }
         // Unmapped writes are silently ignored (matching 6502 hardware behavior)
     }
+
+    fn irq_active(&self) -> bool {
+        // Level-Sensitive IRQ Line Implementation
+        //
+        // This method implements the 6502's level-sensitive IRQ line behavior by
+        // performing a logical OR of all device interrupt flags. The IRQ line is
+        // active (high) if ANY device has a pending interrupt.
+        //
+        // Hardware Semantics:
+        // - IRQ line is ACTIVE when at least one device has_interrupt() returns true
+        // - IRQ line is INACTIVE only when ALL devices have cleared their interrupts
+        // - This matches real 6502 hardware where multiple devices share the IRQ line
+        //
+        // Multi-Device Behavior:
+        // - When multiple devices assert interrupts, the IRQ line stays active
+        // - ISR must poll all devices to identify interrupt sources
+        // - ISR must acknowledge each device individually (device-specific mechanism)
+        // - IRQ line goes inactive only after ALL devices are acknowledged
+        // - If new interrupt asserts during ISR, CPU re-enters ISR after RTI
+        //
+        // ISR Pattern for Multi-Device Systems:
+        // 1. ISR polls each device's status register in priority order
+        // 2. For each device with pending interrupt:
+        //    a. Read device status to identify cause
+        //    b. Handle the interrupt
+        //    c. Acknowledge device (write to control register or read data)
+        // 3. RTI instruction returns to interrupted code
+        // 4. CPU immediately checks IRQ line - if still active, re-enters ISR
+        //
+        // Example (3 devices at 0xD000, 0xD100, 0xD200):
+        //   irq_handler:
+        //       lda $D000          ; Check timer status (highest priority)
+        //       and #$80           ; Interrupt pending?
+        //       beq check_uart
+        //       ; handle timer...
+        //       sta $D001          ; Acknowledge timer
+        //   check_uart:
+        //       lda $D100          ; Check UART status
+        //       and #$80
+        //       beq check_gpio
+        //       ; handle UART...
+        //       lda $D104          ; Acknowledge by reading data
+        //   check_gpio:
+        //       lda $D200          ; Check GPIO status
+        //       and #$80
+        //       beq done
+        //       ; handle GPIO...
+        //       sta $D201          ; Acknowledge GPIO
+        //   done:
+        //       rti                ; Return - CPU will re-check IRQ line
+        //
+        self.devices
+            .iter()
+            .filter_map(|mapping| mapping.device.as_interrupt_device())
+            .any(|interrupt_device| interrupt_device.has_interrupt())
+    }
 }
 
 #[cfg(test)]
@@ -620,5 +736,145 @@ mod tests {
 
         // Should still read as 0xFF (unmapped)
         assert_eq!(memory.read(0x1234), 0xFF);
+    }
+
+    // ========== Edge Case Tests for Address Ranges ==========
+
+    #[test]
+    fn test_device_at_address_ffff() {
+        // Test a 1-byte device at the very end of address space
+        let mut memory = MappedMemory::new();
+        let result = memory.add_device(0xFFFF, Box::new(TestDevice::new(1)));
+        assert!(result.is_ok(), "Should allow 1-byte device at 0xFFFF");
+
+        // Verify it's accessible
+        memory.write(0xFFFF, 0x42);
+        assert_eq!(memory.read(0xFFFF), 0x42);
+    }
+
+    #[test]
+    fn test_device_extending_to_ffff() {
+        // Test device that extends exactly to end of address space
+        let mut memory = MappedMemory::new();
+        // Device at 0xE000 with size 0x2000 should extend to 0xFFFF
+        let result = memory.add_device(0xE000, Box::new(TestDevice::new(0x2000)));
+        assert!(result.is_ok(), "Should allow device extending to 0xFFFF");
+
+        // Verify end addresses are accessible
+        memory.write(0xFFFE, 0xAA);
+        memory.write(0xFFFF, 0xBB);
+        assert_eq!(memory.read(0xFFFE), 0xAA);
+        assert_eq!(memory.read(0xFFFF), 0xBB);
+    }
+
+    #[test]
+    fn test_overlapping_devices_rejected() {
+        let mut memory = MappedMemory::new();
+
+        // Add device at 0x8000-0xBFFF (16KB)
+        memory
+            .add_device(0x8000, Box::new(TestDevice::new(0x4000)))
+            .unwrap();
+
+        // Try to add overlapping device at 0xA000-0xDFFF
+        let result = memory.add_device(0xA000, Box::new(TestDevice::new(0x4000)));
+        assert!(
+            result.is_err(),
+            "Should reject device that overlaps existing device"
+        );
+
+        // Try to add device that contains existing device
+        let result = memory.add_device(0x7000, Box::new(TestDevice::new(0x6000)));
+        assert!(
+            result.is_err(),
+            "Should reject device that contains existing device"
+        );
+
+        // Try to add device contained by existing device
+        let result = memory.add_device(0x9000, Box::new(TestDevice::new(0x1000)));
+        assert!(
+            result.is_err(),
+            "Should reject device contained by existing device"
+        );
+    }
+
+    #[test]
+    fn test_device_at_overflow_boundary() {
+        // Test device at 0xFFFF with size > 1 (would overflow)
+        let mut memory = MappedMemory::new();
+
+        // This should work but the device gets clamped to [0xFFFF, 0xFFFF]
+        let result = memory.add_device(0xFFFF, Box::new(TestDevice::new(10)));
+        assert!(
+            result.is_ok(),
+            "Should handle overflow by clamping to 0xFFFF"
+        );
+
+        // Only 0xFFFF should be accessible
+        memory.write(0xFFFF, 0x42);
+        assert_eq!(memory.read(0xFFFF), 0x42);
+    }
+
+    #[test]
+    fn test_multiple_devices_with_overflow() {
+        let mut memory = MappedMemory::new();
+
+        // Add device extending to 0xFFFF
+        memory
+            .add_device(0xE000, Box::new(TestDevice::new(0x2000)))
+            .unwrap();
+
+        // Try to add another device at 0xF000 (would overlap)
+        let result = memory.add_device(0xF000, Box::new(TestDevice::new(0x1000)));
+        assert!(result.is_err(), "Should detect overlap near 0xFFFF");
+
+        // Try to add device at 0xD000 (should succeed, adjacent)
+        let result = memory.add_device(0xD000, Box::new(TestDevice::new(0x1000)));
+        assert!(result.is_ok(), "Should allow adjacent device before 0xE000");
+    }
+
+    #[test]
+    fn test_address_range_contains() {
+        // Test the AddressRange::contains() method for edge cases
+        let range1 = AddressRange::new(0x1000, 256);
+        assert!(range1.contains(0x1000), "Should contain start address");
+        assert!(range1.contains(0x10FF), "Should contain end address");
+        assert!(
+            !range1.contains(0x0FFF),
+            "Should not contain address before"
+        );
+        assert!(!range1.contains(0x1100), "Should not contain address after");
+
+        // Test range at 0xFFFF
+        let range2 = AddressRange::new(0xFFFF, 1);
+        assert!(range2.contains(0xFFFF), "Should contain 0xFFFF");
+        assert!(!range2.contains(0xFFFE), "Should not contain 0xFFFE");
+
+        // Test range extending to 0xFFFF
+        let range3 = AddressRange::new(0xE000, 0x2000);
+        assert!(range3.contains(0xE000), "Should contain start");
+        assert!(range3.contains(0xFFFF), "Should contain 0xFFFF");
+        assert!(!range3.contains(0xDFFF), "Should not contain before start");
+    }
+
+    #[test]
+    fn test_address_range_overlaps_symmetric() {
+        // Overlap should be symmetric: if A overlaps B, then B overlaps A
+        let range1 = AddressRange::new(0x1000, 0x1000);
+        let range2 = AddressRange::new(0x1800, 0x1000);
+
+        assert_eq!(
+            range1.overlaps(&range2),
+            range2.overlaps(&range1),
+            "Overlap should be symmetric"
+        );
+
+        // Test with ranges that don't overlap
+        let range3 = AddressRange::new(0x3000, 0x1000);
+        assert_eq!(
+            range1.overlaps(&range3),
+            range3.overlaps(&range1),
+            "Non-overlap should be symmetric"
+        );
     }
 }
