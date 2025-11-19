@@ -56,9 +56,9 @@ Phase 6 (Polish)
 
 ### Tasks
 
-- [ ] T001 Review existing `src/assembler/parser.rs` to understand current string parsing approach
-- [ ] T002 Create `src/assembler/lexer.rs` stub module with module declaration in `src/assembler.rs`
-- [ ] T003 Create `tests/lexer_tests.rs` test file for lexer unit tests
+- [x] T001 Review existing `src/assembler/parser.rs` to understand current string parsing approach
+- [x] T002 Create `src/assembler/lexer.rs` stub module with module declaration in `src/assembler.rs`
+- [x] T003 Create `tests/lexer_tests.rs` test file for lexer unit tests
 
 **Completion Criteria**: Module structure ready, can run `cargo build` successfully
 
@@ -72,16 +72,16 @@ Phase 6 (Polish)
 
 ### Tasks
 
-- [ ] T004 [P] Define `TokenType` enum in `src/assembler/lexer.rs` with all variants per data-model.md
-- [ ] T005 [P] Define `Token` struct in `src/assembler/lexer.rs` with token_type, line, column, length fields
-- [ ] T006 [P] Define `LexerError` enum in `src/assembler.rs` with InvalidHexDigit, InvalidBinaryDigit, NumberTooLarge variants
-- [ ] T007 [P] Extend `ErrorType` enum in `src/assembler.rs` with `LexicalError(LexerError)` variant
-- [ ] T008 Implement `Display` trait for `LexerError` in `src/assembler.rs`
-- [ ] T009 [P] Define `Lexer` struct in `src/assembler/lexer.rs` with source, chars, current, line, line_start fields
-- [ ] T010 [P] Define `TokenStream` struct in `src/assembler/lexer.rs` with tokens vec and position field
-- [ ] T011 Implement `TokenStream::new()` constructor in `src/assembler/lexer.rs`
+- [x] T004 [P] Define `TokenType` enum in `src/assembler/lexer.rs` with all variants per data-model.md
+- [x] T005 [P] Define `Token` struct in `src/assembler/lexer.rs` with token_type, line, column, length fields
+- [x] T006 [P] Define `LexerError` enum in `src/assembler.rs` with InvalidHexDigit, InvalidBinaryDigit, NumberTooLarge variants
+- [x] T007 [P] Extend `ErrorType` enum in `src/assembler.rs` with `LexicalError(LexerError)` variant
+- [x] T008 Implement `Display` trait for `LexerError` in `src/assembler.rs`
+- [x] T009 [P] Define `Lexer` struct in `src/assembler/lexer.rs` with source, chars, current, line, line_start fields
+- [x] T010 [P] Define `TokenStream` struct in `src/assembler/lexer.rs` with tokens vec and position field
+- [x] T011 Implement `TokenStream::new()` constructor in `src/assembler/lexer.rs`
 
-**Completion Criteria**: Core types compile, no tests failing
+**Completion Criteria**: Core types compile, no tests failing ✅
 
 ---
 
@@ -96,43 +96,43 @@ Phase 6 (Polish)
 
 ### Entity: Lexer Core Implementation
 
-- [ ] T012 [P] [US1] Implement `Lexer::new()` constructor in `src/assembler/lexer.rs`
-- [ ] T013 [US1] Implement `Lexer::advance()` helper method to move to next character in `src/assembler/lexer.rs`
-- [ ] T014 [US1] Implement `Lexer::peek()` helper method to look at current character in `src/assembler/lexer.rs`
-- [ ] T015 [US1] Implement `Lexer::column()` helper to calculate current column offset in `src/assembler/lexer.rs`
+- [x] T012 [P] [US1] Implement `Lexer::new()` constructor in `src/assembler/lexer.rs`
+- [x] T013 [US1] Implement `Lexer::advance()` helper method to move to next character in `src/assembler/lexer.rs`
+- [x] T014 [US1] Implement `Lexer::peek()` helper method to look at current character in `src/assembler/lexer.rs`
+- [x] T015 [US1] Implement `Lexer::column()` helper to calculate current column offset in `src/assembler/lexer.rs`
 
 ### Entity: Token Scanners
 
-- [ ] T016 [P] [US1] Implement `Lexer::scan_identifier()` for [a-zA-Z][a-zA-Z0-9_]* in `src/assembler/lexer.rs`
-- [ ] T017 [P] [US1] Implement `Lexer::scan_hex_number()` for $[0-9A-Fa-f]+ with validation in `src/assembler/lexer.rs`
-- [ ] T018 [P] [US1] Implement `Lexer::scan_binary_number()` for %[01]+ with validation in `src/assembler/lexer.rs`
-- [ ] T019 [P] [US1] Implement `Lexer::scan_decimal_number()` for [0-9]+ with validation in `src/assembler/lexer.rs`
-- [ ] T020 [P] [US1] Implement `Lexer::scan_comment()` for ;.* until newline in `src/assembler/lexer.rs`
-- [ ] T021 [P] [US1] Implement `Lexer::scan_single_char_token()` for operators (colon, comma, hash, etc.) in `src/assembler/lexer.rs`
+- [x] T016 [P] [US1] Implement `Lexer::scan_identifier()` for [a-zA-Z][a-zA-Z0-9_]* in `src/assembler/lexer.rs`
+- [x] T017 [P] [US1] Implement `Lexer::scan_hex_number()` for $[0-9A-Fa-f]+ with validation in `src/assembler/lexer.rs`
+- [x] T018 [P] [US1] Implement `Lexer::scan_binary_number()` for %[01]+ with validation in `src/assembler/lexer.rs`
+- [x] T019 [P] [US1] Implement `Lexer::scan_decimal_number()` for [0-9]+ with validation in `src/assembler/lexer.rs`
+- [x] T020 [P] [US1] Implement `Lexer::scan_comment()` for ;.* until newline in `src/assembler/lexer.rs`
+- [x] T021 [P] [US1] Implement `Lexer::scan_single_char_token()` for operators (colon, comma, hash, etc.) in `src/assembler/lexer.rs`
 
 ### Entity: Main Lexer Logic
 
-- [ ] T022 [US1] Implement `Lexer::next_token()` with match on current character in `src/assembler/lexer.rs`
-- [ ] T023 [US1] Implement `Lexer::tokenize()` public function returning `Result<Vec<Token>, Vec<LexerError>>` in `src/assembler/lexer.rs`
-- [ ] T024 [US1] Add `pub use lexer::{tokenize, Token, TokenType, LexerError};` to `src/assembler.rs`
+- [x] T022 [US1] Implement `Lexer::next_token()` with match on current character in `src/assembler/lexer.rs`
+- [x] T023 [US1] Implement `Lexer::tokenize()` public function returning `Result<Vec<Token>, Vec<LexerError>>` in `src/assembler/lexer.rs`
+- [x] T024 [US1] Add `pub use lexer::{tokenize, Token, TokenType, LexerError};` to `src/assembler.rs`
 
 ### Testing: Lexer Verification
 
-- [ ] T025 [P] [US1] Add test for identifier tokenization in `tests/lexer_tests.rs`
-- [ ] T026 [P] [US1] Add test for hex number tokenization ($42 → HexNumber(0x42)) in `tests/lexer_tests.rs`
-- [ ] T027 [P] [US1] Add test for binary number tokenization (%01000010 → BinaryNumber(66)) in `tests/lexer_tests.rs`
-- [ ] T028 [P] [US1] Add test for decimal number tokenization (42 → DecimalNumber(42)) in `tests/lexer_tests.rs`
-- [ ] T029 [P] [US1] Add test for operator tokenization (#, ,, :, etc.) in `tests/lexer_tests.rs`
-- [ ] T030 [P] [US1] Add test for comment preservation in `tests/lexer_tests.rs`
-- [ ] T031 [P] [US1] Add test for invalid hex digit error ($ZZ → InvalidHexDigit) in `tests/lexer_tests.rs`
-- [ ] T032 [P] [US1] Add test for number overflow error (>65535 → NumberTooLarge) in `tests/lexer_tests.rs`
-- [ ] T033 [P] [US1] Add test for line/column tracking accuracy in `tests/lexer_tests.rs`
+- [x] T025 [P] [US1] Add test for identifier tokenization in `tests/lexer_tests.rs`
+- [x] T026 [P] [US1] Add test for hex number tokenization ($42 → HexNumber(0x42)) in `tests/lexer_tests.rs`
+- [x] T027 [P] [US1] Add test for binary number tokenization (%01000010 → BinaryNumber(66)) in `tests/lexer_tests.rs`
+- [x] T028 [P] [US1] Add test for decimal number tokenization (42 → DecimalNumber(42)) in `tests/lexer_tests.rs`
+- [x] T029 [P] [US1] Add test for operator tokenization (#, ,, :, etc.) in `tests/lexer_tests.rs`
+- [x] T030 [P] [US1] Add test for comment preservation in `tests/lexer_tests.rs`
+- [x] T031 [P] [US1] Add test for invalid hex digit error ($ZZ → InvalidHexDigit) in `tests/lexer_tests.rs`
+- [x] T032 [P] [US1] Add test for number overflow error (>65535 → NumberTooLarge) in `tests/lexer_tests.rs`
+- [x] T033 [P] [US1] Add test for line/column tracking accuracy in `tests/lexer_tests.rs`
 
-**Phase 3 Completion Criteria** (US1 Independent Test):
+**Phase 3 Completion Criteria** (US1 Independent Test): ✅ ALL COMPLETE
 - ✅ Can call `tokenize(source)` and get token vector
 - ✅ Tokens include correct types and source locations
 - ✅ Lexical errors (invalid hex, overflow) reported separately
-- ✅ Run `cargo test lexer` passes all tests
+- ✅ Run `cargo test lexer` passes all tests (13/13 tests passing)
 
 ---
 

@@ -3,9 +3,13 @@
 //! Converts assembly language source code into binary machine code.
 
 pub mod encoder;
+pub mod lexer;
 pub mod parser;
 pub mod source_map;
 pub mod symbol_table;
+
+// Re-export lexer types for public API
+pub use lexer::{tokenize, Token, TokenType, TokenStream};
 
 use crate::opcodes;
 
@@ -259,9 +263,79 @@ pub struct AssemblerError {
     pub message: String,
 }
 
+/// Lexical analysis errors (FR-007: separate from syntactic errors)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LexerError {
+    /// Invalid hex digit in hex number (e.g., '$ZZ')
+    InvalidHexDigit {
+        ch: char,
+        line: usize,
+        column: usize,
+    },
+
+    /// Invalid binary digit in binary number (e.g., '%222')
+    InvalidBinaryDigit {
+        ch: char,
+        line: usize,
+        column: usize,
+    },
+
+    /// Number too large (overflow u16 range)
+    NumberTooLarge {
+        value: String,
+        max: u16,
+        line: usize,
+        column: usize,
+    },
+
+    /// Unexpected character (invalid token start)
+    UnexpectedCharacter {
+        ch: char,
+        line: usize,
+        column: usize,
+    },
+}
+
+impl std::fmt::Display for LexerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LexerError::InvalidHexDigit { ch, line, column } => write!(
+                f,
+                "Line {}, Column {}: Invalid hex digit '{}' in hex number",
+                line, column, ch
+            ),
+            LexerError::InvalidBinaryDigit { ch, line, column } => write!(
+                f,
+                "Line {}, Column {}: Invalid binary digit '{}' in binary number",
+                line, column, ch
+            ),
+            LexerError::NumberTooLarge {
+                value,
+                max,
+                line,
+                column,
+            } => write!(
+                f,
+                "Line {}, Column {}: Number '{}' exceeds maximum value {} (u16 range)",
+                line, column, value, max
+            ),
+            LexerError::UnexpectedCharacter { ch, line, column } => write!(
+                f,
+                "Line {}, Column {}: Unexpected character '{}'",
+                line, column, ch
+            ),
+        }
+    }
+}
+
+impl std::error::Error for LexerError {}
+
 /// Classification of assembly errors
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorType {
+    /// Lexical analysis error (invalid token, malformed number, etc.)
+    LexicalError(LexerError),
+
     /// Syntax error (invalid format, unexpected character)
     SyntaxError,
 
@@ -306,7 +380,8 @@ impl std::fmt::Display for AssemblerError {
             "Line {}, Column {}: {} - {}",
             self.line,
             self.column,
-            match self.error_type {
+            match &self.error_type {
+                ErrorType::LexicalError(_) => "Lexical Error",
                 ErrorType::SyntaxError => "Syntax Error",
                 ErrorType::UndefinedLabel => "Undefined Label",
                 ErrorType::DuplicateLabel => "Duplicate Label",
