@@ -370,7 +370,9 @@ impl Emulator6502 {
 
     /// Assemble 6502 assembly source code
     pub fn assemble(&self, source: String, start_addr: u16) -> AssemblyResult {
-        match assemble(&source) {
+        // Prepend .org directive so labels are assembled with correct absolute addresses
+        let source_with_org = format!(".org ${:04X}\n{}", start_addr, source);
+        match assemble(&source_with_org) {
             Ok(output) => {
                 let end_addr = start_addr.wrapping_add(output.bytes.len() as u16);
                 AssemblyResult {
