@@ -507,7 +507,17 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                 TokenType::Dollar => operand_str.push('$'),
                 TokenType::Percent => operand_str.push('%'),
                 TokenType::HexNumber(val) => {
-                    write!(operand_str, "${:X}", val).unwrap();
+                    // Preserve original hex digit count from source to distinguish
+                    // zero-page ($0C) from absolute ($000C) addressing modes
+                    // token.length includes the '$' prefix
+                    let hex_digits = token.length.saturating_sub(1);
+                    match hex_digits {
+                        1 => write!(operand_str, "${:X}", val).unwrap(),
+                        2 => write!(operand_str, "${:02X}", val).unwrap(),
+                        3 => write!(operand_str, "${:03X}", val).unwrap(),
+                        4 => write!(operand_str, "${:04X}", val).unwrap(),
+                        _ => write!(operand_str, "${:X}", val).unwrap(), // Fallback
+                    }
                 }
                 TokenType::BinaryNumber(val) => {
                     write!(operand_str, "%{:b}", val).unwrap();
