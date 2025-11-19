@@ -68,7 +68,7 @@ fn test_uart_echo_program() {
     // Vector is at 0xFFFC-0xFFFD, which is offset 0xFC-0xFD in this RAM device
     vector_ram.write(0xFC, 0x00); // Low byte
     vector_ram.write(0xFD, 0xC0); // High byte
-    // IRQ vector at 0xFFFE-0xFFFF (offset 0xFE-0xFF) will be written by the program
+                                  // IRQ vector at 0xFFFE-0xFFFF (offset 0xFE-0xFF) will be written by the program
 
     memory
         .add_device(0xFF00, Box::new(vector_ram))
@@ -113,7 +113,6 @@ fn test_uart_echo_program() {
             idle_loop_pc = Some(pc);
             println!("Found idle loop at PC=0x{:04X}", pc);
             cpu.step().unwrap(); // Execute the NOP
-            steps += 1;
             break;
         }
 
@@ -131,10 +130,7 @@ fn test_uart_echo_program() {
         idle_loop_pc.is_some(),
         "Should have reached idle loop during initialization"
     );
-    assert!(
-        !cpu.flag_i(),
-        "I flag should be clear (interrupts enabled)"
-    );
+    assert!(!cpu.flag_i(), "I flag should be clear (interrupts enabled)");
 
     println!("\n=== Initialization complete, now testing echo functionality ===\n");
 
@@ -198,7 +194,7 @@ fn test_uart_echo_program() {
 
     assert_eq!(
         output_bytes.as_slice(),
-        &[b'A'],
+        b"A",
         "Should have echoed the character 'A'"
     );
 
