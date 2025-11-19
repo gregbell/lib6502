@@ -4,8 +4,8 @@
 //! and assembly/disassembly operations.
 
 use crate::{
-    assemble, disassemble, DisassemblyOptions, MappedMemory, RamDevice, RomDevice,
-    Uart6551, MemoryBus, Device, CPU,
+    assemble, disassemble, Device, DisassemblyOptions, MappedMemory, MemoryBus, RamDevice,
+    RomDevice, Uart6551, CPU,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
