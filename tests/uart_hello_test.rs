@@ -89,7 +89,10 @@ fn test_uart_hello_program() {
         if pc == 0x0000 && opcode == 0x00 {
             brk_count += 1;
             if brk_count > 5 {
-                println!("Detected BRK loop at 0x0000 after {} steps - program finished", steps);
+                println!(
+                    "Detected BRK loop at 0x0000 after {} steps - program finished",
+                    steps
+                );
                 break;
             }
         }
@@ -98,7 +101,12 @@ fn test_uart_hello_program() {
         if steps < 20 {
             println!(
                 "Step {}: PC=0x{:04X} opcode=0x{:02X} A=0x{:02X} X=0x{:02X} Y=0x{:02X}",
-                steps, pc, opcode, cpu.a(), cpu.x(), cpu.y()
+                steps,
+                pc,
+                opcode,
+                cpu.a(),
+                cpu.x(),
+                cpu.y()
             );
         }
 
@@ -120,7 +128,11 @@ fn test_uart_hello_program() {
     // Get transmitted bytes
     let output_bytes = transmitted.borrow().clone();
 
-    println!("Transmitted {} bytes: {:?}", output_bytes.len(), output_bytes);
+    println!(
+        "Transmitted {} bytes: {:?}",
+        output_bytes.len(),
+        output_bytes
+    );
 
     // Convert to string for easier verification
     let output_string = String::from_utf8_lossy(&output_bytes);

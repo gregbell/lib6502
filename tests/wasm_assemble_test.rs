@@ -30,7 +30,9 @@ fn test_assemble_with_org_directive() {
     println!("Symbols: {:?}", result1.symbol_table);
 
     // Find LDA data,X instruction (opcode 0xBD for absolute,X or 0xB5 for zero-page,X)
-    let lda_idx1 = bytes1.iter().position(|&b| b == 0xBD || b == 0xB5)
+    let lda_idx1 = bytes1
+        .iter()
+        .position(|&b| b == 0xBD || b == 0xB5)
         .expect("LDA data,X not found");
     let lda_opcode1 = bytes1[lda_idx1];
 
@@ -44,7 +46,10 @@ fn test_assemble_with_org_directive() {
         bytes1[lda_idx1 + 1] as u16
     };
 
-    println!("Without .org: data label at ${:04X} (opcode ${:02X})", addr1, lda_opcode1);
+    println!(
+        "Without .org: data label at ${:04X} (opcode ${:02X})",
+        addr1, lda_opcode1
+    );
     assert!(addr1 < 0x0100, "Without .org, label should be < $0100");
 
     // Test 2: With .org $0600 directive - assembles for $0600
@@ -56,7 +61,9 @@ fn test_assemble_with_org_directive() {
     println!("With .org - Symbols: {:?}", result2.symbol_table);
 
     // Find LDA data,X instruction (opcode 0xBD for absolute,X or 0xB5 for zero-page,X)
-    let lda_idx2 = bytes2.iter().position(|&b| b == 0xBD || b == 0xB5)
+    let lda_idx2 = bytes2
+        .iter()
+        .position(|&b| b == 0xBD || b == 0xB5)
         .expect("LDA data,X not found");
     let lda_opcode2 = bytes2[lda_idx2];
 
@@ -70,9 +77,23 @@ fn test_assemble_with_org_directive() {
         bytes2[lda_idx2 + 1] as u16
     };
 
-    println!("With .org $0600: data label at ${:04X} (opcode ${:02X})", addr2, lda_opcode2);
-    assert!(addr2 >= 0x0600, "With .org $0600, label should be >= $0600, got ${:04X}", addr2);
-    assert!(addr2 < 0x0700, "With .org $0600, label should be < $0700, got ${:04X}", addr2);
+    println!(
+        "With .org $0600: data label at ${:04X} (opcode ${:02X})",
+        addr2, lda_opcode2
+    );
+    assert!(
+        addr2 >= 0x0600,
+        "With .org $0600, label should be >= $0600, got ${:04X}",
+        addr2
+    );
+    assert!(
+        addr2 < 0x0700,
+        "With .org $0600, label should be < $0700, got ${:04X}",
+        addr2
+    );
 
-    println!("✓ Labels correctly adjusted by .org directive (from ${:04X} to ${:04X})", addr1, addr2);
+    println!(
+        "✓ Labels correctly adjusted by .org directive (from ${:04X} to ${:04X})",
+        addr1, addr2
+    );
 }
