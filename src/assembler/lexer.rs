@@ -115,6 +115,53 @@
 //! Typical overhead: <5% compared to direct string parsing (measured via benchmarks).
 
 
+/// Single-character token types (operators and punctuation)
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum SingleCharTokenType {
+    Colon,
+    Comma,
+    Hash,
+    Dollar,
+    Percent,
+    Equal,
+    LParen,
+    RParen,
+    Dot,
+}
+
+impl SingleCharTokenType {
+    /// Try to convert a character to a single-char token type
+    fn from_char(ch: char) -> Option<Self> {
+        match ch {
+            ':' => Some(Self::Colon),
+            ',' => Some(Self::Comma),
+            '#' => Some(Self::Hash),
+            '$' => Some(Self::Dollar),
+            '%' => Some(Self::Percent),
+            '=' => Some(Self::Equal),
+            '(' => Some(Self::LParen),
+            ')' => Some(Self::RParen),
+            '.' => Some(Self::Dot),
+            _ => None,
+        }
+    }
+
+    /// Convert to public TokenType
+    fn to_token_type(self) -> TokenType {
+        match self {
+            Self::Colon => TokenType::Colon,
+            Self::Comma => TokenType::Comma,
+            Self::Hash => TokenType::Hash,
+            Self::Dollar => TokenType::Dollar,
+            Self::Percent => TokenType::Percent,
+            Self::Equal => TokenType::Equal,
+            Self::LParen => TokenType::LParen,
+            Self::RParen => TokenType::RParen,
+            Self::Dot => TokenType::Dot,
+        }
+    }
+}
+
 /// Classification of lexical tokens in 6502 assembly
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -228,7 +275,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Scan an identifier: [a-zA-Z][a-zA-Z0-9_]* (uppercase normalized)
-    fn scan_identifier(&mut self, _start_pos: usize, start_col: usize) -> Token {
+    fn scan_identifier(&mut self, start_col: usize) -> Token {
         let mut identifier = String::new();
 
         // Collect identifier characters
@@ -274,8 +321,7 @@ impl<'a> Lexer<'a> {
 
         // Ensure we got at least one hex digit
         if hex_str.is_empty() {
-            return Err(super::LexerError::InvalidHexDigit {
-                ch: ' ', // placeholder
+            return Err(super::LexerError::MissingHexDigits {
                 line: self.line,
                 column: self.column(),
             });
@@ -321,6 +367,14 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        // Ensure we got at least one binary digit
+        if bin_str.is_empty() {
+            return Err(super::LexerError::MissingBinaryDigits {
+                line: self.line,
+                column: self.column(),
+            });
+        }
+
         // Parse binary value
         let value = u16::from_str_radix(&bin_str, 2)
             .map_err(|_| super::LexerError::NumberTooLarge {
@@ -339,7 +393,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Scan a decimal number: [0-9]+
-    fn scan_decimal_number(&mut self, _start_pos: usize, start_col: usize) -> Result<Token, super::LexerError> {
+    fn scan_decimal_number(&mut self, start_col: usize) -> Result<Token, super::LexerError> {
         let mut num_str = String::new();
 
         // Collect decimal digits
@@ -395,24 +449,11 @@ impl<'a> Lexer<'a> {
     }
 
     /// Scan a single-character token (operators, punctuation)
-    fn scan_single_char_token(&mut self, ch: char, start_col: usize) -> Token {
-        let token_type = match ch {
-            ':' => TokenType::Colon,
-            ',' => TokenType::Comma,
-            '#' => TokenType::Hash,
-            '$' => TokenType::Dollar,
-            '%' => TokenType::Percent,
-            '=' => TokenType::Equal,
-            '(' => TokenType::LParen,
-            ')' => TokenType::RParen,
-            '.' => TokenType::Dot,
-            _ => unreachable!("scan_single_char_token called with invalid character"),
-        };
-
+    fn scan_single_char_token(&mut self, token_type: SingleCharTokenType, start_col: usize) -> Token {
         self.advance();
 
         Token {
-            token_type,
+            token_type: token_type.to_token_type(),
             line: self.line,
             column: start_col,
             length: 1,
@@ -427,7 +468,6 @@ impl<'a> Lexer<'a> {
         };
 
         let start_col = self.column();
-        let start_pos = self.current.map(|(pos, _)| pos).unwrap_or(0);
 
         match ch {
             // Whitespace (spaces and tabs)
@@ -519,16 +559,19 @@ impl<'a> Lexer<'a> {
             }
 
             // Decimal number
-            '0'..='9' => Ok(Some(self.scan_decimal_number(start_pos, start_col)?)),
+            '0'..='9' => Ok(Some(self.scan_decimal_number(start_col)?)),
 
             // Identifier (mnemonic, label, symbol)
             'a'..='z' | 'A'..='Z' => {
-                Ok(Some(self.scan_identifier(start_pos, start_col)))
+                Ok(Some(self.scan_identifier(start_col)))
             }
 
             // Single-character operators
             ':' | ',' | '#' | '=' | '(' | ')' | '.' => {
-                Ok(Some(self.scan_single_char_token(ch, start_col)))
+                // Convert char to SingleCharTokenType (guaranteed to succeed for these chars)
+                let token_type = SingleCharTokenType::from_char(ch)
+                    .expect("BUG: char matched in pattern but not in from_char");
+                Ok(Some(self.scan_single_char_token(token_type, start_col)))
             }
 
             // Unexpected character
@@ -580,8 +623,15 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, Vec<super::LexerError>> {
             }
             Err(err) => {
                 errors.push(err);
-                // Try to recover by skipping the problematic character
-                lexer.advance();
+                // Try to recover by skipping to next safe synchronization point
+                // (whitespace, newline, or semicolon)
+                lexer.advance();  // Skip the problematic character
+                while let Some(ch) = lexer.peek() {
+                    if matches!(ch, ' ' | '\t' | '\n' | '\r' | ';') {
+                        break;  // Found synchronization point
+                    }
+                    lexer.advance();  // Keep skipping
+                }
             }
         }
     }
@@ -625,6 +675,7 @@ impl TokenStream {
     ///     assert!(matches!(token.token_type, TokenType::Identifier(_)));
     /// }
     /// ```
+    #[must_use]
     pub fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.position)
     }
@@ -645,13 +696,41 @@ impl TokenStream {
     ///     assert_eq!(token.token_type, TokenType::Hash);
     /// }
     /// ```
+    #[must_use]
     pub fn peek_n(&self, n: usize) -> Option<&Token> {
         self.tokens.get(self.position + n)
+    }
+
+    /// Advance the stream position by one token without returning it
+    ///
+    /// This is more efficient than `consume()` when you don't need the token value.
+    /// Returns true if advanced, false if already at end of stream.
+    ///
+    /// # Examples
+    /// ```
+    /// use lib6502::assembler::{tokenize, TokenStream};
+    ///
+    /// let tokens = tokenize("LDA STA").unwrap();
+    /// let mut stream = TokenStream::new(tokens);
+    /// assert!(stream.advance()); // skip LDA
+    /// assert!(stream.advance()); // skip whitespace
+    /// // Now at STA
+    /// ```
+    pub fn advance(&mut self) -> bool {
+        if self.position < self.tokens.len() {
+            self.position += 1;
+            true
+        } else {
+            false
+        }
     }
 
     /// Consume and return the current token, advancing the stream
     ///
     /// Returns None if at end of token stream.
+    ///
+    /// **Note**: This method clones the token. If you don't need the token value,
+    /// use `advance()` instead for better performance.
     ///
     /// # Examples
     /// ```
@@ -683,7 +762,7 @@ impl TokenStream {
     ///
     /// let tokens = tokenize("LDA   \n  #$42").unwrap();
     /// let mut stream = TokenStream::new(tokens);
-    /// stream.consume(); // consume LDA
+    /// stream.advance(); // skip LDA
     /// stream.skip_whitespace(); // skip spaces and newline
     /// let token = stream.peek().unwrap();
     /// assert_eq!(token.token_type, TokenType::Hash);
@@ -710,9 +789,10 @@ impl TokenStream {
     /// let tokens = tokenize("LDA").unwrap();
     /// let mut stream = TokenStream::new(tokens);
     /// assert!(!stream.is_eof()); // at LDA
-    /// stream.consume(); // consume LDA
+    /// stream.advance(); // skip LDA
     /// assert!(stream.is_eof()); // at EOF
     /// ```
+    #[must_use = "calling is_eof() without using the result has no effect"]
     pub fn is_eof(&self) -> bool {
         match self.peek() {
             Some(token) => matches!(token.token_type, TokenType::Eof),
@@ -735,6 +815,7 @@ impl TokenStream {
     /// assert_eq!(line, 1);
     /// assert_eq!(column, 0);
     /// ```
+    #[must_use]
     pub fn current_location(&self) -> (usize, usize) {
         match self.peek() {
             Some(token) => (token.line, token.column),

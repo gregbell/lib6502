@@ -136,6 +136,7 @@
 
 use crate::addressing::AddressingMode;
 use super::lexer::{Token, TokenType};
+use std::fmt::Write;  // For write! macro on String
 
 /// A parsed line of assembly source
 #[derive(Debug, Clone, PartialEq)]
@@ -321,9 +322,15 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                                 value_str.push(' ');
                             }
                         }
-                        TokenType::HexNumber(val) => value_str.push_str(&format!("${:X}", val)),
-                        TokenType::BinaryNumber(val) => value_str.push_str(&format!("%{:b}", val)),
-                        TokenType::DecimalNumber(val) => value_str.push_str(&val.to_string()),
+                        TokenType::HexNumber(val) => {
+                            write!(value_str, "${:X}", val).unwrap();
+                        }
+                        TokenType::BinaryNumber(val) => {
+                            write!(value_str, "%{:b}", val).unwrap();
+                        }
+                        TokenType::DecimalNumber(val) => {
+                            write!(value_str, "{}", val).unwrap();
+                        }
                         TokenType::Identifier(id) => value_str.push_str(id),
                         _ => {}, // Ignore other tokens in constant value
                     }
@@ -371,11 +378,11 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                         TokenType::Eof => break,
                         TokenType::HexNumber(val) => {
                             if !args.is_empty() { args.push(' '); }
-                            args.push_str(&format!("${:X}", val));
+                            write!(args, "${:X}", val).unwrap();
                         }
                         TokenType::DecimalNumber(val) => {
                             if !args.is_empty() { args.push(' '); }
-                            args.push_str(&val.to_string());
+                            write!(args, "{}", val).unwrap();
                         }
                         TokenType::Identifier(id) => {
                             if !args.is_empty() { args.push(' '); }
@@ -472,9 +479,15 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                 TokenType::Hash => operand_str.push('#'),
                 TokenType::Dollar => operand_str.push('$'),
                 TokenType::Percent => operand_str.push('%'),
-                TokenType::HexNumber(val) => operand_str.push_str(&format!("${:X}", val)),
-                TokenType::BinaryNumber(val) => operand_str.push_str(&format!("%{:b}", val)),
-                TokenType::DecimalNumber(val) => operand_str.push_str(&val.to_string()),
+                TokenType::HexNumber(val) => {
+                    write!(operand_str, "${:X}", val).unwrap();
+                }
+                TokenType::BinaryNumber(val) => {
+                    write!(operand_str, "%{:b}", val).unwrap();
+                }
+                TokenType::DecimalNumber(val) => {
+                    write!(operand_str, "{}", val).unwrap();
+                }
                 TokenType::Identifier(id) => operand_str.push_str(id),
                 TokenType::Comma => operand_str.push(','),
                 TokenType::LParen => operand_str.push('('),

@@ -280,6 +280,18 @@ pub enum LexerError {
         column: usize,
     },
 
+    /// Missing digits after hex prefix (e.g., '$' followed by non-hex)
+    MissingHexDigits {
+        line: usize,
+        column: usize,
+    },
+
+    /// Missing digits after binary prefix (e.g., '%' followed by non-binary)
+    MissingBinaryDigits {
+        line: usize,
+        column: usize,
+    },
+
     /// Number too large (overflow u16 range)
     NumberTooLarge {
         value: String,
@@ -308,6 +320,16 @@ impl std::fmt::Display for LexerError {
                 f,
                 "Line {}, Column {}: Invalid binary digit '{}' in binary number",
                 line, column, ch
+            ),
+            LexerError::MissingHexDigits { line, column } => write!(
+                f,
+                "Line {}, Column {}: Expected hex digits after '$' prefix",
+                line, column
+            ),
+            LexerError::MissingBinaryDigits { line, column } => write!(
+                f,
+                "Line {}, Column {}: Expected binary digits after '%' prefix",
+                line, column
             ),
             LexerError::NumberTooLarge {
                 value,
@@ -454,6 +476,8 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                 let (line, column) = match &lex_err {
                     LexerError::InvalidHexDigit { line, column, .. } => (*line, *column),
                     LexerError::InvalidBinaryDigit { line, column, .. } => (*line, *column),
+                    LexerError::MissingHexDigits { line, column } => (*line, *column),
+                    LexerError::MissingBinaryDigits { line, column } => (*line, *column),
                     LexerError::NumberTooLarge { line, column, .. } => (*line, *column),
                     LexerError::UnexpectedCharacter { line, column, .. } => (*line, *column),
                 };
