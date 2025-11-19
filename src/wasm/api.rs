@@ -181,15 +181,21 @@ impl Emulator6502 {
             .add_device(0xA000, Box::new(SharedUart::new(Rc::clone(&uart))))
             .expect("Failed to add UART device");
 
-        // Create ROM with reset vector pointing to $0600
-        let mut rom_data = vec![0xEA; 16384]; // 16KB of NOP instructions
-        rom_data[0x3FFC] = 0x00; // Reset vector low byte ($FFFC in ROM = offset $3FFC)
-        rom_data[0x3FFD] = 0x06; // Reset vector high byte ($FFFD in ROM = offset $3FFD)
-
-        // Add ROM at $C000-$FFFF (16KB including vectors)
+        // Add ROM at $C000-$FEFF (15872 bytes, excludes vector page)
+        // Vector page ($FF00-$FFFF) will be in RAM to allow programs to set interrupt vectors
+        let rom_data = vec![0xEA; 15872]; // NOP instructions
         memory
             .add_device(0xC000, Box::new(RomDevice::new(rom_data)))
             .expect("Failed to add ROM device");
+
+        // Add RAM at $FF00-$FFFF (256 bytes) for writable vector page
+        let mut vector_ram = RamDevice::new(256);
+        // Initialize reset vector to point to $0600 (default program start)
+        vector_ram.write(0xFC, 0x00); // Reset vector low byte ($FFFC = offset $FC in this RAM)
+        vector_ram.write(0xFD, 0x06); // Reset vector high byte ($FFFD = offset $FD in this RAM)
+        memory
+            .add_device(0xFF00, Box::new(vector_ram))
+            .expect("Failed to add vector RAM device");
 
         let cpu = CPU::new(memory);
 
@@ -219,10 +225,14 @@ impl Emulator6502 {
 
     /// Reset the CPU to initial state
     pub fn reset(&mut self) {
-        // Save current RAM contents
+        // Save current RAM contents (including vector page)
         let mut ram_backup = Vec::with_capacity(32768);
         for addr in 0x0000..=0x7FFF {
             ram_backup.push(self.cpu.memory.read(addr));
+        }
+        let mut vector_backup = Vec::with_capacity(256);
+        for addr in 0xFF00..=0xFFFF {
+            vector_backup.push(self.cpu.memory.read(addr));
         }
 
         // Create new MappedMemory
@@ -250,13 +260,20 @@ impl Emulator6502 {
             .add_device(0xA000, Box::new(SharedUart::new(Rc::clone(&uart))))
             .expect("Failed to add UART device");
 
-        // Create ROM with reset vector pointing to $0600
-        let mut rom_data = vec![0xEA; 16384]; // 16KB of NOP instructions
-        rom_data[0x3FFC] = 0x00; // Reset vector low byte
-        rom_data[0x3FFD] = 0x06; // Reset vector high byte
+        // Add ROM at $C000-$FEFF (15872 bytes, excludes vector page)
+        let rom_data = vec![0xEA; 15872]; // NOP instructions
         memory
             .add_device(0xC000, Box::new(RomDevice::new(rom_data)))
             .expect("Failed to add ROM device");
+
+        // Restore vector RAM at $FF00-$FFFF (256 bytes)
+        let mut vector_ram = RamDevice::new(256);
+        for (offset, &byte) in vector_backup.iter().enumerate() {
+            vector_ram.write(offset as u16, byte);
+        }
+        memory
+            .add_device(0xFF00, Box::new(vector_ram))
+            .expect("Failed to add vector RAM device");
 
         // Create new CPU with reset memory
         self.cpu = CPU::new(memory);

@@ -4,7 +4,7 @@
 //! and properly echoes received characters using interrupt-driven I/O.
 
 use lib6502::assembler::assemble;
-use lib6502::{MappedMemory, MemoryBus, RamDevice, RomDevice, Uart6551, CPU};
+use lib6502::{Device, MappedMemory, MemoryBus, RamDevice, RomDevice, Uart6551, CPU};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -54,21 +54,25 @@ fn test_uart_echo_program() {
     // The program is now assembled with .org $C000, so bytes can be loaded directly
     let mut rom_data = output.bytes.clone();
 
-    // Expand ROM to 16KB and add vectors at the end
-    rom_data.resize(16384, 0x00); // Pad with zeros to 16KB
-
-    // Set reset vector to point to ROM start (0xC000)
-    // Vector is at 0xFFFC-0xFFFD, which is offset 0x3FFC-0x3FFD in our ROM
-    rom_data[0x3FFC] = 0x00; // Low byte
-    rom_data[0x3FFD] = 0xC0; // High byte
-
-    // The program itself sets up the IRQ vector at 0xFFFE-0xFFFF
-    // by writing to those addresses, so we don't need to set them here
-    // Initially they'll be 0x0000, but the program will overwrite them
+    // Expand ROM to 15872 bytes (0xC000-0xFEFF, excludes vector page)
+    rom_data.resize(15872, 0x00); // Pad with zeros
 
     memory
         .add_device(rom_base, Box::new(RomDevice::new(rom_data)))
         .expect("Failed to add ROM");
+
+    // Add RAM at 0xFF00-0xFFFF (256 bytes) for writable vector page
+    // This allows programs to write their interrupt vectors
+    let mut vector_ram = RamDevice::new(256);
+    // Set reset vector to point to ROM start (0xC000)
+    // Vector is at 0xFFFC-0xFFFD, which is offset 0xFC-0xFD in this RAM device
+    vector_ram.write(0xFC, 0x00); // Low byte
+    vector_ram.write(0xFD, 0xC0); // High byte
+    // IRQ vector at 0xFFFE-0xFFFF (offset 0xFE-0xFF) will be written by the program
+
+    memory
+        .add_device(0xFF00, Box::new(vector_ram))
+        .expect("Failed to add vector RAM");
 
     // Create CPU
     let mut cpu = CPU::new(memory);
