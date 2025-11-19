@@ -19,10 +19,11 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # No dependencies - core module is dependency-free
 wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
 
 [dev-dependencies]
 # Use standard Rust test framework
 
 [features]
 default = []
-wasm = ["wasm-bindgen"]
+wasm = ["wasm-bindgen", "js-sys"]

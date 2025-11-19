@@ -361,6 +361,7 @@ See `examples/constants.rs` for a complete example program.
 - Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible per Constitution) (006-assembler-lexer)
 - N/A (operates on in-memory strings and produces byte vectors) (006-assembler-lexer)
 - N/A (in-memory CPU and device state only) (005-cpu-interrupt-support)
+- N/A (in-memory emulator state only, no persistence) (005-xterm-serial-connection)
 
 ## Recent Changes
 - 002-assembler-disassembler: Added Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible)

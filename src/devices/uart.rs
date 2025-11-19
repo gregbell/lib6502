@@ -3,7 +3,7 @@
 //! Provides serial communication via memory-mapped registers with callback interface
 //! for external terminal integration.
 
-use super::Device;
+use super::{Device, InterruptDevice};
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -35,7 +35,8 @@ use std::collections::VecDeque;
 /// | Bit | Name | Description |
 /// |-----|------|-------------|
 /// | 3   | ECHO | Echo mode (1 = auto-retransmit received bytes) |
-/// | 7-4,2-0 | - | User-defined (stored but not interpreted) |
+/// | 1   | IRQ_EN | Interrupt enable (1 = trigger IRQ on data received) |
+/// | 7-4,2,0 | - | User-defined (stored but not interpreted) |
 ///
 /// ## Control Register (Offset 3, Read/Write)
 ///
@@ -52,6 +53,26 @@ use std::collections::VecDeque;
 /// - **Immediate**: Writes to data register invoke callback immediately
 /// - **No buffering**: TDRE always set (always ready)
 /// - **Echo mode**: When command register bit 3 set, received bytes auto-transmit
+///
+/// ## Interrupt Support
+///
+/// The UART supports receive interrupts via the CPU interrupt system:
+///
+/// - **Enable**: Set command register bit 1 (0x02) to enable interrupts
+/// - **Trigger**: Interrupt fires when byte is received (via `receive_byte()`)
+/// - **Clear**: Reading data register (offset 0) acknowledges interrupt
+/// - **IRQ Line**: Device signals CPU via `InterruptDevice` trait
+///
+/// Interrupt Service Routine pattern:
+/// ```text
+/// isr:
+///     LDA $A002      ; Read command register
+///     AND #$02       ; Check if UART interrupts enabled
+///     BEQ check_other_devices
+///     LDA $A000      ; Read data (clears interrupt)
+///     ; Process received byte...
+///     RTS
+/// ```
 ///
 /// # Example
 ///
@@ -97,6 +118,10 @@ pub struct Uart6551 {
 
     // Overrun flag (uses interior mutability)
     overrun_occurred: RefCell<bool>,
+
+    // Interrupt support (uses interior mutability for state changes during read)
+    interrupt_pending: RefCell<bool>,
+    interrupt_enable: RefCell<bool>,
 }
 
 impl Uart6551 {
@@ -128,6 +153,8 @@ impl Uart6551 {
             on_transmit: None,
             last_rx_byte: RefCell::new(0x00),
             overrun_occurred: RefCell::new(false),
+            interrupt_pending: RefCell::new(false),
+            interrupt_enable: RefCell::new(false),
         }
     }
 
@@ -188,6 +215,11 @@ impl Uart6551 {
             self.rx_buffer.borrow_mut().push_back(byte);
             *self.last_rx_byte.borrow_mut() = byte;
             self.update_status_register();
+
+            // Trigger interrupt if enabled (command bit 1)
+            if *self.interrupt_enable.borrow() {
+                *self.interrupt_pending.borrow_mut() = true;
+            }
 
             // Echo mode: automatically retransmit if enabled (command bit 3)
             if self.command_register & 0x08 != 0 {
@@ -294,6 +326,9 @@ impl Device for Uart6551 {
                     *self.overrun_occurred.borrow_mut() = false;
                     *self.last_rx_byte.borrow_mut() = byte;
 
+                    // Clear interrupt on data read (acknowledge interrupt)
+                    *self.interrupt_pending.borrow_mut() = false;
+
                     // Update status (RDRF may clear if buffer now empty)
                     let mut status = 0x10; // TDRE always 1
                     if !rx_buffer.is_empty() {
@@ -324,6 +359,12 @@ impl Device for Uart6551 {
             }
             2 => {
                 self.command_register = value;
+                // Interrupt enable is bit 1
+                *self.interrupt_enable.borrow_mut() = (value & 0x02) != 0;
+                // If disabling interrupts, clear any pending interrupt
+                if (value & 0x02) == 0 {
+                    *self.interrupt_pending.borrow_mut() = false;
+                }
                 // Echo mode is bit 3, handled in receive_byte
             }
             3 => {
@@ -346,6 +387,16 @@ impl Device for Uart6551 {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
+        Some(self)
+    }
+}
+
+impl InterruptDevice for Uart6551 {
+    fn has_interrupt(&self) -> bool {
+        *self.interrupt_pending.borrow()
     }
 }
 

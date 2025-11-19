@@ -215,10 +215,21 @@ cargo run --example simple_ram
 An interactive 6502 assembly playground is available at the [GitHub Pages demo](https://your-org.github.io/6502/) (or run locally from the `demo/` directory).
 
 The demo features:
-- Live assembly editor
-- Real-time CPU state visualization
-- Memory viewer
-- Cycle-accurate execution
+- **Live Assembly Editor** - Write and edit 6502 assembly code
+- **Real-time CPU State** - View registers, flags, and program counter
+- **Memory Viewer** - Inspect memory contents at any address
+- **Serial Terminal** - Interactive xterm.js terminal connected to UART at $A000-$A003
+- **Example Programs** - Pre-loaded examples including UART I/O demos
+- **Cycle-accurate Execution** - Step through code or run at configurable speeds
+
+### UART Examples
+
+The demo includes example programs demonstrating interrupt-driven serial I/O:
+- **UART Echo (IRQ)** - Interrupt-driven character echo using hardware interrupts
+- **UART Hello World** - Simple string output demonstration
+- **UART IRQ Advanced** - Advanced interrupt example with character counting and auto-newline
+
+These examples showcase the 6502's interrupt system (IRQ) for asynchronous I/O - the authentic way real 6502 systems handled serial communication. Type in the terminal to trigger interrupts and see the ISR in action!
 
 ## Development
 
@@ -340,8 +351,12 @@ CI runs both suites to ensure correctness while keeping local development fast.
 - [x] Assembler and disassembler
 - [x] WebAssembly support
 - [x] Interactive web demo
+- [x] Memory-mapped devices (MappedMemory architecture)
+- [x] CPU interrupt support (IRQ with level-sensitive line)
+- [x] UART serial device (W65C51 ACIA emulation with interrupts)
+- [x] Serial terminal integration (xterm.js in demo)
 - [ ] Debugger interface
-- [ ] Additional memory implementations (ROM, banked memory)
+- [ ] Additional memory-mapped devices (VIA, PIA)
 - [ ] Performance optimizations
 - [ ] CMOS 65C02 support
 

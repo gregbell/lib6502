@@ -3,8 +3,47 @@
 //! Provides JavaScript-callable interfaces for CPU control, state inspection,
 //! and assembly/disassembly operations.
 
-use crate::{assemble, disassemble, DisassemblyOptions, FlatMemory, MemoryBus, CPU};
+use crate::{
+    assemble, disassemble, Device, DisassemblyOptions, MappedMemory, MemoryBus, RamDevice,
+    RomDevice, Uart6551, CPU,
+};
+use std::cell::RefCell;
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
+
+/// Shared UART wrapper that implements Device
+/// Allows the UART to be used both in MappedMemory and accessed separately for receive_byte()
+struct SharedUart {
+    uart: Rc<RefCell<Uart6551>>,
+}
+
+impl SharedUart {
+    fn new(uart: Rc<RefCell<Uart6551>>) -> Self {
+        SharedUart { uart }
+    }
+}
+
+impl Device for SharedUart {
+    fn read(&self, offset: u16) -> u8 {
+        self.uart.borrow().read(offset)
+    }
+
+    fn write(&mut self, offset: u16, value: u8) {
+        self.uart.borrow_mut().write(offset, value);
+    }
+
+    fn size(&self) -> u16 {
+        self.uart.borrow().size()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 /// JavaScript-compatible error wrapper
 #[wasm_bindgen]
@@ -109,27 +148,55 @@ impl DisassemblyLine {
 /// Main emulator interface for JavaScript
 #[wasm_bindgen]
 pub struct Emulator6502 {
-    cpu: CPU<FlatMemory>,
+    cpu: CPU<MappedMemory>,
+    uart: Rc<RefCell<Uart6551>>,
+    on_transmit: js_sys::Function,
     program_start: u16,
     program_end: u16,
 }
 
 #[wasm_bindgen]
 impl Emulator6502 {
-    /// Create a new 6502 emulator instance
+    /// Create a new 6502 emulator instance with UART support
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        // Initialize with flat 64KB memory
-        let mut memory = FlatMemory::new();
+    pub fn new(on_transmit: js_sys::Function) -> Self {
+        // Initialize MappedMemory with device mapping
+        let mut memory = MappedMemory::new();
 
-        // Set reset vector to default program start (0x0600)
-        memory.write(0xFFFC, 0x00);
-        memory.write(0xFFFD, 0x06);
+        // Add RAM at $0000-$7FFF (32KB)
+        memory
+            .add_device(0x0000, Box::new(RamDevice::new(32768)))
+            .expect("Failed to add RAM device");
+
+        // Create UART device with transmit callback
+        let uart = Rc::new(RefCell::new(Uart6551::new()));
+        let on_transmit_clone = on_transmit.clone();
+        uart.borrow_mut().set_transmit_callback(move |byte| {
+            let char_str = String::from_utf8(vec![byte]).unwrap_or_else(|_| "?".to_string());
+            let _ = on_transmit_clone.call1(&JsValue::NULL, &JsValue::from_str(&char_str));
+        });
+
+        // Add UART at $A000-$A003 using SharedUart wrapper
+        memory
+            .add_device(0xA000, Box::new(SharedUart::new(Rc::clone(&uart))))
+            .expect("Failed to add UART device");
+
+        // Create ROM with reset vector pointing to $0600
+        let mut rom_data = vec![0xEA; 16384]; // 16KB of NOP instructions
+        rom_data[0x3FFC] = 0x00; // Reset vector low byte ($FFFC in ROM = offset $3FFC)
+        rom_data[0x3FFD] = 0x06; // Reset vector high byte ($FFFD in ROM = offset $3FFD)
+
+        // Add ROM at $C000-$FFFF (16KB including vectors)
+        memory
+            .add_device(0xC000, Box::new(RomDevice::new(rom_data)))
+            .expect("Failed to add ROM device");
 
         let cpu = CPU::new(memory);
 
         Emulator6502 {
             cpu,
+            uart,
+            on_transmit,
             program_start: 0x0600,
             program_end: 0x0600,
         }
@@ -152,17 +219,48 @@ impl Emulator6502 {
 
     /// Reset the CPU to initial state
     pub fn reset(&mut self) {
-        // Create new memory and copy current memory state
-        let mut new_memory = FlatMemory::new();
-
-        // Copy all memory
-        for addr in 0..=0xFFFF {
-            let value = self.cpu.memory.read(addr);
-            new_memory.write(addr, value);
+        // Save current RAM contents
+        let mut ram_backup = Vec::with_capacity(32768);
+        for addr in 0x0000..=0x7FFF {
+            ram_backup.push(self.cpu.memory.read(addr));
         }
 
-        // Create new CPU with the memory
-        self.cpu = CPU::new(new_memory);
+        // Create new MappedMemory
+        let mut memory = MappedMemory::new();
+
+        // Restore RAM at $0000-$7FFF (32KB)
+        let mut ram = RamDevice::new(32768);
+        for (offset, &byte) in ram_backup.iter().enumerate() {
+            ram.write(offset as u16, byte);
+        }
+        memory
+            .add_device(0x0000, Box::new(ram))
+            .expect("Failed to add RAM device");
+
+        // Create fresh UART with transmit callback
+        let uart = Rc::new(RefCell::new(Uart6551::new()));
+        let on_transmit_clone = self.on_transmit.clone();
+        uart.borrow_mut().set_transmit_callback(move |byte| {
+            let char_str = String::from_utf8(vec![byte]).unwrap_or_else(|_| "?".to_string());
+            let _ = on_transmit_clone.call1(&JsValue::NULL, &JsValue::from_str(&char_str));
+        });
+
+        // Add UART at $A000-$A003 using SharedUart wrapper
+        memory
+            .add_device(0xA000, Box::new(SharedUart::new(Rc::clone(&uart))))
+            .expect("Failed to add UART device");
+
+        // Create ROM with reset vector pointing to $0600
+        let mut rom_data = vec![0xEA; 16384]; // 16KB of NOP instructions
+        rom_data[0x3FFC] = 0x00; // Reset vector low byte
+        rom_data[0x3FFD] = 0x06; // Reset vector high byte
+        memory
+            .add_device(0xC000, Box::new(RomDevice::new(rom_data)))
+            .expect("Failed to add ROM device");
+
+        // Create new CPU with reset memory
+        self.cpu = CPU::new(memory);
+        self.uart = uart;
     }
 
     // Register getters
@@ -232,6 +330,13 @@ impl Emulator6502 {
     /// Set the program counter
     pub fn set_pc(&mut self, addr: u16) {
         self.cpu.set_pc(addr);
+    }
+
+    // UART methods
+
+    /// Receive a character from the terminal into the UART buffer
+    pub fn receive_char(&mut self, byte: u8) {
+        self.uart.borrow_mut().receive_byte(byte);
     }
 
     // Memory access methods
@@ -349,11 +454,5 @@ impl Emulator6502 {
     #[wasm_bindgen(getter)]
     pub fn program_end(&self) -> u16 {
         self.program_end
-    }
-}
-
-impl Default for Emulator6502 {
-    fn default() -> Self {
-        Self::new()
     }
 }
