@@ -445,11 +445,62 @@ fn is_branch_mnemonic(mnemonic: &str) -> bool {
 pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     let mut errors = Vec::new();
 
-    // Parse all lines
-    let parsed_lines: Vec<_> = source
-        .lines()
+    // Tokenize the entire source
+    let tokens = match tokenize(source) {
+        Ok(tokens) => tokens,
+        Err(lexer_errors) => {
+            // Convert lexer errors to assembler errors
+            for lex_err in lexer_errors {
+                let (line, column) = match &lex_err {
+                    LexerError::InvalidHexDigit { line, column, .. } => (*line, *column),
+                    LexerError::InvalidBinaryDigit { line, column, .. } => (*line, *column),
+                    LexerError::NumberTooLarge { line, column, .. } => (*line, *column),
+                    LexerError::UnexpectedCharacter { line, column, .. } => (*line, *column),
+                };
+                errors.push(AssemblerError {
+                    error_type: ErrorType::LexicalError(lex_err.clone()),
+                    line,
+                    column,
+                    span: (column, column + 1),
+                    message: lex_err.to_string(),
+                });
+            }
+            return Err(errors);
+        }
+    };
+
+    // Group tokens by line
+    let mut token_lines: Vec<Vec<Token>> = Vec::new();
+    let mut current_line_tokens = Vec::new();
+
+    for token in tokens {
+        match &token.token_type {
+            TokenType::Newline => {
+                // End of line - save current line tokens
+                token_lines.push(current_line_tokens);
+                current_line_tokens = Vec::new();
+            }
+            TokenType::Eof => {
+                // End of file - save last line if not empty
+                if !current_line_tokens.is_empty() {
+                    token_lines.push(current_line_tokens);
+                }
+                break;
+            }
+            _ => {
+                // Add token to current line
+                current_line_tokens.push(token);
+            }
+        }
+    }
+
+    // Parse all lines using token-based parser
+    let parsed_lines: Vec<_> = token_lines
+        .iter()
         .enumerate()
-        .filter_map(|(idx, line)| parser::parse_line(line, idx + 1))
+        .filter_map(|(idx, line_tokens)| {
+            parser::parse_token_line(line_tokens, idx + 1)
+        })
         .collect();
 
     // Pass 1: Build symbol table

@@ -447,7 +447,7 @@ impl<'a> Lexer<'a> {
 /// use lib6502::assembler::lexer::{tokenize, TokenType};
 ///
 /// let tokens = tokenize("LDA #$42").unwrap();
-/// assert_eq!(tokens.len(), 4); // LDA, whitespace, #, $42
+/// assert_eq!(tokens.len(), 5); // LDA, whitespace, #, $42, EOF
 /// ```
 pub fn tokenize(source: &str) -> Result<Vec<Token>, Vec<super::LexerError>> {
     let mut lexer = Lexer::new(source);

@@ -1,6 +1,7 @@
 //! Assembly source parser
 
 use crate::addressing::AddressingMode;
+use super::lexer::{Token, TokenType};
 
 /// A parsed line of assembly source
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +29,339 @@ pub struct AssemblyLine {
 
     /// Character span in source (start, end) for error reporting
     pub span: (usize, usize),
+}
+
+/// Parse a line from a sequence of tokens (new token-based parser)
+///
+/// Takes a slice of tokens representing one logical line (tokens between newlines).
+/// This is the new lexer-integrated parser that replaces string manipulation
+/// with token pattern matching.
+///
+/// # Arguments
+///
+/// * `tokens` - Slice of tokens for this line (excluding the terminating newline)
+/// * `line_number` - The 1-indexed line number
+///
+/// # Returns
+///
+/// Some(AssemblyLine) if the line contains code, None for empty/comment-only lines
+pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<AssemblyLine> {
+    // Skip leading whitespace
+    let mut pos = 0;
+    while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+        pos += 1;
+    }
+
+    // Empty line or only whitespace
+    if pos >= tokens.len() || matches!(tokens[pos].token_type, TokenType::Eof) {
+        return None;
+    }
+
+    // Calculate span from first to last token
+    let span_start = if tokens.is_empty() { 0 } else { tokens[0].column };
+    let span_end = if tokens.is_empty() {
+        0
+    } else {
+        let last = &tokens[tokens.len() - 1];
+        last.column + last.length
+    };
+
+    // Comment-only line
+    if matches!(tokens[pos].token_type, TokenType::Comment(_)) {
+        if let TokenType::Comment(text) = &tokens[pos].token_type {
+            return Some(AssemblyLine {
+                line_number,
+                constant: None,
+                label: None,
+                mnemonic: None,
+                operand: None,
+                directive: None,
+                comment: Some(text.clone()),
+                span: (span_start, span_end),
+            });
+        }
+    }
+
+    let mut label = None;
+    let mut constant = None;
+    let mut mnemonic = None;
+    let mut operand_tokens = Vec::new();
+    let mut directive = None;
+    let mut comment = None;
+
+    // Look for label (Identifier followed by Colon)
+    // Also handle invalid labels that start with digits (Number + Identifier + Colon)
+    if pos + 1 < tokens.len() {
+        // Check for Number + Identifier + Colon (invalid label starting with digit)
+        if pos + 2 < tokens.len() {
+            let is_number_label = matches!(
+                (&tokens[pos].token_type, &tokens[pos + 1].token_type, &tokens[pos + 2].token_type),
+                (TokenType::DecimalNumber(_) | TokenType::HexNumber(_) | TokenType::BinaryNumber(_),
+                 TokenType::Identifier(_),
+                 TokenType::Colon)
+            );
+
+            if is_number_label {
+                // Construct the invalid label name
+                let num_str = match &tokens[pos].token_type {
+                    TokenType::DecimalNumber(val) => val.to_string(),
+                    TokenType::HexNumber(val) => format!("${:X}", val),
+                    TokenType::BinaryNumber(val) => format!("%{:b}", val),
+                    _ => unreachable!(),
+                };
+                if let TokenType::Identifier(id) = &tokens[pos + 1].token_type {
+                    label = Some(format!("{}{}", num_str, id));
+                    pos += 3; // Skip number, identifier, and colon
+
+                    // Skip whitespace after label
+                    while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                        pos += 1;
+                    }
+                }
+            }
+        }
+
+        // Normal label case (Identifier + Colon)
+        if label.is_none() && matches!(tokens[pos].token_type, TokenType::Identifier(_)) {
+            if let TokenType::Identifier(name) = &tokens[pos].token_type {
+                if matches!(tokens[pos + 1].token_type, TokenType::Colon) {
+                    label = Some(name.clone());
+                    pos += 2; // Skip identifier and colon
+
+                    // Skip whitespace after label
+                    while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                        pos += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Check if line ends after label
+    if pos >= tokens.len() {
+        if label.is_some() {
+            return Some(AssemblyLine {
+                line_number,
+                constant: None,
+                label,
+                mnemonic: None,
+                operand: None,
+                directive: None,
+                comment: None,
+                span: (span_start, span_end),
+            });
+        }
+        return None;
+    }
+
+    // Look for constant assignment (Identifier followed by Equal)
+    if label.is_none() && pos + 1 < tokens.len() {
+        if let TokenType::Identifier(name) = &tokens[pos].token_type {
+            // Skip whitespace before potential equals
+            let mut check_pos = pos + 1;
+            while check_pos < tokens.len() && matches!(tokens[check_pos].token_type, TokenType::Whitespace) {
+                check_pos += 1;
+            }
+
+            if check_pos < tokens.len() && matches!(tokens[check_pos].token_type, TokenType::Equal) {
+                // This is a constant assignment
+                let const_name = name.clone();
+                pos = check_pos + 1; // Skip past equals
+
+                // Skip whitespace after equals
+                while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                    pos += 1;
+                }
+
+                // Collect value tokens until comment or EOF
+                let mut value_str = String::new();
+                while pos < tokens.len() {
+                    match &tokens[pos].token_type {
+                        TokenType::Comment(text) => {
+                            comment = Some(text.clone());
+                            break;
+                        }
+                        TokenType::Eof => break,
+                        TokenType::Whitespace => {
+                            if !value_str.is_empty() {
+                                value_str.push(' ');
+                            }
+                        }
+                        TokenType::HexNumber(val) => value_str.push_str(&format!("${:X}", val)),
+                        TokenType::BinaryNumber(val) => value_str.push_str(&format!("%{:b}", val)),
+                        TokenType::DecimalNumber(val) => value_str.push_str(&val.to_string()),
+                        TokenType::Identifier(id) => value_str.push_str(id),
+                        _ => {}, // Ignore other tokens in constant value
+                    }
+                    pos += 1;
+                }
+
+                constant = Some((const_name, value_str.trim().to_string()));
+
+                return Some(AssemblyLine {
+                    line_number,
+                    constant,
+                    label,
+                    mnemonic: None,
+                    operand: None,
+                    directive: None,
+                    comment,
+                    span: (span_start, span_end),
+                });
+            }
+        }
+    }
+
+    // Check for directive (starts with Dot)
+    if pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Dot) {
+        pos += 1; // Skip dot
+
+        // Get directive name
+        if pos < tokens.len() {
+            if let TokenType::Identifier(directive_name) = &tokens[pos].token_type {
+                pos += 1; // Skip directive name
+
+                // Skip whitespace
+                while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                    pos += 1;
+                }
+
+                // Collect argument tokens until comment or EOF
+                let mut args = String::new();
+                while pos < tokens.len() {
+                    match &tokens[pos].token_type {
+                        TokenType::Comment(text) => {
+                            comment = Some(text.clone());
+                            break;
+                        }
+                        TokenType::Eof => break,
+                        TokenType::HexNumber(val) => {
+                            if !args.is_empty() { args.push(' '); }
+                            args.push_str(&format!("${:X}", val));
+                        }
+                        TokenType::DecimalNumber(val) => {
+                            if !args.is_empty() { args.push(' '); }
+                            args.push_str(&val.to_string());
+                        }
+                        TokenType::Identifier(id) => {
+                            if !args.is_empty() { args.push(' '); }
+                            args.push_str(id);
+                        }
+                        TokenType::Comma => args.push(','),
+                        TokenType::Whitespace => {
+                            if !args.is_empty() && !args.ends_with(',') {
+                                args.push(' ');
+                            }
+                        }
+                        _ => {}
+                    }
+                    pos += 1;
+                }
+
+                // Parse the directive
+                let directive_str = format!(".{} {}", directive_name, args).trim().to_string();
+
+                match parse_directive(&directive_str) {
+                    Ok(dir) => {
+                        directive = Some(dir);
+                        return Some(AssemblyLine {
+                            line_number,
+                            constant: None,
+                            label,
+                            mnemonic: None,
+                            operand: None,
+                            directive,
+                            comment,
+                            span: (span_start, span_end),
+                        });
+                    }
+                    Err(_) => {
+                        // Invalid directive - treat as mnemonic so validator can catch it
+                        mnemonic = Some(format!(".{}", directive_name));
+                        let operand_str = if args.is_empty() {
+                            None
+                        } else {
+                            Some(args.trim().to_string())
+                        };
+
+                        return Some(AssemblyLine {
+                            line_number,
+                            constant: None,
+                            label,
+                            mnemonic,
+                            operand: operand_str,
+                            directive: None,
+                            comment,
+                            span: (span_start, span_end),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Look for mnemonic (Identifier not followed by colon or equals)
+    if pos < tokens.len() {
+        if let TokenType::Identifier(name) = &tokens[pos].token_type {
+            mnemonic = Some(name.clone());
+            pos += 1;
+
+            // Skip whitespace after mnemonic
+            while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                pos += 1;
+            }
+
+            // Collect operand tokens until comment or EOF
+            while pos < tokens.len() {
+                match &tokens[pos].token_type {
+                    TokenType::Comment(text) => {
+                        comment = Some(text.clone());
+                        break;
+                    }
+                    TokenType::Eof => break,
+                    _ => {
+                        operand_tokens.push(&tokens[pos]);
+                        pos += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Convert operand tokens to string (temporary - until we refactor operand parsing)
+    let operand = if operand_tokens.is_empty() {
+        None
+    } else {
+        let mut operand_str = String::new();
+        for token in operand_tokens {
+            match &token.token_type {
+                TokenType::Hash => operand_str.push('#'),
+                TokenType::Dollar => operand_str.push('$'),
+                TokenType::Percent => operand_str.push('%'),
+                TokenType::HexNumber(val) => operand_str.push_str(&format!("${:X}", val)),
+                TokenType::BinaryNumber(val) => operand_str.push_str(&format!("%{:b}", val)),
+                TokenType::DecimalNumber(val) => operand_str.push_str(&val.to_string()),
+                TokenType::Identifier(id) => operand_str.push_str(id),
+                TokenType::Comma => operand_str.push(','),
+                TokenType::LParen => operand_str.push('('),
+                TokenType::RParen => operand_str.push(')'),
+                TokenType::Whitespace => operand_str.push(' '),
+                _ => {}
+            }
+        }
+        Some(operand_str.trim().to_string())
+    };
+
+    Some(AssemblyLine {
+        line_number,
+        constant,
+        label,
+        mnemonic,
+        operand,
+        directive,
+        comment,
+        span: (span_start, span_end),
+    })
 }
 
 /// Parse a number from a string (supports hex $XX, decimal, binary %XXXXXXXX)
