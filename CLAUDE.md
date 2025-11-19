@@ -33,15 +33,72 @@ The fetch-decode-execute loop is driven by:
 
 ```
 src/
-  lib.rs         - Public API and error types
-  cpu.rs         - CPU state and execution logic
-  memory.rs      - MemoryBus trait and FlatMemory impl
-  opcodes.rs     - OPCODE_TABLE metadata
-  addressing.rs  - AddressingMode enum
-tests/           - Integration tests (separate from unit tests in src/)
-examples/        - Usage examples
-specs/           - Feature specifications and planning docs
+  lib.rs              - Public API and error types
+  cpu.rs              - CPU state and execution logic
+  memory.rs           - MemoryBus trait and FlatMemory impl
+  opcodes.rs          - OPCODE_TABLE metadata
+  addressing.rs       - AddressingMode enum
+  assembler/
+    mod.rs            - Assembler public API
+    lexer.rs          - Tokenization (characters → tokens)
+    parser.rs         - Syntactic analysis (tokens → AssemblyLine)
+    encoder.rs        - Code generation (AssemblyLine → bytes)
+    symbol_table.rs   - Label/constant resolution
+    source_map.rs     - Debug information
+tests/                - Integration tests (separate from unit tests in src/)
+examples/             - Usage examples
+specs/                - Feature specifications and planning docs
 ```
+
+### Assembler Architecture
+
+The assembler follows a **three-phase pipeline** that separates concerns:
+
+```
+Phase 1: Lexical Analysis (src/assembler/lexer.rs)
+  Input:  "LDA #$42 ; comment"
+  Output: [Identifier("LDA"), Whitespace, Hash, HexNumber(0x42), Comment("comment"), EOF]
+
+  Responsibilities:
+  - Tokenize characters into typed tokens
+  - Parse number literals ($42 → HexNumber(0x42))
+  - Track source locations (line, column)
+  - Detect lexical errors (invalid hex, overflow)
+
+Phase 2: Syntactic Analysis (src/assembler/parser.rs)
+  Input:  Token stream from lexer
+  Output: AssemblyLine { label, mnemonic, operand, directive, ... }
+
+  Responsibilities:
+  - Pattern match on token types (Identifier + Colon → label)
+  - Build structured representation
+  - Validate syntax (not semantics)
+  - Preserve comments and locations
+
+Phase 3: Code Generation (src/assembler/encoder.rs + mod.rs)
+  Input:  Vector of AssemblyLine
+  Output: Binary machine code + source maps
+
+  Responsibilities:
+  - Resolve labels and constants (two-pass)
+  - Validate addressing modes and ranges
+  - Generate machine code bytes
+  - Build debug information
+```
+
+**Key Benefits of Lexer/Parser Separation:**
+
+- **Simpler Code**: Token pattern matching instead of string manipulation
+- **Better Errors**: Lexical errors (bad hex) vs syntactic errors (bad mnemonic)
+- **Extensibility**: Add directives without modifying lexer
+- **Reusability**: External tools can use `tokenize()` for syntax highlighting
+- **Type Safety**: Compiler catches token type mismatches
+
+**Adding New Features:**
+
+- New directive → Modify parser only (lexer already handles `.` + identifier)
+- New number format → Modify lexer only (parser uses TokenType::*Number)
+- New addressing mode → Modify encoder only (parser preserves operand tokens)
 
 ### Table-Driven Design
 
@@ -301,6 +358,8 @@ See `examples/constants.rs` for a complete example program.
 - Rust 1.75+ (for WASM compilation), HTML5/CSS3/JavaScript ES6+ (for frontend) (003-wasm-web-demo)
 - N/A (fully client-side, no persistence) (003-wasm-web-demo)
 - N/A (in-memory state only, no persistence) (004-memory-mapping-module)
+- Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible per Constitution) (006-assembler-lexer)
+- N/A (operates on in-memory strings and produces byte vectors) (006-assembler-lexer)
 - N/A (in-memory CPU and device state only) (005-cpu-interrupt-support)
 
 ## Recent Changes

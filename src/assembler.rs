@@ -3,9 +3,13 @@
 //! Converts assembly language source code into binary machine code.
 
 pub mod encoder;
+pub mod lexer;
 pub mod parser;
 pub mod source_map;
 pub mod symbol_table;
+
+// Re-export lexer types for public API
+pub use lexer::{tokenize, Token, TokenStream, TokenType};
 
 use crate::opcodes;
 
@@ -259,9 +263,95 @@ pub struct AssemblerError {
     pub message: String,
 }
 
+/// Lexical analysis errors (FR-007: separate from syntactic errors)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LexerError {
+    /// Invalid hex digit in hex number (e.g., '$ZZ')
+    InvalidHexDigit {
+        ch: char,
+        line: usize,
+        column: usize,
+    },
+
+    /// Invalid binary digit in binary number (e.g., '%222')
+    InvalidBinaryDigit {
+        ch: char,
+        line: usize,
+        column: usize,
+    },
+
+    /// Missing digits after hex prefix (e.g., '$' followed by non-hex)
+    MissingHexDigits { line: usize, column: usize },
+
+    /// Missing digits after binary prefix (e.g., '%' followed by non-binary)
+    MissingBinaryDigits { line: usize, column: usize },
+
+    /// Number too large (overflow u16 range)
+    NumberTooLarge {
+        value: String,
+        max: u16,
+        line: usize,
+        column: usize,
+    },
+
+    /// Unexpected character (invalid token start)
+    UnexpectedCharacter {
+        ch: char,
+        line: usize,
+        column: usize,
+    },
+}
+
+impl std::fmt::Display for LexerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LexerError::InvalidHexDigit { ch, line, column } => write!(
+                f,
+                "Line {}, Column {}: Invalid hex digit '{}' in hex number",
+                line, column, ch
+            ),
+            LexerError::InvalidBinaryDigit { ch, line, column } => write!(
+                f,
+                "Line {}, Column {}: Invalid binary digit '{}' in binary number",
+                line, column, ch
+            ),
+            LexerError::MissingHexDigits { line, column } => write!(
+                f,
+                "Line {}, Column {}: Expected hex digits after '$' prefix",
+                line, column
+            ),
+            LexerError::MissingBinaryDigits { line, column } => write!(
+                f,
+                "Line {}, Column {}: Expected binary digits after '%' prefix",
+                line, column
+            ),
+            LexerError::NumberTooLarge {
+                value,
+                max,
+                line,
+                column,
+            } => write!(
+                f,
+                "Line {}, Column {}: Number '{}' exceeds maximum value {} (u16 range)",
+                line, column, value, max
+            ),
+            LexerError::UnexpectedCharacter { ch, line, column } => write!(
+                f,
+                "Line {}, Column {}: Unexpected character '{}'",
+                line, column, ch
+            ),
+        }
+    }
+}
+
+impl std::error::Error for LexerError {}
+
 /// Classification of assembly errors
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorType {
+    /// Lexical analysis error (invalid token, malformed number, etc.)
+    LexicalError(LexerError),
+
     /// Syntax error (invalid format, unexpected character)
     SyntaxError,
 
@@ -306,7 +396,8 @@ impl std::fmt::Display for AssemblerError {
             "Line {}, Column {}: {} - {}",
             self.line,
             self.column,
-            match self.error_type {
+            match &self.error_type {
+                ErrorType::LexicalError(_) => "Lexical Error",
                 ErrorType::SyntaxError => "Syntax Error",
                 ErrorType::UndefinedLabel => "Undefined Label",
                 ErrorType::DuplicateLabel => "Duplicate Label",
@@ -370,11 +461,62 @@ fn is_branch_mnemonic(mnemonic: &str) -> bool {
 pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     let mut errors = Vec::new();
 
-    // Parse all lines
-    let parsed_lines: Vec<_> = source
-        .lines()
+    // Tokenize the entire source
+    let tokens = match tokenize(source) {
+        Ok(tokens) => tokens,
+        Err(lexer_errors) => {
+            // Convert lexer errors to assembler errors
+            for lex_err in lexer_errors {
+                let (line, column) = match &lex_err {
+                    LexerError::InvalidHexDigit { line, column, .. } => (*line, *column),
+                    LexerError::InvalidBinaryDigit { line, column, .. } => (*line, *column),
+                    LexerError::MissingHexDigits { line, column } => (*line, *column),
+                    LexerError::MissingBinaryDigits { line, column } => (*line, *column),
+                    LexerError::NumberTooLarge { line, column, .. } => (*line, *column),
+                    LexerError::UnexpectedCharacter { line, column, .. } => (*line, *column),
+                };
+                errors.push(AssemblerError {
+                    error_type: ErrorType::LexicalError(lex_err.clone()),
+                    line,
+                    column,
+                    span: (column, column + 1),
+                    message: lex_err.to_string(),
+                });
+            }
+            return Err(errors);
+        }
+    };
+
+    // Group tokens by line
+    let mut token_lines: Vec<Vec<Token>> = Vec::new();
+    let mut current_line_tokens = Vec::new();
+
+    for token in tokens {
+        match &token.token_type {
+            TokenType::Newline => {
+                // End of line - save current line tokens
+                token_lines.push(current_line_tokens);
+                current_line_tokens = Vec::new();
+            }
+            TokenType::Eof => {
+                // End of file - save last line if not empty
+                if !current_line_tokens.is_empty() {
+                    token_lines.push(current_line_tokens);
+                }
+                break;
+            }
+            _ => {
+                // Add token to current line
+                current_line_tokens.push(token);
+            }
+        }
+    }
+
+    // Parse all lines using token-based parser
+    let parsed_lines: Vec<_> = token_lines
+        .iter()
         .enumerate()
-        .filter_map(|(idx, line)| parser::parse_line(line, idx + 1))
+        .filter_map(|(idx, line_tokens)| parser::parse_token_line(line_tokens, idx + 1))
         .collect();
 
     // Pass 1: Build symbol table
