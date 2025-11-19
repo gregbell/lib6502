@@ -300,6 +300,9 @@ pub enum LexerError {
         line: usize,
         column: usize,
     },
+
+    /// Unterminated string literal (missing closing quote)
+    UnterminatedString { line: usize, column: usize },
 }
 
 impl std::fmt::Display for LexerError {
@@ -339,6 +342,11 @@ impl std::fmt::Display for LexerError {
                 f,
                 "Line {}, Column {}: Unexpected character '{}'",
                 line, column, ch
+            ),
+            LexerError::UnterminatedString { line, column } => write!(
+                f,
+                "Line {}, Column {}: Unterminated string literal (missing closing quote)",
+                line, column
             ),
         }
     }
@@ -424,6 +432,9 @@ pub enum DirectiveValue {
 
     /// Symbol reference (label or constant name)
     Symbol(String),
+
+    /// String literal (converted to bytes in encoding phase)
+    StringLiteral(String),
 }
 
 /// Assembler directive types
@@ -474,6 +485,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                     LexerError::MissingBinaryDigits { line, column } => (*line, *column),
                     LexerError::NumberTooLarge { line, column, .. } => (*line, *column),
                     LexerError::UnexpectedCharacter { line, column, .. } => (*line, *column),
+                    LexerError::UnterminatedString { line, column } => (*line, *column),
                 };
                 errors.push(AssemblerError {
                     error_type: ErrorType::LexicalError(lex_err.clone()),
@@ -641,10 +653,36 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                     current_address = *address;
                 }
                 AssemblerDirective::Byte { values } => {
-                    current_address = current_address.wrapping_add(values.len() as u16);
+                    // Count bytes - string literals contribute their character count
+                    let mut byte_count = 0u16;
+                    for val in values {
+                        match val {
+                            DirectiveValue::Literal(_) | DirectiveValue::Symbol(_) => {
+                                byte_count += 1;
+                            }
+                            DirectiveValue::StringLiteral(s) => {
+                                byte_count += s.len() as u16;
+                            }
+                        }
+                    }
+                    current_address = current_address.wrapping_add(byte_count);
                 }
                 AssemblerDirective::Word { values } => {
-                    current_address = current_address.wrapping_add((values.len() * 2) as u16);
+                    // Count bytes - string literals are not supported in .word directive
+                    // Each non-string value contributes 2 bytes
+                    let mut byte_count = 0u16;
+                    for val in values {
+                        match val {
+                            DirectiveValue::Literal(_) | DirectiveValue::Symbol(_) => {
+                                byte_count += 2;
+                            }
+                            DirectiveValue::StringLiteral(_) => {
+                                // String literals not supported in .word - error will be caught in Pass 2
+                                byte_count += 2; // Count as 2 bytes to keep address calculation consistent
+                            }
+                        }
+                    }
+                    current_address = current_address.wrapping_add(byte_count);
                 }
             }
             continue;
@@ -721,14 +759,30 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                 AssemblerDirective::Byte { values } => {
                     let instruction_start_address = current_address;
 
-                    // Resolve values (handle both literals and symbol references)
+                    // Resolve values (handle literals, symbol references, and string literals)
                     let mut resolved_bytes = Vec::new();
                     for val in values {
-                        let resolved = match val {
-                            DirectiveValue::Literal(lit) => *lit,
+                        match val {
+                            DirectiveValue::Literal(lit) => {
+                                // Validate it fits in a byte
+                                if *lit > 0xFF {
+                                    errors.push(AssemblerError {
+                                        error_type: ErrorType::RangeError,
+                                        line: line.line_number,
+                                        column: 0,
+                                        span: line.span,
+                                        message: format!(
+                                            "Literal value ${:04X} in .byte directive exceeds 8-bit range (max $FF)",
+                                            lit
+                                        ),
+                                    });
+                                    continue;
+                                }
+                                resolved_bytes.push(*lit as u8);
+                            }
                             DirectiveValue::Symbol(name) => {
                                 // Look up symbol in symbol table
-                                match symbol_table.lookup_symbol_ignore_case(name) {
+                                let resolved = match symbol_table.lookup_symbol_ignore_case(name) {
                                     Some(sym) => sym.value,
                                     None => {
                                         errors.push(AssemblerError {
@@ -743,26 +797,32 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                                         });
                                         continue;
                                     }
+                                };
+
+                                // Validate it fits in a byte
+                                if resolved > 0xFF {
+                                    errors.push(AssemblerError {
+                                        error_type: ErrorType::RangeError,
+                                        line: line.line_number,
+                                        column: 0,
+                                        span: line.span,
+                                        message: format!(
+                                            "Symbol value ${:04X} in .byte directive exceeds 8-bit range (max $FF)",
+                                            resolved
+                                        ),
+                                    });
+                                    continue;
+                                }
+
+                                resolved_bytes.push(resolved as u8);
+                            }
+                            DirectiveValue::StringLiteral(s) => {
+                                // Convert each character to its ASCII byte value
+                                for ch in s.chars() {
+                                    resolved_bytes.push(ch as u8);
                                 }
                             }
-                        };
-
-                        // Validate it fits in a byte
-                        if resolved > 0xFF {
-                            errors.push(AssemblerError {
-                                error_type: ErrorType::RangeError,
-                                line: line.line_number,
-                                column: 0,
-                                span: line.span,
-                                message: format!(
-                                    "Value ${:04X} in .byte directive exceeds 8-bit range (max $FF)",
-                                    resolved
-                                ),
-                            });
-                            continue;
                         }
-
-                        resolved_bytes.push(resolved as u8);
                     }
 
                     // Add bytes to output
@@ -793,15 +853,19 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                 AssemblerDirective::Word { values } => {
                     let instruction_start_address = current_address;
 
-                    // Resolve values (handle both literals and symbol references)
+                    // Resolve values (handle literals, symbol references; reject string literals)
                     let mut resolved_words = Vec::new();
                     for val in values {
-                        let resolved = match val {
-                            DirectiveValue::Literal(lit) => *lit,
+                        match val {
+                            DirectiveValue::Literal(lit) => {
+                                resolved_words.push(*lit);
+                            }
                             DirectiveValue::Symbol(name) => {
                                 // Look up symbol in symbol table
                                 match symbol_table.lookup_symbol_ignore_case(name) {
-                                    Some(sym) => sym.value,
+                                    Some(sym) => {
+                                        resolved_words.push(sym.value);
+                                    }
                                     None => {
                                         errors.push(AssemblerError {
                                             error_type: ErrorType::UndefinedLabel,
@@ -817,8 +881,17 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                                     }
                                 }
                             }
-                        };
-                        resolved_words.push(resolved);
+                            DirectiveValue::StringLiteral(_) => {
+                                errors.push(AssemblerError {
+                                    error_type: ErrorType::InvalidOperand,
+                                    line: line.line_number,
+                                    column: 0,
+                                    span: line.span,
+                                    message: "String literals are not supported in .word directive (use .byte instead)".to_string(),
+                                });
+                                continue;
+                            }
+                        }
                     }
 
                     // Add words in little-endian format
@@ -1043,9 +1116,53 @@ fn resolve_operand(
     // Check if this is a branch instruction
     let is_branch = is_branch_mnemonic(mnemonic);
 
-    // Special handling for immediate mode with constants (#CONSTANT)
+    // Special handling for immediate mode with constants (#CONSTANT) or low/high byte operators (#<LABEL, #>LABEL)
     if let Some(stripped) = operand_trimmed.strip_prefix('#') {
         let inner = stripped.trim();
+
+        // Check for low byte operator (<)
+        if let Some(symbol_name) = inner.strip_prefix('<') {
+            let symbol_name = symbol_name.trim();
+            // Look up symbol in symbol table
+            if let Some(symbol) = symbol_table.lookup_symbol_ignore_case(symbol_name) {
+                // Extract low byte (bits 0-7)
+                let low_byte = symbol.value & 0xFF;
+                return Ok((crate::addressing::AddressingMode::Immediate, low_byte));
+            } else {
+                return Err(AssemblerError {
+                    error_type: ErrorType::UndefinedLabel,
+                    line,
+                    column,
+                    span,
+                    message: format!(
+                        "Undefined symbol '{}' in low byte operator",
+                        symbol_name.to_uppercase()
+                    ),
+                });
+            }
+        }
+
+        // Check for high byte operator (>)
+        if let Some(symbol_name) = inner.strip_prefix('>') {
+            let symbol_name = symbol_name.trim();
+            // Look up symbol in symbol table
+            if let Some(symbol) = symbol_table.lookup_symbol_ignore_case(symbol_name) {
+                // Extract high byte (bits 8-15)
+                let high_byte = (symbol.value >> 8) & 0xFF;
+                return Ok((crate::addressing::AddressingMode::Immediate, high_byte));
+            } else {
+                return Err(AssemblerError {
+                    error_type: ErrorType::UndefinedLabel,
+                    line,
+                    column,
+                    span,
+                    message: format!(
+                        "Undefined symbol '{}' in high byte operator",
+                        symbol_name.to_uppercase()
+                    ),
+                });
+            }
+        }
 
         // Check if it's a constant reference (no $, %, or digit prefix)
         if !inner.starts_with('$')

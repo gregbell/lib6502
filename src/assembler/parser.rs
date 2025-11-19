@@ -415,6 +415,15 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                             }
                             args.push_str(id);
                         }
+                        TokenType::StringLiteral(s) => {
+                            if !args.is_empty() {
+                                args.push(' ');
+                            }
+                            // Re-wrap in quotes for directive parsing
+                            args.push('"');
+                            args.push_str(s);
+                            args.push('"');
+                        }
                         TokenType::Comma => args.push(','),
                         TokenType::Whitespace => {
                             if !args.is_empty() && !args.ends_with(',') {
@@ -529,6 +538,8 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                 TokenType::Comma => operand_str.push(','),
                 TokenType::LParen => operand_str.push('('),
                 TokenType::RParen => operand_str.push(')'),
+                TokenType::LessThan => operand_str.push('<'),
+                TokenType::GreaterThan => operand_str.push('>'),
                 TokenType::Whitespace => operand_str.push(' '),
                 _ => {}
             }
@@ -728,9 +739,18 @@ pub fn parse_org_directive(args: &str) -> Result<crate::assembler::AssemblerDire
     Ok(crate::assembler::AssemblerDirective::Origin { address })
 }
 
-/// Parse a directive value (either a literal number or a symbol reference)
+/// Parse a directive value (either a literal number, a symbol reference, or a string literal)
 fn parse_directive_value(arg: &str) -> Result<crate::assembler::DirectiveValue, String> {
     let trimmed = arg.trim();
+
+    // Check if it's a string literal (starts and ends with ")
+    if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+        // Extract the string content (without quotes)
+        let string_content = &trimmed[1..trimmed.len() - 1];
+        return Ok(crate::assembler::DirectiveValue::StringLiteral(
+            string_content.to_string(),
+        ));
+    }
 
     // Check if it looks like a number (starts with $, %, or digit)
     if trimmed.starts_with('$')
@@ -773,8 +793,45 @@ pub fn parse_byte_directive(args: &str) -> Result<crate::assembler::AssemblerDir
     }
 
     let mut values = Vec::new();
-    for arg in args.split(',') {
-        let directive_val = parse_directive_value(arg)?;
+
+    // Split by commas, but be careful with string literals that may contain commas
+    let mut current_arg = String::new();
+    let mut in_string = false;
+
+    for ch in args.chars() {
+        match ch {
+            '"' => {
+                in_string = !in_string;
+                current_arg.push(ch);
+            }
+            ',' if !in_string => {
+                // Process the accumulated argument
+                if !current_arg.is_empty() {
+                    let directive_val = parse_directive_value(&current_arg)?;
+
+                    // For literals, validate they fit in a byte
+                    if let crate::assembler::DirectiveValue::Literal(val) = directive_val {
+                        if val > 0xFF {
+                            return Err(format!(
+                                "Byte value ${:04X} is too large (must be 0-255)",
+                                val
+                            ));
+                        }
+                    }
+
+                    values.push(directive_val);
+                    current_arg.clear();
+                }
+            }
+            _ => {
+                current_arg.push(ch);
+            }
+        }
+    }
+
+    // Don't forget the last argument
+    if !current_arg.is_empty() {
+        let directive_val = parse_directive_value(&current_arg)?;
 
         // For literals, validate they fit in a byte
         if let crate::assembler::DirectiveValue::Literal(val) = directive_val {

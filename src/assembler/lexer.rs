@@ -126,6 +126,8 @@ enum SingleCharTokenType {
     LParen,
     RParen,
     Dot,
+    LessThan,
+    GreaterThan,
 }
 
 impl SingleCharTokenType {
@@ -141,6 +143,8 @@ impl SingleCharTokenType {
             '(' => Some(Self::LParen),
             ')' => Some(Self::RParen),
             '.' => Some(Self::Dot),
+            '<' => Some(Self::LessThan),
+            '>' => Some(Self::GreaterThan),
             _ => None,
         }
     }
@@ -157,6 +161,8 @@ impl SingleCharTokenType {
             Self::LParen => TokenType::LParen,
             Self::RParen => TokenType::RParen,
             Self::Dot => TokenType::Dot,
+            Self::LessThan => TokenType::LessThan,
+            Self::GreaterThan => TokenType::GreaterThan,
         }
     }
 }
@@ -195,6 +201,14 @@ pub enum TokenType {
     RParen,
     /// Dot `.` - directive prefix
     Dot,
+    /// Less than `<` - low byte operator
+    LessThan,
+    /// Greater than `>` - high byte operator
+    GreaterThan,
+
+    // String literals
+    /// String literal (e.g., "Hello") with escape sequences processed
+    StringLiteral(String),
 
     // Structural
     /// Whitespace (spaces/tabs, preserved for formatters)
@@ -448,6 +462,97 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Scan a string literal: "..." with escape sequence support
+    fn scan_string_literal(&mut self, start_col: usize) -> Result<Token, super::LexerError> {
+        let mut string_value = String::new();
+        let mut length = 1; // Count opening "
+
+        // Skip the opening " (already consumed by caller)
+
+        loop {
+            match self.peek() {
+                None => {
+                    // Unterminated string
+                    return Err(super::LexerError::UnterminatedString {
+                        line: self.line,
+                        column: start_col,
+                    });
+                }
+                Some('\n') | Some('\r') => {
+                    // String cannot span lines
+                    return Err(super::LexerError::UnterminatedString {
+                        line: self.line,
+                        column: start_col,
+                    });
+                }
+                Some('"') => {
+                    // Closing quote
+                    self.advance();
+                    length += 1;
+                    break;
+                }
+                Some('\\') => {
+                    // Escape sequence
+                    self.advance();
+                    length += 1;
+
+                    match self.peek() {
+                        None => {
+                            return Err(super::LexerError::UnterminatedString {
+                                line: self.line,
+                                column: start_col,
+                            });
+                        }
+                        Some('n') => {
+                            string_value.push('\n');
+                            self.advance();
+                            length += 1;
+                        }
+                        Some('r') => {
+                            string_value.push('\r');
+                            self.advance();
+                            length += 1;
+                        }
+                        Some('t') => {
+                            string_value.push('\t');
+                            self.advance();
+                            length += 1;
+                        }
+                        Some('\\') => {
+                            string_value.push('\\');
+                            self.advance();
+                            length += 1;
+                        }
+                        Some('"') => {
+                            string_value.push('"');
+                            self.advance();
+                            length += 1;
+                        }
+                        Some(ch) => {
+                            // Unknown escape sequence - just include the character
+                            string_value.push(ch);
+                            self.advance();
+                            length += 1;
+                        }
+                    }
+                }
+                Some(ch) => {
+                    // Regular character
+                    string_value.push(ch);
+                    self.advance();
+                    length += 1;
+                }
+            }
+        }
+
+        Ok(Token {
+            token_type: TokenType::StringLiteral(string_value),
+            line: self.line,
+            column: start_col,
+            length,
+        })
+    }
+
     /// Scan a single-character token (operators, punctuation)
     fn scan_single_char_token(
         &mut self,
@@ -571,8 +676,14 @@ impl<'a> Lexer<'a> {
             // Identifier (mnemonic, label, symbol)
             'a'..='z' | 'A'..='Z' => Ok(Some(self.scan_identifier(start_col))),
 
+            // String literal
+            '"' => {
+                self.advance(); // consume opening "
+                Ok(Some(self.scan_string_literal(start_col)?))
+            }
+
             // Single-character operators
-            ':' | ',' | '#' | '=' | '(' | ')' | '.' => {
+            ':' | ',' | '#' | '=' | '(' | ')' | '.' | '<' | '>' => {
                 // Convert char to SingleCharTokenType (guaranteed to succeed for these chars)
                 let token_type = SingleCharTokenType::from_char(ch)
                     .expect("BUG: char matched in pattern but not in from_char");

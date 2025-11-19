@@ -76,7 +76,9 @@ fn highlight_line(source: &str) -> String {
             | TokenType::Percent
             | TokenType::Equal
             | TokenType::LParen
-            | TokenType::RParen => {
+            | TokenType::RParen
+            | TokenType::LessThan
+            | TokenType::GreaterThan => {
                 let ch = match &token.token_type {
                     TokenType::Hash => '#',
                     TokenType::Comma => ',',
@@ -85,9 +87,16 @@ fn highlight_line(source: &str) -> String {
                     TokenType::Equal => '=',
                     TokenType::LParen => '(',
                     TokenType::RParen => ')',
+                    TokenType::LessThan => '<',
+                    TokenType::GreaterThan => '>',
                     _ => unreachable!(),
                 };
                 format!("{}{}{}", colors::OPERATOR, ch, colors::RESET)
+            }
+
+            // String literals
+            TokenType::StringLiteral(s) => {
+                format!("{}\"{}\"{}", colors::NUMBER, s, colors::RESET)
             }
 
             // Comments are dimmed
