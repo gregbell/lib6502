@@ -84,7 +84,7 @@
 //! let directive = parse_directive(".org $8000").unwrap();
 //!
 //! match directive {
-//!     AssemblerDirective::Org { address } => assert_eq!(address, 0x8000),
+//!     AssemblerDirective::Origin { address } => assert_eq!(address, 0x8000),
 //!     _ => panic!("Expected .org directive"),
 //! }
 //! ```
@@ -134,9 +134,9 @@
 //!
 //! Benefits: Simpler code, better errors, no repeated parsing.
 
-use crate::addressing::AddressingMode;
 use super::lexer::{Token, TokenType};
-use std::fmt::Write;  // For write! macro on String
+use crate::addressing::AddressingMode;
+use std::fmt::Write; // For write! macro on String
 
 /// A parsed line of assembly source
 #[derive(Debug, Clone, PartialEq)]
@@ -193,7 +193,11 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
     }
 
     // Calculate span from first to last token
-    let span_start = if tokens.is_empty() { 0 } else { tokens[0].column };
+    let span_start = if tokens.is_empty() {
+        0
+    } else {
+        tokens[0].column
+    };
     let span_end = if tokens.is_empty() {
         0
     } else {
@@ -230,10 +234,18 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
         // Check for Number + Identifier + Colon (invalid label starting with digit)
         if pos + 2 < tokens.len() {
             let is_number_label = matches!(
-                (&tokens[pos].token_type, &tokens[pos + 1].token_type, &tokens[pos + 2].token_type),
-                (TokenType::DecimalNumber(_) | TokenType::HexNumber(_) | TokenType::BinaryNumber(_),
-                 TokenType::Identifier(_),
-                 TokenType::Colon)
+                (
+                    &tokens[pos].token_type,
+                    &tokens[pos + 1].token_type,
+                    &tokens[pos + 2].token_type
+                ),
+                (
+                    TokenType::DecimalNumber(_)
+                        | TokenType::HexNumber(_)
+                        | TokenType::BinaryNumber(_),
+                    TokenType::Identifier(_),
+                    TokenType::Colon
+                )
             );
 
             if is_number_label {
@@ -249,7 +261,9 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                     pos += 3; // Skip number, identifier, and colon
 
                     // Skip whitespace after label
-                    while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                    while pos < tokens.len()
+                        && matches!(tokens[pos].token_type, TokenType::Whitespace)
+                    {
                         pos += 1;
                     }
                 }
@@ -264,7 +278,9 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                     pos += 2; // Skip identifier and colon
 
                     // Skip whitespace after label
-                    while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                    while pos < tokens.len()
+                        && matches!(tokens[pos].token_type, TokenType::Whitespace)
+                    {
                         pos += 1;
                     }
                 }
@@ -294,17 +310,21 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
         if let TokenType::Identifier(name) = &tokens[pos].token_type {
             // Skip whitespace before potential equals
             let mut check_pos = pos + 1;
-            while check_pos < tokens.len() && matches!(tokens[check_pos].token_type, TokenType::Whitespace) {
+            while check_pos < tokens.len()
+                && matches!(tokens[check_pos].token_type, TokenType::Whitespace)
+            {
                 check_pos += 1;
             }
 
-            if check_pos < tokens.len() && matches!(tokens[check_pos].token_type, TokenType::Equal) {
+            if check_pos < tokens.len() && matches!(tokens[check_pos].token_type, TokenType::Equal)
+            {
                 // This is a constant assignment
                 let const_name = name.clone();
                 pos = check_pos + 1; // Skip past equals
 
                 // Skip whitespace after equals
-                while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace)
+                {
                     pos += 1;
                 }
 
@@ -332,7 +352,7 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                             write!(value_str, "{}", val).unwrap();
                         }
                         TokenType::Identifier(id) => value_str.push_str(id),
-                        _ => {}, // Ignore other tokens in constant value
+                        _ => {} // Ignore other tokens in constant value
                     }
                     pos += 1;
                 }
@@ -363,7 +383,8 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                 pos += 1; // Skip directive name
 
                 // Skip whitespace
-                while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace) {
+                while pos < tokens.len() && matches!(tokens[pos].token_type, TokenType::Whitespace)
+                {
                     pos += 1;
                 }
 
@@ -377,15 +398,21 @@ pub fn parse_token_line(tokens: &[Token], line_number: usize) -> Option<Assembly
                         }
                         TokenType::Eof => break,
                         TokenType::HexNumber(val) => {
-                            if !args.is_empty() { args.push(' '); }
+                            if !args.is_empty() {
+                                args.push(' ');
+                            }
                             write!(args, "${:X}", val).unwrap();
                         }
                         TokenType::DecimalNumber(val) => {
-                            if !args.is_empty() { args.push(' '); }
+                            if !args.is_empty() {
+                                args.push(' ');
+                            }
                             write!(args, "{}", val).unwrap();
                         }
                         TokenType::Identifier(id) => {
-                            if !args.is_empty() { args.push(' '); }
+                            if !args.is_empty() {
+                                args.push(' ');
+                            }
                             args.push_str(id);
                         }
                         TokenType::Comma => args.push(','),

@@ -9,7 +9,7 @@ pub mod source_map;
 pub mod symbol_table;
 
 // Re-export lexer types for public API
-pub use lexer::{tokenize, Token, TokenType, TokenStream};
+pub use lexer::{tokenize, Token, TokenStream, TokenType};
 
 use crate::opcodes;
 
@@ -281,16 +281,10 @@ pub enum LexerError {
     },
 
     /// Missing digits after hex prefix (e.g., '$' followed by non-hex)
-    MissingHexDigits {
-        line: usize,
-        column: usize,
-    },
+    MissingHexDigits { line: usize, column: usize },
 
     /// Missing digits after binary prefix (e.g., '%' followed by non-binary)
-    MissingBinaryDigits {
-        line: usize,
-        column: usize,
-    },
+    MissingBinaryDigits { line: usize, column: usize },
 
     /// Number too large (overflow u16 range)
     NumberTooLarge {
@@ -522,9 +516,7 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
     let parsed_lines: Vec<_> = token_lines
         .iter()
         .enumerate()
-        .filter_map(|(idx, line_tokens)| {
-            parser::parse_token_line(line_tokens, idx + 1)
-        })
+        .filter_map(|(idx, line_tokens)| parser::parse_token_line(line_tokens, idx + 1))
         .collect();
 
     // Pass 1: Build symbol table

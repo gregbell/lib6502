@@ -149,12 +149,36 @@ LOOP:
     }
 
     println!("\n\nColor legend:");
-    println!("  {}Mnemonics{} - Cyan (instructions)", colors::MNEMONIC, colors::RESET);
-    println!("  {}Numbers{} - Yellow (all formats)", colors::NUMBER, colors::RESET);
-    println!("  {}Labels{} - Magenta (symbols)", colors::LABEL, colors::RESET);
-    println!("  {}Operators{} - Green (#, :, etc.)", colors::OPERATOR, colors::RESET);
-    println!("  {}Directives{} - Blue (.org, .byte)", colors::DIRECTIVE, colors::RESET);
-    println!("  {}Comments{} - Gray (dimmed)", colors::COMMENT, colors::RESET);
+    println!(
+        "  {}Mnemonics{} - Cyan (instructions)",
+        colors::MNEMONIC,
+        colors::RESET
+    );
+    println!(
+        "  {}Numbers{} - Yellow (all formats)",
+        colors::NUMBER,
+        colors::RESET
+    );
+    println!(
+        "  {}Labels{} - Magenta (symbols)",
+        colors::LABEL,
+        colors::RESET
+    );
+    println!(
+        "  {}Operators{} - Green (#, :, etc.)",
+        colors::OPERATOR,
+        colors::RESET
+    );
+    println!(
+        "  {}Directives{} - Blue (.org, .byte)",
+        colors::DIRECTIVE,
+        colors::RESET
+    );
+    println!(
+        "  {}Comments{} - Gray (dimmed)",
+        colors::COMMENT,
+        colors::RESET
+    );
     println!("\nThis example demonstrates Success Criterion SC-005:");
     println!("External tools can use tokenize() for syntax analysis!");
 }

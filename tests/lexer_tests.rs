@@ -9,25 +9,40 @@ fn test_identifier_tokenization() {
     // Test basic identifier (mnemonic)
     let tokens = tokenize("LDA").unwrap();
     assert_eq!(tokens.len(), 2); // LDA + EOF
-    assert_eq!(tokens[0].token_type, TokenType::Identifier("LDA".to_string()));
+    assert_eq!(
+        tokens[0].token_type,
+        TokenType::Identifier("LDA".to_string())
+    );
     assert_eq!(tokens[0].line, 1);
     assert_eq!(tokens[0].column, 0);
     assert_eq!(tokens[0].length, 3);
 
     // Test mixed case (should normalize to uppercase)
     let tokens = tokenize("lda").unwrap();
-    assert_eq!(tokens[0].token_type, TokenType::Identifier("LDA".to_string()));
+    assert_eq!(
+        tokens[0].token_type,
+        TokenType::Identifier("LDA".to_string())
+    );
 
     // Test identifier with underscores and numbers
     let tokens = tokenize("LABEL_123").unwrap();
-    assert_eq!(tokens[0].token_type, TokenType::Identifier("LABEL_123".to_string()));
+    assert_eq!(
+        tokens[0].token_type,
+        TokenType::Identifier("LABEL_123".to_string())
+    );
 
     // Test multiple identifiers
     let tokens = tokenize("LDA STA").unwrap();
     assert_eq!(tokens.len(), 4); // LDA + whitespace + STA + EOF
-    assert_eq!(tokens[0].token_type, TokenType::Identifier("LDA".to_string()));
+    assert_eq!(
+        tokens[0].token_type,
+        TokenType::Identifier("LDA".to_string())
+    );
     assert_eq!(tokens[1].token_type, TokenType::Whitespace);
-    assert_eq!(tokens[2].token_type, TokenType::Identifier("STA".to_string()));
+    assert_eq!(
+        tokens[2].token_type,
+        TokenType::Identifier("STA".to_string())
+    );
 }
 
 #[test]
@@ -126,7 +141,10 @@ fn test_comment_preservation() {
     // Test simple comment
     let tokens = tokenize("; This is a comment").unwrap();
     assert_eq!(tokens.len(), 2); // comment + EOF
-    assert_eq!(tokens[0].token_type, TokenType::Comment(" This is a comment".to_string()));
+    assert_eq!(
+        tokens[0].token_type,
+        TokenType::Comment(" This is a comment".to_string())
+    );
     assert_eq!(tokens[0].line, 1);
     assert_eq!(tokens[0].column, 0);
 
@@ -192,14 +210,20 @@ fn test_line_column_tracking() {
     let tokens = tokenize(source).unwrap();
 
     // Find LDA token (should be on line 1, column 0)
-    assert_eq!(tokens[0].token_type, TokenType::Identifier("LDA".to_string()));
+    assert_eq!(
+        tokens[0].token_type,
+        TokenType::Identifier("LDA".to_string())
+    );
     assert_eq!(tokens[0].line, 1);
     assert_eq!(tokens[0].column, 0);
 
     // Find STA token (should be on line 2, column 0)
     // tokens: LDA + ws + # + $42 + newline + STA + ws + $1000 + newline + EOF
     // Index:  0    1    2   3     4         5     6    7       8         9
-    assert_eq!(tokens[5].token_type, TokenType::Identifier("STA".to_string()));
+    assert_eq!(
+        tokens[5].token_type,
+        TokenType::Identifier("STA".to_string())
+    );
     assert_eq!(tokens[5].line, 2);
     assert_eq!(tokens[5].column, 0);
 
@@ -253,10 +277,16 @@ fn test_complete_instruction() {
     let tokens = tokenize("START: LDA #$42 ; Load value").unwrap();
 
     // Expected tokens: START + : + ws + LDA + ws + # + $42 + ws + comment + EOF
-    assert_eq!(tokens[0].token_type, TokenType::Identifier("START".to_string()));
+    assert_eq!(
+        tokens[0].token_type,
+        TokenType::Identifier("START".to_string())
+    );
     assert_eq!(tokens[1].token_type, TokenType::Colon);
     assert_eq!(tokens[2].token_type, TokenType::Whitespace);
-    assert_eq!(tokens[3].token_type, TokenType::Identifier("LDA".to_string()));
+    assert_eq!(
+        tokens[3].token_type,
+        TokenType::Identifier("LDA".to_string())
+    );
     assert_eq!(tokens[4].token_type, TokenType::Whitespace);
     assert_eq!(tokens[5].token_type, TokenType::Hash);
     assert_eq!(tokens[6].token_type, TokenType::HexNumber(0x42));

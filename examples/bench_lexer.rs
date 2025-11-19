@@ -48,14 +48,16 @@ fn main() {
 
     let elapsed = start.elapsed();
     let per_iteration = elapsed.as_micros() as f64 / iterations as f64;
-    let lines_per_sec = (source.lines().count() as f64 * iterations as f64)
-        / elapsed.as_secs_f64();
+    let lines_per_sec = (source.lines().count() as f64 * iterations as f64) / elapsed.as_secs_f64();
 
     println!("Performance Results:");
     println!("  Total time ({} iterations): {:.2?}", iterations, elapsed);
     println!("  Time per iteration: {:.2} µs", per_iteration);
     println!("  Lines/second: {:.0}", lines_per_sec);
-    println!("  Characters/second: {:.0}", source.len() as f64 * iterations as f64 / elapsed.as_secs_f64());
+    println!(
+        "  Characters/second: {:.0}",
+        source.len() as f64 * iterations as f64 / elapsed.as_secs_f64()
+    );
 
     // Calculate overhead estimate
     // The lexer is O(n) single-pass, parser is O(n) single-pass

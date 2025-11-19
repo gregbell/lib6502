@@ -114,7 +114,6 @@
 //!
 //! Typical overhead: <5% compared to direct string parsing (measured via benchmarks).
 
-
 /// Single-character token types (operators and punctuation)
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum SingleCharTokenType {
@@ -328,8 +327,8 @@ impl<'a> Lexer<'a> {
         }
 
         // Parse hex value
-        let value = u16::from_str_radix(&hex_str, 16)
-            .map_err(|_| super::LexerError::NumberTooLarge {
+        let value =
+            u16::from_str_radix(&hex_str, 16).map_err(|_| super::LexerError::NumberTooLarge {
                 value: format!("${}", hex_str),
                 max: u16::MAX,
                 line: self.line,
@@ -376,8 +375,8 @@ impl<'a> Lexer<'a> {
         }
 
         // Parse binary value
-        let value = u16::from_str_radix(&bin_str, 2)
-            .map_err(|_| super::LexerError::NumberTooLarge {
+        let value =
+            u16::from_str_radix(&bin_str, 2).map_err(|_| super::LexerError::NumberTooLarge {
                 value: format!("%{}", bin_str),
                 max: u16::MAX,
                 line: self.line,
@@ -407,7 +406,8 @@ impl<'a> Lexer<'a> {
         }
 
         // Parse decimal value
-        let value: u16 = num_str.parse()
+        let value: u16 = num_str
+            .parse()
             .map_err(|_| super::LexerError::NumberTooLarge {
                 value: num_str.clone(),
                 max: u16::MAX,
@@ -449,7 +449,11 @@ impl<'a> Lexer<'a> {
     }
 
     /// Scan a single-character token (operators, punctuation)
-    fn scan_single_char_token(&mut self, token_type: SingleCharTokenType, start_col: usize) -> Token {
+    fn scan_single_char_token(
+        &mut self,
+        token_type: SingleCharTokenType,
+        start_col: usize,
+    ) -> Token {
         self.advance();
 
         Token {
@@ -509,7 +513,10 @@ impl<'a> Lexer<'a> {
 
                 // Update line tracking
                 self.line += 1;
-                self.line_start = self.current.map(|(pos, _)| pos).unwrap_or(self.source.len());
+                self.line_start = self
+                    .current
+                    .map(|(pos, _)| pos)
+                    .unwrap_or(self.source.len());
 
                 Ok(Some(token))
             }
@@ -523,7 +530,7 @@ impl<'a> Lexer<'a> {
             // Hex number or dollar sign
             '$' => {
                 self.advance(); // consume $
-                // Check if followed by alphanumeric (hex number expected)
+                                // Check if followed by alphanumeric (hex number expected)
                 if let Some(next_ch) = self.peek() {
                     if next_ch.is_ascii_alphanumeric() {
                         // Commit to hex number - will error if not valid hex
@@ -542,7 +549,7 @@ impl<'a> Lexer<'a> {
             // Binary number or percent sign
             '%' => {
                 self.advance(); // consume %
-                // Check if followed by digit (binary number expected)
+                                // Check if followed by digit (binary number expected)
                 if let Some(next_ch) = self.peek() {
                     if next_ch.is_ascii_digit() {
                         // Commit to binary number - will error if not 0 or 1
@@ -562,9 +569,7 @@ impl<'a> Lexer<'a> {
             '0'..='9' => Ok(Some(self.scan_decimal_number(start_col)?)),
 
             // Identifier (mnemonic, label, symbol)
-            'a'..='z' | 'A'..='Z' => {
-                Ok(Some(self.scan_identifier(start_col)))
-            }
+            'a'..='z' | 'A'..='Z' => Ok(Some(self.scan_identifier(start_col))),
 
             // Single-character operators
             ':' | ',' | '#' | '=' | '(' | ')' | '.' => {
@@ -625,12 +630,12 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, Vec<super::LexerError>> {
                 errors.push(err);
                 // Try to recover by skipping to next safe synchronization point
                 // (whitespace, newline, or semicolon)
-                lexer.advance();  // Skip the problematic character
+                lexer.advance(); // Skip the problematic character
                 while let Some(ch) = lexer.peek() {
                     if matches!(ch, ' ' | '\t' | '\n' | '\r' | ';') {
-                        break;  // Found synchronization point
+                        break; // Found synchronization point
                     }
-                    lexer.advance();  // Keep skipping
+                    lexer.advance(); // Keep skipping
                 }
             }
         }
