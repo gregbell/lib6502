@@ -147,12 +147,12 @@ Phase 6 (Polish)
 
 ### Entity: TokenStream Implementation
 
-- [ ] T034 [P] [US2] Implement `TokenStream::peek()` to look at current token in `src/assembler/lexer.rs`
-- [ ] T035 [P] [US2] Implement `TokenStream::peek_n(n)` for multi-token lookahead in `src/assembler/lexer.rs`
-- [ ] T036 [P] [US2] Implement `TokenStream::consume()` to advance and return token in `src/assembler/lexer.rs`
-- [ ] T037 [P] [US2] Implement `TokenStream::skip_whitespace()` helper in `src/assembler/lexer.rs`
-- [ ] T038 [P] [US2] Implement `TokenStream::is_eof()` check in `src/assembler/lexer.rs`
-- [ ] T039 [P] [US2] Implement `TokenStream::current_location()` for error reporting in `src/assembler/lexer.rs`
+- [x] T034 [P] [US2] Implement `TokenStream::peek()` to look at current token in `src/assembler/lexer.rs`
+- [x] T035 [P] [US2] Implement `TokenStream::peek_n(n)` for multi-token lookahead in `src/assembler/lexer.rs`
+- [x] T036 [P] [US2] Implement `TokenStream::consume()` to advance and return token in `src/assembler/lexer.rs`
+- [x] T037 [P] [US2] Implement `TokenStream::skip_whitespace()` helper in `src/assembler/lexer.rs`
+- [x] T038 [P] [US2] Implement `TokenStream::is_eof()` check in `src/assembler/lexer.rs`
+- [x] T039 [P] [US2] Implement `TokenStream::current_location()` for error reporting in `src/assembler/lexer.rs`
 
 ### Integration: Parser Refactoring
 

@@ -499,4 +499,142 @@ impl TokenStream {
             position: 0,
         }
     }
+
+    /// Peek at the current token without consuming it
+    ///
+    /// Returns None if at end of token stream.
+    ///
+    /// # Examples
+    /// ```
+    /// use lib6502::assembler::{tokenize, TokenStream, TokenType};
+    ///
+    /// let tokens = tokenize("LDA #$42").unwrap();
+    /// let mut stream = TokenStream::new(tokens);
+    /// if let Some(token) = stream.peek() {
+    ///     assert!(matches!(token.token_type, TokenType::Identifier(_)));
+    /// }
+    /// ```
+    pub fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.position)
+    }
+
+    /// Peek ahead n tokens without consuming them
+    ///
+    /// Returns None if n tokens ahead would be past end of stream.
+    /// peek_n(0) is equivalent to peek().
+    ///
+    /// # Examples
+    /// ```
+    /// use lib6502::assembler::{tokenize, TokenStream, TokenType};
+    ///
+    /// let tokens = tokenize("LDA #$42").unwrap();
+    /// let stream = TokenStream::new(tokens);
+    /// // Look ahead to see the # token (skipping whitespace)
+    /// if let Some(token) = stream.peek_n(2) {
+    ///     assert_eq!(token.token_type, TokenType::Hash);
+    /// }
+    /// ```
+    pub fn peek_n(&self, n: usize) -> Option<&Token> {
+        self.tokens.get(self.position + n)
+    }
+
+    /// Consume and return the current token, advancing the stream
+    ///
+    /// Returns None if at end of token stream.
+    ///
+    /// # Examples
+    /// ```
+    /// use lib6502::assembler::{tokenize, TokenStream, TokenType};
+    ///
+    /// let tokens = tokenize("LDA").unwrap();
+    /// let mut stream = TokenStream::new(tokens);
+    /// let token = stream.consume().unwrap();
+    /// assert!(matches!(token.token_type, TokenType::Identifier(_)));
+    /// ```
+    pub fn consume(&mut self) -> Option<Token> {
+        if self.position < self.tokens.len() {
+            let token = self.tokens[self.position].clone();
+            self.position += 1;
+            Some(token)
+        } else {
+            None
+        }
+    }
+
+    /// Skip all whitespace and newline tokens
+    ///
+    /// Advances the stream position past any Whitespace or Newline tokens.
+    /// Stops at the first non-whitespace token or EOF.
+    ///
+    /// # Examples
+    /// ```
+    /// use lib6502::assembler::{tokenize, TokenStream, TokenType};
+    ///
+    /// let tokens = tokenize("LDA   \n  #$42").unwrap();
+    /// let mut stream = TokenStream::new(tokens);
+    /// stream.consume(); // consume LDA
+    /// stream.skip_whitespace(); // skip spaces and newline
+    /// let token = stream.peek().unwrap();
+    /// assert_eq!(token.token_type, TokenType::Hash);
+    /// ```
+    pub fn skip_whitespace(&mut self) {
+        while let Some(token) = self.peek() {
+            match token.token_type {
+                TokenType::Whitespace | TokenType::Newline => {
+                    self.position += 1;
+                }
+                _ => break,
+            }
+        }
+    }
+
+    /// Check if the stream is at end of file
+    ///
+    /// Returns true if current position is at EOF token or past end of stream.
+    ///
+    /// # Examples
+    /// ```
+    /// use lib6502::assembler::{tokenize, TokenStream};
+    ///
+    /// let tokens = tokenize("LDA").unwrap();
+    /// let mut stream = TokenStream::new(tokens);
+    /// assert!(!stream.is_eof()); // at LDA
+    /// stream.consume(); // consume LDA
+    /// assert!(stream.is_eof()); // at EOF
+    /// ```
+    pub fn is_eof(&self) -> bool {
+        match self.peek() {
+            Some(token) => matches!(token.token_type, TokenType::Eof),
+            None => true,
+        }
+    }
+
+    /// Get the current token's source location for error reporting
+    ///
+    /// Returns (line, column) tuple. If at EOF or past end, returns the
+    /// location of the EOF token or (0, 0) if no tokens exist.
+    ///
+    /// # Examples
+    /// ```
+    /// use lib6502::assembler::{tokenize, TokenStream};
+    ///
+    /// let tokens = tokenize("LDA").unwrap();
+    /// let stream = TokenStream::new(tokens);
+    /// let (line, column) = stream.current_location();
+    /// assert_eq!(line, 1);
+    /// assert_eq!(column, 0);
+    /// ```
+    pub fn current_location(&self) -> (usize, usize) {
+        match self.peek() {
+            Some(token) => (token.line, token.column),
+            None => {
+                // If past end, try to get EOF token location
+                if let Some(eof) = self.tokens.last() {
+                    (eof.line, eof.column)
+                } else {
+                    (0, 0)
+                }
+            }
+        }
+    }
 }
