@@ -224,12 +224,12 @@ The demo features:
 
 ### UART Examples
 
-The demo includes example programs demonstrating serial I/O:
-- **UART Echo** - Type characters in the terminal and see them echoed back
-- **UART Hello World** - Outputs "Hello, 6502!" to the terminal
-- **UART Polling** - Demonstrates proper status register polling techniques
+The demo includes example programs demonstrating interrupt-driven serial I/O:
+- **UART Echo (IRQ)** - Interrupt-driven character echo using hardware interrupts
+- **UART Hello World** - Simple string output demonstration
+- **UART IRQ Advanced** - Advanced interrupt example with character counting and auto-newline
 
-Try typing in the terminal after loading the echo example to interact with the 6502!
+These examples showcase the 6502's interrupt system (IRQ) for asynchronous I/O - the authentic way real 6502 systems handled serial communication. Type in the terminal to trigger interrupts and see the ISR in action!
 
 ## Development
 
@@ -352,10 +352,11 @@ CI runs both suites to ensure correctness while keeping local development fast.
 - [x] WebAssembly support
 - [x] Interactive web demo
 - [x] Memory-mapped devices (MappedMemory architecture)
-- [x] UART serial device (W65C51 ACIA emulation)
+- [x] CPU interrupt support (IRQ with level-sensitive line)
+- [x] UART serial device (W65C51 ACIA emulation with interrupts)
 - [x] Serial terminal integration (xterm.js in demo)
 - [ ] Debugger interface
-- [ ] Additional memory-mapped devices (VIA, PPT)
+- [ ] Additional memory-mapped devices (VIA, PIA)
 - [ ] Performance optimizations
 - [ ] CMOS 65C02 support
 

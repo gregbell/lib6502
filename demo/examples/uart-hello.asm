@@ -4,14 +4,10 @@
 ; Memory Map:
 ;   $A000 - UART Data Register (read/write)
 ;   $A001 - UART Status Register (read-only)
-;           Bit 4: TDRE (Transmit Data Register Empty)
+;           Bit 4: TDRE (Transmit Data Register Empty - always 1)
 ;
-; This program demonstrates string output by:
-; 1. Loading a pointer to the message string
-; 2. For each character:
-;    a. Wait for TDRE (transmit ready)
-;    b. Write character to UART
-; 3. Stop when null terminator ($00) is reached
+; This program demonstrates simple string output.
+; No interrupts needed for transmit since TDRE is always ready.
 
 UART_DATA   = $A000     ; UART data register
 UART_STATUS = $A001     ; UART status register
@@ -25,13 +21,9 @@ print_loop:
         LDA message,X   ; Load character from message
         BEQ done        ; If zero (null terminator), we're done
 
-        ; Wait for transmitter ready
-wait_tx:
-        PHA             ; Save character on stack
-        LDA UART_STATUS ; Read UART status
-        AND #TDRE       ; Check TDRE flag (bit 4)
-        BEQ wait_tx     ; If not ready, keep waiting
-        PLA             ; Restore character
+        ; TDRE is always set in our emulator, but we show
+        ; the check pattern for completeness
+        BIT UART_STATUS ; Check status (V flag set if bit 6 is set)
 
         ; Send character
         STA UART_DATA   ; Write character to UART

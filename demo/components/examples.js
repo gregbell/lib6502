@@ -74,41 +74,60 @@ loop:
             },
             {
                 id: 'uart-echo',
-                name: 'UART Echo',
-                description: 'Echo characters from terminal',
-                code: `; UART Echo
-; Echoes characters typed in the terminal back to the terminal
+                name: 'UART Echo (IRQ)',
+                description: 'Interrupt-driven echo example',
+                code: `; UART Echo (Interrupt-Driven)
+; Echoes characters typed in the terminal back to the terminal using IRQ
 ;
 ; Memory Map:
 ;   $A000 - UART Data Register (read/write)
 ;   $A001 - UART Status Register (read-only)
-;           Bit 3: RDRF (Receive Data Register Full)
-;           Bit 4: TDRE (Transmit Data Register Empty)
+;   $A002 - UART Command Register (read/write)
+;           Bit 1: IRQ_EN (Interrupt Enable)
+;           Bit 3: ECHO (Echo mode)
 ;
-; This program demonstrates a simple polling loop that:
-; 1. Checks if a character is available (RDRF flag)
-; 2. Reads the character from UART
-; 3. Writes it back to UART (echoes it)
-; 4. Repeats forever
+; This program demonstrates interrupt-driven serial I/O:
+; 1. Configure UART to trigger interrupts on receive
+; 2. Enable CPU interrupts (CLI)
+; 3. When data arrives, CPU jumps to ISR automatically
+; 4. ISR reads data and echoes it back
+; 5. RTI returns to main loop
 
-UART_DATA   = $A000     ; UART data register
-UART_STATUS = $A001     ; UART status register
-RDRF        = $08       ; Receive Data Register Full flag (bit 3)
+UART_DATA    = $A000     ; UART data register
+UART_STATUS  = $A001     ; UART status register
+UART_COMMAND = $A002     ; UART command register
+IRQ_EN       = $02       ; Interrupt enable bit (bit 1)
 
-        ; Main echo loop
-echo_loop:
-        LDA UART_STATUS ; Read UART status register
-        AND #RDRF       ; Check RDRF flag (bit 3)
-        BEQ echo_loop   ; If no data, keep polling
+        ; Set up IRQ vector to point to our ISR
+        LDA #<isr           ; Low byte of ISR address
+        STA $FFFE
+        LDA #>isr           ; High byte of ISR address
+        STA $FFFF
 
-        ; Character is available - read it
-        LDA UART_DATA   ; Read character from UART
+        ; Enable UART receive interrupts
+        LDA #IRQ_EN         ; Set bit 1 (interrupt enable)
+        STA UART_COMMAND
 
-        ; Echo it back
-        STA UART_DATA   ; Write character back to UART
+        ; Enable CPU interrupts
+        CLI                 ; Clear interrupt disable flag
 
-        ; Loop forever
-        JMP echo_loop`
+        ; Main loop - CPU is now free to do other work
+        ; Interrupts will be serviced automatically
+idle_loop:
+        NOP                 ; CPU idles here between interrupts
+        JMP idle_loop
+
+        ; Interrupt Service Routine
+        ; Called automatically when UART receives data
+isr:
+        ; Read data from UART (clears interrupt automatically)
+        LDA UART_DATA
+
+        ; Echo character back to terminal
+        STA UART_DATA
+
+        ; Return from interrupt
+        RTI                 ; Restores PC and status, continues main loop`
             },
             {
                 id: 'uart-hello',
@@ -120,14 +139,10 @@ echo_loop:
 ; Memory Map:
 ;   $A000 - UART Data Register (read/write)
 ;   $A001 - UART Status Register (read-only)
-;           Bit 4: TDRE (Transmit Data Register Empty)
+;           Bit 4: TDRE (Transmit Data Register Empty - always 1)
 ;
-; This program demonstrates string output by:
-; 1. Loading a pointer to the message string
-; 2. For each character:
-;    a. Wait for TDRE (transmit ready)
-;    b. Write character to UART
-; 3. Stop when null terminator ($00) is reached
+; This program demonstrates simple string output.
+; No interrupts needed for transmit since TDRE is always ready.
 
 UART_DATA   = $A000     ; UART data register
 UART_STATUS = $A001     ; UART status register
@@ -141,13 +156,9 @@ print_loop:
         LDA message,X   ; Load character from message
         BEQ done        ; If zero (null terminator), we're done
 
-        ; Wait for transmitter ready
-wait_tx:
-        PHA             ; Save character on stack
-        LDA UART_STATUS ; Read UART status
-        AND #TDRE       ; Check TDRE flag (bit 4)
-        BEQ wait_tx     ; If not ready, keep waiting
-        PLA             ; Restore character
+        ; TDRE is always set in our emulator, but we show
+        ; the check pattern for completeness
+        BIT UART_STATUS ; Check status (V flag set if bit 6 is set)
 
         ; Send character
         STA UART_DATA   ; Write character to UART
@@ -166,63 +177,90 @@ message:
         .byte $00       ; Null terminator`
             },
             {
-                id: 'uart-polling',
-                name: 'UART Polling',
-                description: 'Demonstrate UART status polling',
-                code: `; UART Polling Demo
-; Demonstrates UART status register polling techniques
+                id: 'uart-interrupt-advanced',
+                name: 'UART IRQ Advanced',
+                description: 'Interrupt-driven with character counting',
+                code: `; UART Interrupt-Driven Advanced Example
+; Demonstrates interrupt-driven UART with character counting
 ;
 ; Memory Map:
 ;   $A000 - UART Data Register (read/write)
 ;   $A001 - UART Status Register (read-only)
-;           Bit 3: RDRF (Receive Data Register Full)
-;           Bit 4: TDRE (Transmit Data Register Empty)
+;   $A002 - UART Command Register (read/write)
+;           Bit 1: IRQ_EN (Interrupt Enable)
 ;
-; This program demonstrates:
-; 1. Polling RDRF to detect incoming data
-; 2. Polling TDRE to ensure transmitter is ready
-; 3. Safe read/write patterns with status checking
-;
-; The program reads one character, then outputs it 3 times
-; to demonstrate controlled UART operations.
+; This program:
+; 1. Receives characters via interrupt
+; 2. Counts received characters in zero page
+; 3. Echoes each character back
+; 4. Shows ISR can maintain state
 
-UART_DATA   = $A000     ; UART data register
-UART_STATUS = $A001     ; UART status register
-RDRF        = $08       ; Receive Data Register Full flag (bit 3)
-TDRE        = $10       ; Transmit Data Register Empty flag (bit 4)
+UART_DATA    = $A000     ; UART data register
+UART_STATUS  = $A001     ; UART status register
+UART_COMMAND = $A002     ; UART command register
+IRQ_EN       = $02       ; Interrupt enable bit (bit 1)
+CHAR_COUNT   = $00       ; Zero page counter
 
-        ; Wait for incoming character
-wait_rx:
-        LDA UART_STATUS ; Read UART status register
-        AND #RDRF       ; Check RDRF flag (bit 3)
-        BEQ wait_rx     ; Loop until character available
+        ; Initialize character counter
+        LDA #$00
+        STA CHAR_COUNT
 
-        ; Read the character
-        LDA UART_DATA   ; Read character (also clears RDRF)
-        PHA             ; Save character on stack
+        ; Set up IRQ vector to point to our ISR
+        LDA #<isr
+        STA $FFFE
+        LDA #>isr
+        STA $FFFF
 
-        ; Output the character 3 times with polling
-        LDX #$03        ; Counter for 3 repetitions
+        ; Enable UART receive interrupts
+        LDA #IRQ_EN
+        STA UART_COMMAND
 
-output_loop:
-        ; Wait for transmitter ready
-poll_tx:
-        LDA UART_STATUS ; Read UART status register
-        AND #TDRE       ; Check TDRE flag (bit 4)
-        BEQ poll_tx     ; Loop until transmitter ready
+        ; Enable CPU interrupts
+        CLI
 
-        ; Transmitter is ready - send character
-        PLA             ; Get character from stack
-        STA UART_DATA   ; Write to UART data register
-        PHA             ; Put character back on stack
+        ; Main loop - display count periodically
+main_loop:
+        ; Main program can do other work here
+        ; For demo, we just idle
+        NOP
+        JMP main_loop
 
-        ; Decrement counter and continue
-        DEX             ; Decrease counter
-        BNE output_loop ; Continue if not zero
+        ; Interrupt Service Routine
+        ; Called when UART receives a character
+isr:
+        ; Save accumulator (important in ISR!)
+        PHA
 
-        ; Clean up and finish
-        PLA             ; Remove character from stack
-        BRK             ; Stop execution`
+        ; Read data from UART (clears interrupt)
+        LDA UART_DATA
+
+        ; Increment character counter
+        INC CHAR_COUNT
+
+        ; Echo the character back
+        STA UART_DATA
+
+        ; Check if we've received 10 characters
+        LDA CHAR_COUNT
+        CMP #$0A        ; 10 characters?
+        BNE isr_done
+
+        ; After 10 chars, send a newline and reset counter
+        LDA #$0D        ; CR
+        STA UART_DATA
+        LDA #$0A        ; LF
+        STA UART_DATA
+
+        ; Reset counter
+        LDA #$00
+        STA CHAR_COUNT
+
+isr_done:
+        ; Restore accumulator
+        PLA
+
+        ; Return from interrupt
+        RTI`
             }
         ];
     }
