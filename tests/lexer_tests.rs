@@ -2,7 +2,7 @@
 //!
 //! Tests for the assembler lexer (tokenization phase)
 
-use lib6502::assembler::{tokenize, Token, TokenType};
+use lib6502::assembler::{tokenize, TokenType};
 
 #[test]
 fn test_identifier_tokenization() {
@@ -116,8 +116,8 @@ fn test_operator_tokenization() {
     assert_eq!(tokens[8].token_type, TokenType::Dot);
 
     // All should have length 1
-    for i in 0..9 {
-        assert_eq!(tokens[i].length, 1);
+    for token in tokens.iter().take(9) {
+        assert_eq!(token.length, 1);
     }
 }
 
@@ -170,7 +170,7 @@ fn test_number_overflow_error() {
     assert!(result.is_err());
 
     let errors = result.unwrap_err();
-    assert!(errors.len() > 0);
+    assert!(!errors.is_empty());
 
     // Check error type
     if let lib6502::assembler::LexerError::NumberTooLarge { value, max, .. } = &errors[0] {

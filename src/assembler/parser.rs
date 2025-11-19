@@ -1,4 +1,138 @@
-//! Assembly source parser
+//! Assembly source parser (syntactic analysis phase)
+//!
+//! This module provides the second phase of assembly: converting token streams into
+//! structured assembly lines. The parser works with pre-tokenized input from the
+//! [`lexer`](super::lexer) module, using pattern matching on token types instead of
+//! string manipulation.
+//!
+//! # Architecture
+//!
+//! The parser follows a token-based design that separates lexical concerns from
+//! syntactic analysis:
+//!
+//! ```text
+//! Source Text → Lexer → Token Stream → Parser → AssemblyLine → Assembler → Machine Code
+//!                ↓                        ↓                         ↓
+//!           TokenType::*           AssemblyLine            Binary output
+//!           (characters)           (structure)              (bytes)
+//! ```
+//!
+//! ## Two Parsing Paths
+//!
+//! 1. **Token-based** ([`parse_token_line`]): Modern path using lexer tokens (recommended)
+//! 2. **String-based** ([`parse_line`]): Legacy path for backwards compatibility
+//!
+//! The assembler uses `parse_token_line()` via token grouping for production code.
+//!
+//! # Parser Responsibilities
+//!
+//! **What the parser does:**
+//! - Recognize syntactic patterns (label:, mnemonic operand, .directive args)
+//! - Distinguish label definitions from constant assignments (NAME: vs NAME =)
+//! - Parse directives (.org, .byte, .word) and validate arguments
+//! - Build [`AssemblyLine`] structure for each line
+//! - Preserve comments and source locations for debugging
+//!
+//! **What the parser does NOT do:**
+//! - Character-level tokenization (lexer's job)
+//! - Number parsing (lexer already parsed `$42` → `HexNumber(0x42)`)
+//! - Label resolution or address calculation (assembler's job)
+//! - Machine code generation (encoder's job)
+//!
+//! # Token Consumption Model
+//!
+//! The parser uses a simple left-to-right scan with token pattern matching:
+//!
+//! ```text
+//! Input tokens:  [Identifier("START"), Colon, Whitespace, Identifier("LDA"), ...]
+//!                  ↓
+//! Pattern match:  Identifier + Colon  → Found a label!
+//!                                       ↓
+//! Skip whitespace:                     [Identifier("LDA"), ...]
+//!                                       ↓
+//! Pattern match:  Identifier (no Colon) → Found a mnemonic!
+//! ```
+//!
+//! ## Edge Cases Handled
+//!
+//! - **Number before identifier** (e.g., `1START:`): Treated as invalid label
+//! - **Invalid directives** (e.g., `.unknown`): Treated as mnemonic for validation
+//! - **Whitespace flexibility**: Parser skips whitespace between tokens
+//! - **Comment preservation**: Comments are extracted and stored, not discarded
+//!
+//! # Examples
+//!
+//! ## Basic Parsing
+//!
+//! ```
+//! use lib6502::assembler::parser::parse_line;
+//!
+//! let line = parse_line("START: LDA #$42", 1).unwrap();
+//!
+//! assert_eq!(line.label, Some("START".to_string()));
+//! assert_eq!(line.mnemonic, Some("LDA".to_string()));
+//! assert_eq!(line.operand, Some("#$42".to_string()));
+//! assert_eq!(line.line_number, 1);
+//! ```
+//!
+//! ## Directive Parsing
+//!
+//! ```
+//! use lib6502::assembler::parser::parse_directive;
+//! use lib6502::assembler::AssemblerDirective;
+//!
+//! let directive = parse_directive(".org $8000").unwrap();
+//!
+//! match directive {
+//!     AssemblerDirective::Org { address } => assert_eq!(address, 0x8000),
+//!     _ => panic!("Expected .org directive"),
+//! }
+//! ```
+//!
+//! ## Token-Based Parsing (Internal)
+//!
+//! The assembler uses token-based parsing internally:
+//!
+//! ```
+//! use lib6502::assembler::lexer::tokenize;
+//! use lib6502::assembler::parser::parse_token_line;
+//!
+//! // Tokenize first
+//! let tokens = tokenize("LDA #$42").unwrap();
+//!
+//! // Group tokens by line (simplified example - real code handles newlines)
+//! let line_tokens: Vec<_> = tokens.iter()
+//!     .filter(|t| !matches!(t.token_type, lib6502::assembler::lexer::TokenType::Eof))
+//!     .cloned()
+//!     .collect();
+//!
+//! // Parse tokens
+//! let line = parse_token_line(&line_tokens, 1).unwrap();
+//! assert_eq!(line.mnemonic, Some("LDA".to_string()));
+//! ```
+//!
+//! # Migration Notes
+//!
+//! The parser has been refactored from string-based to token-based parsing:
+//!
+//! **Old approach** (string manipulation):
+//! ```text
+//! line.find(':')            → Look for label
+//! line.strip_prefix('.')    → Look for directive
+//! line.splitn(2, ' ')       → Split mnemonic/operand
+//! parse_number("$42")       → Parse hex numbers
+//! ```
+//!
+//! **New approach** (token matching):
+//! ```text
+//! match (token[0], token[1])
+//!   (Identifier, Colon)     → Found label
+//!   (Dot, Identifier)       → Found directive
+//! match token.token_type
+//!   HexNumber(0x42)         → Already parsed!
+//! ```
+//!
+//! Benefits: Simpler code, better errors, no repeated parsing.
 
 use crate::addressing::AddressingMode;
 use super::lexer::{Token, TokenType};
