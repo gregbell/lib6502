@@ -109,6 +109,26 @@ Phase 3: Code Generation (src/assembler/encoder.rs + mod.rs)
 - New number format → Modify lexer only (parser uses TokenType::\*Number)
 - New addressing mode → Modify encoder only (parser preserves operand tokens)
 
+### Disassembler Architecture
+
+- Public API in `src/disassembler.rs` exposes
+  `disassemble(bytes, DisassemblyOptions) -> Vec<Instruction>` plus the
+  `Instruction` metadata struct (address, opcode, mnemonic, addressing_mode,
+  operand_bytes, size_bytes, base_cycles) and options for
+  `start_address`/`hex_dump`/`show_offsets`.
+- Decoder (`src/disassembler/decoder.rs`) looks up opcodes in `OPCODE_TABLE`,
+  verifies byte length, and returns `None` for illegal or truncated
+  instructions; `disassemble` then advances PC/address and emits `.byte $XX`
+  pseudo-instructions for invalid opcodes with `AddressingMode::Implicit`.
+- Formatter (`src/disassembler/formatter.rs`) handles operand rendering for
+  every addressing mode (relative branches resolve to absolute targets) and
+  provides helpers `format_instruction`, `format_hex_dump`, `format_hex_bytes`,
+  and `format_address`; illegal opcodes format as `.byte $XX`.
+- Usage examples live in `examples/simple_disasm.rs`; integration + round-trip
+  coverage in `tests/disassembler_tests.rs` and
+  `tests/functional_assembler_disassembler.rs` (documented in
+  `docs/ASSEMBLER_DISASSEMBLER_ROUNDTRIP.md`).
+
 ### Table-Driven Design
 
 All opcode information lives in `OPCODE_TABLE`. When implementing instructions:
