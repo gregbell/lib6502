@@ -1,19 +1,12 @@
 # Klaus Dormann's 6502 Functional Test Integration
 
-## Status: ✅ PASSING (100%)
-
-The Klaus functional test **passes completely**, validating all 151 documented NMOS 6502 opcodes across 96+ million instruction cycles.
-
-**Final Results:**
-- **PC**: $3469 (exact success address)
-- **Cycles**: 96,241,373
-- **Test Status**: ✓ SUCCESS - All tests passed
-
 ## Overview
 
-This document describes the integration of Klaus Dormann's comprehensive 6502 functional test suite into our emulator. This test validates all valid opcodes and addressing modes of the NMOS 6502 processor.
+This document describes the integration of Klaus Dormann's comprehensive 6502
+functional test suite into our emulator. This test validates all valid opcodes
+and addressing modes of the NMOS 6502 processor.
 
-**Test Source**: https://github.com/Klaus2m5/6502_65C02_functional_tests
+**Test Source**: <https://github.com/Klaus2m5/6502_65C02_functional_tests>
 
 ## What is the Functional Test?
 
@@ -49,7 +42,8 @@ docs/
 
 ## Running the Test
 
-The functional test is marked as `#[ignore]` to enable fast TDD workflows. It runs separately in CI.
+The functional test is marked as `#[ignore]` to enable fast TDD workflows. It
+runs separately in CI.
 
 ### Run the test
 
@@ -69,13 +63,15 @@ cargo test --test functional_klaus tests::
 
 ### Why is it ignored?
 
-The Klaus test executes 96+ million instruction cycles and takes ~6 seconds. During TDD, you want fast feedback (<2 seconds). The test is marked with:
+The Klaus test executes 96+ million instruction cycles and takes ~6 seconds.
+During TDD, you want fast feedback (<2 seconds). The test is marked with:
 
 ```rust
 #[ignore = "slow functional test (~6 seconds) - run with --ignored or --include-ignored"]
 ```
 
 This allows:
+
 - **Development**: Fast iteration with `cargo test`
 - **Pre-commit**: Full validation with `cargo test -- --include-ignored`
 - **CI**: Separate fast and slow test jobs for optimal feedback
@@ -151,16 +147,19 @@ const LOOP_DETECTION_THRESHOLD: usize = 3; // PC unchanged count
 
 ## Test-Driven Development
 
-The Klaus functional test served as an excellent tool for incremental development during implementation.
+The Klaus functional test served as an excellent tool for incremental
+development during implementation.
 
 ### Development Workflow (Historical)
 
 1. **Run Test** → Identify next missing instruction by opcode error
 2. **Look Up Opcode** → Use listing file to find instruction at failure address
-3. **Implement Instruction** → Follow patterns in `src/instructions/`, update `OPCODE_TABLE`
+3. **Implement Instruction** → Follow patterns in `src/instructions/`, update
+   `OPCODE_TABLE`
 4. **Repeat** → Test progresses further with each instruction added
 
-This iterative approach helped implement all 151 opcodes systematically, with the test providing immediate validation of each addition.
+This iterative approach helped implement all 151 opcodes systematically, with
+the test providing immediate validation of each addition.
 
 ## Debugging Failed Tests
 
@@ -182,13 +181,15 @@ This shows which instruction and which test was running at that address.
 
 ### 3. Examine Context
 
-The test output shows memory around the failure point and CPU state, helping identify what went wrong.
+The test output shows memory around the failure point and CPU state, helping
+identify what went wrong.
 
 ## Test Coverage
 
 Once fully passing, this test validates:
 
 ### Instruction Categories
+
 - ✅ Arithmetic: ADC, SBC
 - ✅ Logic: AND, ORA, EOR
 - ✅ Shifts/Rotates: ASL, LSR, ROL, ROR
@@ -205,6 +206,7 @@ Once fully passing, this test validates:
 - ✅ Bit Test: BIT
 
 ### Addressing Modes (13 total)
+
 - Implied
 - Accumulator
 - Immediate
@@ -220,6 +222,7 @@ Once fully passing, this test validates:
 - Relative (branches)
 
 ### Edge Cases
+
 - Page crossing penalties
 - Zero page wraparound
 - Stack operations
@@ -251,14 +254,17 @@ All NMOS 6502 instructions are fully implemented:
 ### Key Features Validated
 
 - **Binary mode arithmetic**: All operations work correctly in standard mode
-- **Decimal mode (BCD)**: ADC and SBC perform Binary Coded Decimal arithmetic when D flag is set
+- **Decimal mode (BCD)**: ADC and SBC perform Binary Coded Decimal arithmetic
+  when D flag is set
 - **Cycle accuracy**: Correct cycle counts including page-crossing penalties
-- **Flag behavior**: N, V, Z, C flags update correctly (D flag controls BCD mode)
+- **Flag behavior**: N, V, Z, C flags update correctly (D flag controls BCD
+  mode)
 - **Edge cases**: Page crossing, wraparound, overflow, all validated
 
 ## Milestones
 
 ### Milestone 1: Test Infrastructure ✅
+
 - [x] Test binary loads correctly
 - [x] CPU initializes at entry point
 - [x] Infrastructure detects blocking instructions
@@ -266,12 +272,14 @@ All NMOS 6502 instructions are fully implemented:
 - [x] Diagnostic output helps debugging
 
 ### Milestone 2: Core Instructions ✅
+
 - [x] Implement core instructions (loads, stores, transfers)
 - [x] Test progresses past initialization
 - [x] Basic test loops execute
 - [x] Binary mode arithmetic complete
 
 ### Milestone 3: Full Implementation ✅
+
 - [x] All 151 documented 6502 opcodes implemented
 - [x] Decimal mode (BCD) arithmetic in ADC/SBC
 - [x] Test reaches success address ($3469)
@@ -282,11 +290,12 @@ All NMOS 6502 instructions are fully implemented:
 
 The functional test suite was created by Klaus Dormann (Klaus2m5).
 
-- **Test Suite**: https://github.com/Klaus2m5/6502_65C02_functional_tests
+- **Test Suite**: <https://github.com/Klaus2m5/6502_65C02_functional_tests>
 - **Author**: Klaus Dormann
 - **License**: See original repository
 
-This integration is part of the lib6502 emulator project and follows the project's MIT/Apache-2.0 dual license.
+This integration is part of the lib6502 emulator project and follows the
+project's MIT/Apache-2.0 dual license.
 
 ## References
 
@@ -304,14 +313,17 @@ The CI pipeline runs two separate test jobs for optimal feedback:
   run: cargo test --verbose
 
 - name: Run Klaus functional test
-  run: cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture
+  run:
+    cargo test --test functional_klaus klaus_6502_functional_test -- --ignored
+    --nocapture
 ```
 
 ### Benefits
 
 - ✅ **Fast Feedback**: Fast tests complete in ~2 seconds
 - ✅ **Parallel Execution**: Both jobs can run concurrently
-- ✅ **Clear Failures**: Know immediately if it's a fast test or functional test failure
+- ✅ **Clear Failures**: Know immediately if it's a fast test or functional test
+  failure
 - ✅ **Complete Coverage**: All 1,471 tests validate on every PR
 
 ### Test Counts
@@ -323,16 +335,22 @@ The CI pipeline runs two separate test jobs for optimal feedback:
 ## Potential Enhancements
 
 ### Verbose Mode
+
 Set `verbose = true` in the test to enable:
+
 - Progress updates every 100k cycles
 - PC tracking through execution
 - Detailed timing information
 
 ### Breakpoint Support
-Add ability to halt execution at specific addresses for debugging instruction implementations.
+
+Add ability to halt execution at specific addresses for debugging instruction
+implementations.
 
 ### Performance Benchmarking
+
 Track cycle execution speed over time:
+
 - Measure instructions per second
 - Compare performance across platforms
 - Identify optimization opportunities

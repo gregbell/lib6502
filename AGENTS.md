@@ -1,25 +1,34 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with
+code in this repository.
 
 ## Project Overview
 
-A cycle-accurate NMOS 6502 CPU emulator built in Rust. The project prioritizes modularity, clarity, WebAssembly portability, and hackability. No external dependencies are used in the core library.
+A cycle-accurate NMOS 6502 CPU emulator built in Rust. The project prioritizes
+modularity, clarity, WebAssembly portability, and hackability. No external
+dependencies are used in the core library.
 
 ## Constitution
 
-The project uses a CONSTITUTION.md file (.specify/memory/constitution.md) to manage a set of core principles to follow. Review them to ensure that new work matches hte project style, architecture, and vision.
+The project uses a CONSTITUTION.md file (.specify/memory/constitution.md) to
+manage a set of core principles to follow. Review them to ensure that new work
+matches hte project style, architecture, and vision.
 
 ## Architecture
 
 ### Core Abstractions
 
-The emulator uses a **trait-based architecture** to decouple CPU logic from memory implementation:
+The emulator uses a **trait-based architecture** to decouple CPU logic from
+memory implementation:
 
-- **CPU<M: MemoryBus>**: Generic over memory implementation, contains all processor state (registers, flags, PC, SP, cycle counter)
-- **MemoryBus trait**: Provides `read(&self, addr: u16) -> u8` and `write(&mut self, addr: u16, value: u8)`
+- **CPU<M: MemoryBus>**: Generic over memory implementation, contains all
+  processor state (registers, flags, PC, SP, cycle counter)
+- **MemoryBus trait**: Provides `read(&self, addr: u16) -> u8` and
+  `write(&mut self, addr: u16, value: u8)`
 - **FlatMemory**: Simple 64KB RAM implementation of MemoryBus
-- **OPCODE_TABLE**: Static 256-entry metadata table mapping opcodes to mnemonic, addressing mode, cycle cost, and size
+- **OPCODE_TABLE**: Static 256-entry metadata table mapping opcodes to mnemonic,
+  addressing mode, cycle cost, and size
 
 ### Execution Model
 
@@ -109,7 +118,8 @@ All opcode information lives in `OPCODE_TABLE`. When implementing instructions:
 3. Add `metadata.base_cycles` to cycle counter (plus page-crossing penalties)
 4. Advance PC by `metadata.size_bytes`
 
-The `get_operand_value()` helper handles all addressing modes and returns `(value, page_crossed)`.
+The `get_operand_value()` helper handles all addressing modes and returns
+`(value, page_crossed)`.
 
 ## Common Commands
 
@@ -167,8 +177,10 @@ See [docs/KLAUS_FUNCTIONAL_TEST.md](docs/KLAUS_FUNCTIONAL_TEST.md) for details.
 
 - Unit tests live in `mod tests` at bottom of source files
 - Integration tests live in `tests/` directory
-- CPU state is inspectable via public getter methods: `cpu.a()`, `cpu.pc()`, `cpu.flag_c()`, etc.
-- CPU state can be set via public setters for testing: `cpu.set_a(value)`, `cpu.set_flag_c(true)`
+- CPU state is inspectable via public getter methods: `cpu.a()`, `cpu.pc()`,
+  `cpu.flag_c()`, etc.
+- CPU state can be set via public setters for testing: `cpu.set_a(value)`,
+  `cpu.set_flag_c(true)`
 - Use `cpu.memory_mut()` to access memory for test setup
 
 ## Implementation Workflow
@@ -187,25 +199,33 @@ When adding new instructions:
 
 ## Key Design Constraints
 
-- **No external dependencies** in core library (only dev-dependencies for testing)
+- **No external dependencies** in core library (only dev-dependencies for
+  testing)
 - **No OS dependencies** - must work in WebAssembly
-- **No panics in MemoryBus** - reads/writes always succeed (matching real 6502 hardware)
-- **Individual bool fields for flags** - not packed into status register byte (stored as `flag_n`, `flag_z`, etc.)
-- **Cycle accuracy** - track exact cycle counts including page-crossing penalties
+- **No panics in MemoryBus** - reads/writes always succeed (matching real 6502
+  hardware)
+- **Individual bool fields for flags** - not packed into status register byte
+  (stored as `flag_n`, `flag_z`, etc.)
+- **Cycle accuracy** - track exact cycle counts including page-crossing
+  penalties
 
 <!-- MANUAL ADDITIONS START -->
 
 ## Interrupt Support
 
-The emulator implements hardware-accurate IRQ (Interrupt Request) support matching real 6502 behavior.
+The emulator implements hardware-accurate IRQ (Interrupt Request) support
+matching real 6502 behavior.
 
 ### Interrupt Model
 
-- **Level-sensitive IRQ line**: Shared among all interrupt-capable devices via logical OR
-- **No queuing**: Interrupt state reflects current device status (not edge-triggered)
+- **Level-sensitive IRQ line**: Shared among all interrupt-capable devices via
+  logical OR
+- **No queuing**: Interrupt state reflects current device status (not
+  edge-triggered)
 - **I flag respect**: Interrupts only serviced when I flag is clear
 - **7-cycle sequence**: Exact timing matching MOS 6502 specification
-- **Explicit acknowledgment**: ISR must read/write device registers to clear interrupts
+- **Explicit acknowledgment**: ISR must read/write device registers to clear
+  interrupts
 
 ### Creating Interrupt-Capable Devices
 
@@ -296,7 +316,8 @@ See `tests/interrupt_test.rs` for comprehensive test coverage.
 
 ## Assembler Constants
 
-The assembler supports named constants for defining reusable values like screen addresses, character codes, and magic numbers.
+The assembler supports named constants for defining reusable values like screen
+addresses, character codes, and magic numbers.
 
 ### Syntax
 
@@ -337,7 +358,8 @@ Constants can be used anywhere in code:
 ### Rules
 
 - Constants must be defined before use (no forward references)
-- Names follow the same rules as labels (alphanumeric + underscore, start with letter)
+- Names follow the same rules as labels (alphanumeric + underscore, start with
+  letter)
 - Names are case-insensitive and normalized to UPPERCASE
 - Values can be decimal, hex ($XXXX), or binary (%XXXXXXXX)
 - Constants hold literal values, labels hold memory addresses
@@ -358,16 +380,23 @@ See `examples/constants.rs` for a complete example program.
 
 ## Active Technologies
 
-- Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible) (002-assembler-disassembler)
-- N/A (operates on in-memory byte slices and strings) (002-assembler-disassembler)
-- Rust 1.75+ (for WASM compilation), HTML5/CSS3/JavaScript ES6+ (for frontend) (003-wasm-web-demo)
+- Rust 1.75+ (edition 2021) + None (zero external dependencies for core
+  library - `no_std` compatible) (002-assembler-disassembler)
+- N/A (operates on in-memory byte slices and strings)
+  (002-assembler-disassembler)
+- Rust 1.75+ (for WASM compilation), HTML5/CSS3/JavaScript ES6+ (for frontend)
+  (003-wasm-web-demo)
 - N/A (fully client-side, no persistence) (003-wasm-web-demo)
 - N/A (in-memory state only, no persistence) (004-memory-mapping-module)
-- Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible per Constitution) (006-assembler-lexer)
-- N/A (operates on in-memory strings and produces byte vectors) (006-assembler-lexer)
+- Rust 1.75+ (edition 2021) + None (zero external dependencies for core
+  library - `no_std` compatible per Constitution) (006-assembler-lexer)
+- N/A (operates on in-memory strings and produces byte vectors)
+  (006-assembler-lexer)
 - N/A (in-memory CPU and device state only) (005-cpu-interrupt-support)
-- N/A (in-memory emulator state only, no persistence) (005-xterm-serial-connection)
+- N/A (in-memory emulator state only, no persistence)
+  (005-xterm-serial-connection)
 
 ## Recent Changes
 
-- 002-assembler-disassembler: Added Rust 1.75+ (edition 2021) + None (zero external dependencies for core library - `no_std` compatible)
+- 002-assembler-disassembler: Added Rust 1.75+ (edition 2021) + None (zero
+  external dependencies for core library - `no_std` compatible)
