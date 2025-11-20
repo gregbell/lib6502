@@ -194,7 +194,7 @@ lib6502 follows a **trait-based architecture** that separates concerns:
 - **`OPCODE_TABLE`** - Static table of all 256 opcode metadata entries
 - **Assembler/Disassembler** - Convert between assembly text and bytecode
 
-See [`CLAUDE.md`](CLAUDE.md) for detailed architecture documentation.
+See [`AGENTS.md`](AGENTS.md) for detailed architecture documentation.
 
 ## Examples
 
@@ -317,7 +317,7 @@ Contributions are welcome! Please:
 6. Push to the branch (`git push origin feature/amazing-feature`)
 7. Open a Pull Request
 
-See [`CLAUDE.md`](CLAUDE.md) for development guidelines and project constitution.
+See [`AGENTS.md`](AGENTS.md) for development guidelines and project constitution.
 
 ## Design Principles
 
@@ -339,7 +339,7 @@ CI runs both suites to ensure correctness while keeping local development fast.
 
 ## Documentation
 
-- [Architecture Guide](CLAUDE.md) - Development guide and project overview
+- [Architecture Guide](AGENTS.md) - Development guide and project overview
 - [Klaus Functional Test](docs/KLAUS_FUNCTIONAL_TEST.md) - Comprehensive test suite documentation
 - [Assembler/Disassembler](docs/ASSEMBLER_DISASSEMBLER_ROUNDTRIP.md) - Assembly tooling details
 
