@@ -4,18 +4,27 @@
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
 
-> A cycle-accurate NMOS 6502 CPU emulator built for modularity, clarity, and WebAssembly portability.
+> A cycle-accurate NMOS 6502 CPU emulator library with WebAssembly bindings.
 
-**lib6502** is a faithful emulation of the iconic MOS Technology 6502 processor, written in Rust with zero external dependencies. Designed for both historical accuracy and modern usability, it powers everything from retro computing projects to educational tools and browser-based emulators.
+**lib6502** is a faithful emulation of the iconic MOS Technology 6502 processor,
+written in Rust with zero external dependencies. Designed for both historical
+accuracy and modern usability, it powers everything from retro computing
+projects to educational tools and browser-based emulators.
 
 ## Features
 
-- **🎯 Cycle-Accurate Emulation** - Precisely tracks CPU cycles including page-crossing penalties
-- **🔧 Zero Dependencies** - Core library has no external dependencies, fully `no_std` compatible
-- **🌐 WebAssembly Ready** - Runs in browsers with optional WASM bindings ([try the demo](https://your-org.github.io/6502/))
-- **🏗️ Modular Architecture** - Trait-based design lets you plug in custom memory implementations
-- **📝 Built-in Assembler/Disassembler** - Write 6502 assembly directly in your programs
-- **✅ Extensively Tested** - 1,470+ unit tests plus Klaus Dormann's comprehensive functional test (96M+ cycles, all 151 opcodes validated)
+- **🎯 Cycle-Accurate Emulation** - Precisely tracks CPU cycles including
+  page-crossing penalties
+- **🔧 Zero Dependencies** - Core library has no external dependencies, fully
+  `no_std` compatible
+- **🌐 WebAssembly Ready** - Runs in browsers with optional WASM bindings
+  ([try the demo](https://your-org.github.io/6502/))
+- **🏗️ Modular Architecture** - Trait-based design lets you plug in custom
+  memory implementations
+- **📝 Built-in Assembler/Disassembler** - Write 6502 assembly directly in your
+  programs
+- **✅ Extensively Tested** - 1,470+ unit tests plus Klaus Dormann's
+  comprehensive functional test (96M+ cycles, all 151 opcodes validated)
 - **📚 Well Documented** - Comprehensive documentation and examples
 
 ## Quick Start
@@ -212,14 +221,17 @@ cargo run --example simple_ram
 
 ## Web Demo
 
-An interactive 6502 assembly playground is available at the [GitHub Pages demo](https://your-org.github.io/6502/) (or run locally from the `demo/` directory).
+An interactive 6502 assembly playground is available at the
+[GitHub Pages demo](https://gregbell.github.io/lib6502/) (or run locally from
+the `demo/` directory).
 
 The demo features:
 
 - **Live Assembly Editor** - Write and edit 6502 assembly code
 - **Real-time CPU State** - View registers, flags, and program counter
 - **Memory Viewer** - Inspect memory contents at any address
-- **Serial Terminal** - Interactive xterm.js terminal connected to UART at $A000-$A003
+- **Serial Terminal** - Interactive xterm.js terminal connected to UART at
+  $A000-$A003
 - **Example Programs** - Pre-loaded examples including UART I/O demos
 - **Cycle-accurate Execution** - Step through code or run at configurable speeds
 
@@ -227,11 +239,15 @@ The demo features:
 
 The demo includes example programs demonstrating interrupt-driven serial I/O:
 
-- **UART Echo (IRQ)** - Interrupt-driven character echo using hardware interrupts
+- **UART Echo (IRQ)** - Interrupt-driven character echo using hardware
+  interrupts
 - **UART Hello World** - Simple string output demonstration
-- **UART IRQ Advanced** - Advanced interrupt example with character counting and auto-newline
+- **UART IRQ Advanced** - Advanced interrupt example with character counting and
+  auto-newline
 
-These examples showcase the 6502's interrupt system (IRQ) for asynchronous I/O - the authentic way real 6502 systems handled serial communication. Type in the terminal to trigger interrupts and see the ISR in action!
+These examples showcase the 6502's interrupt system (IRQ) for asynchronous I/O -
+the authentic way real 6502 systems handled serial communication. Type in the
+terminal to trigger interrupts and see the ISR in action!
 
 ## Development
 
@@ -272,7 +288,8 @@ cargo test -- --ignored
 cargo test && cargo test -- --ignored
 ```
 
-See [`docs/KLAUS_FUNCTIONAL_TEST.md`](docs/KLAUS_FUNCTIONAL_TEST.md) for details about the comprehensive functional test suite.
+See [`docs/KLAUS_FUNCTIONAL_TEST.md`](docs/KLAUS_FUNCTIONAL_TEST.md) for details
+about the comprehensive functional test suite.
 
 ### Code Quality
 
@@ -322,7 +339,8 @@ Contributions are welcome! Please:
 6. Push to the branch (`git push origin feature/amazing-feature`)
 7. Open a Pull Request
 
-See [`AGENTS.md`](AGENTS.md) for development guidelines and project constitution.
+See [`AGENTS.md`](AGENTS.md) for development guidelines and project
+constitution.
 
 ## Design Principles
 
@@ -345,25 +363,10 @@ CI runs both suites to ensure correctness while keeping local development fast.
 ## Documentation
 
 - [Architecture Guide](AGENTS.md) - Development guide and project overview
-- [Klaus Functional Test](docs/KLAUS_FUNCTIONAL_TEST.md) - Comprehensive test suite documentation
-- [Assembler/Disassembler](docs/ASSEMBLER_DISASSEMBLER_ROUNDTRIP.md) - Assembly tooling details
-
-## Roadmap
-
-- [x] Core CPU foundation
-- [x] All 151 NMOS 6502 opcodes
-- [x] Cycle-accurate timing
-- [x] Assembler and disassembler
-- [x] WebAssembly support
-- [x] Interactive web demo
-- [x] Memory-mapped devices (MappedMemory architecture)
-- [x] CPU interrupt support (IRQ with level-sensitive line)
-- [x] UART serial device (W65C51 ACIA emulation with interrupts)
-- [x] Serial terminal integration (xterm.js in demo)
-- [ ] Debugger interface
-- [ ] Additional memory-mapped devices (VIA, PIA)
-- [ ] Performance optimizations
-- [ ] CMOS 65C02 support
+- [Klaus Functional Test](docs/KLAUS_FUNCTIONAL_TEST.md) - Comprehensive test
+  suite documentation
+- [Assembler/Disassembler](docs/ASSEMBLER_DISASSEMBLER_ROUNDTRIP.md) - Assembly
+  tooling details
 
 ## License
 
@@ -376,7 +379,8 @@ at your option.
 
 ## Acknowledgments
 
-- **Klaus Dormann** - For the comprehensive [6502 functional test suite](https://github.com/Klaus2m5/6502_65C02_functional_tests)
+- **Klaus Dormann** - For the comprehensive
+  [6502 functional test suite](https://github.com/Klaus2m5/6502_65C02_functional_tests)
 - **MOS Technology** - For creating the legendary 6502 processor
 - The Rust community for excellent tooling and documentation
 
