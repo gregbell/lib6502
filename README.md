@@ -7,9 +7,8 @@
 > A cycle-accurate NMOS 6502 CPU emulator library with WebAssembly bindings.
 
 **lib6502** is a faithful emulation of the iconic MOS Technology 6502 processor,
-written in Rust with zero external dependencies. Designed for both historical
-accuracy and modern usability, it powers everything from retro computing
-projects to educational tools and browser-based emulators.
+written in Rust with zero external dependencies and usable as a library for
+projects that need to emulate both the CPU and related hardware.
 
 ## Features
 
@@ -171,47 +170,22 @@ let memory = MyMemory { /* ... */ };
 let cpu = CPU::new(memory);
 ```
 
-## Architecture
-
-lib6502 follows a **trait-based architecture** that separates concerns:
-
-```
-┌─────────────────┐
-│   CPU<M>        │  Generic over memory implementation
-│  (State + Logic)│  Registers, flags, PC, SP, cycles
-└────────┬────────┘
-         │ uses
-         ▼
-┌─────────────────┐
-│  MemoryBus      │  Trait: read(addr) -> u8
-│  (Trait)        │         write(addr, value)
-└────────┬────────┘
-         │ implements
-    ┌────┴──────┬──────────┐
-    ▼           ▼          ▼
-┌──────────┐ ┌────────┐  ┌─────────┐
-│FlatMemory│ │ Custom │  │ Custom  │
-│ (64KB)   │ │ Memory │  │ Memory  │
-└──────────┘ └────────┘  └─────────┘
-```
-
-**Key Components:**
-
-- **`CPU<M: MemoryBus>`** - Generic CPU implementation with all processor state
-- **`MemoryBus` trait** - Abstraction for memory access (read/write)
-- **`FlatMemory`** - Simple 64KB RAM implementation
-- **`OPCODE_TABLE`** - Static table of all 256 opcode metadata entries
-- **Assembler/Disassembler** - Convert between assembly text and bytecode
-
-See [`AGENTS.md`](AGENTS.md) for detailed architecture documentation.
-
 ## Examples
 
 The [`examples/`](examples/) directory contains:
 
+- **`bench_lexer.rs`** - Lexer performance benchmark
+  (`cargo run --release --example bench_lexer`)
+- **`constants.rs`** - Using assembler constants in source code
+- **`interrupt_device.rs`** - Interrupt-capable timer device with
+  `InterruptDevice`
+- **`memory_mapped_system.rs`** - RAM/ROM memory-mapped system setup
 - **`simple_ram.rs`** - Basic CPU setup and execution
 - **`simple_asm.rs`** - Assembler usage
 - **`simple_disasm.rs`** - Disassembler usage
+- **`syntax_highlighter.rs`** - Terminal syntax highlighting via assembler lexer
+- **`uart_echo.rs`** - UART (6551 ACIA) echo mode with memory-mapped I/O
+- **`wasm_terminal.rs`** - Browser terminal integration pattern for WASM builds
 
 Run examples with:
 
@@ -221,7 +195,7 @@ cargo run --example simple_ram
 
 ## Web Demo
 
-An interactive 6502 assembly playground is available at the
+An interactive 6502 assembly playground using `lib6502` is available at the
 [GitHub Pages demo](https://gregbell.github.io/lib6502/) (or run locally from
 the `demo/` directory).
 
@@ -234,20 +208,6 @@ The demo features:
   $A000-$A003
 - **Example Programs** - Pre-loaded examples including UART I/O demos
 - **Cycle-accurate Execution** - Step through code or run at configurable speeds
-
-### UART Examples
-
-The demo includes example programs demonstrating interrupt-driven serial I/O:
-
-- **UART Echo (IRQ)** - Interrupt-driven character echo using hardware
-  interrupts
-- **UART Hello World** - Simple string output demonstration
-- **UART IRQ Advanced** - Advanced interrupt example with character counting and
-  auto-newline
-
-These examples showcase the 6502's interrupt system (IRQ) for asynchronous I/O -
-the authentic way real 6502 systems handled serial communication. Type in the
-terminal to trigger interrupts and see the ISR in action!
 
 ## Development
 
@@ -304,29 +264,6 @@ cargo fmt
 cargo fmt --all -- --check
 ```
 
-### Project Structure
-
-```
-lib6502/
-├── src/
-│   ├── lib.rs           # Public API and error types
-│   ├── cpu.rs           # CPU state and execution logic
-│   ├── memory.rs        # MemoryBus trait and FlatMemory
-│   ├── opcodes.rs       # OPCODE_TABLE metadata
-│   ├── addressing.rs    # AddressingMode enum
-│   ├── assembler.rs     # 6502 assembler
-│   ├── disassembler.rs  # 6502 disassembler
-│   ├── instructions/    # Instruction implementations
-│   └── wasm.rs          # WebAssembly bindings (optional)
-├── tests/               # Integration tests
-│   ├── fixtures/        # Test data (Klaus binary, etc.)
-│   └── *.rs             # Test implementations
-├── examples/            # Usage examples
-├── demo/                # WebAssembly demo webpage
-├── docs/                # Documentation
-└── specs/               # Feature specifications
-```
-
 ## Contributing
 
 Contributions are welcome! Please:
@@ -362,7 +299,8 @@ CI runs both suites to ensure correctness while keeping local development fast.
 
 ## Documentation
 
-- [Architecture Guide](AGENTS.md) - Development guide and project overview
+- [AGENTS.md](AGENTS.md) - Helpful to get an overview of all the things and for
+  use with Claude or others.
 - [Klaus Functional Test](docs/KLAUS_FUNCTIONAL_TEST.md) - Comprehensive test
   suite documentation
 - [Assembler/Disassembler](docs/ASSEMBLER_DISASSEMBLER_ROUNDTRIP.md) - Assembly
@@ -382,7 +320,6 @@ at your option.
 - **Klaus Dormann** - For the comprehensive
   [6502 functional test suite](https://github.com/Klaus2m5/6502_65C02_functional_tests)
 - **MOS Technology** - For creating the legendary 6502 processor
-- The Rust community for excellent tooling and documentation
 
 ## See Also
 
