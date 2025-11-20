@@ -215,6 +215,7 @@ cargo run --example simple_ram
 An interactive 6502 assembly playground is available at the [GitHub Pages demo](https://your-org.github.io/6502/) (or run locally from the `demo/` directory).
 
 The demo features:
+
 - **Live Assembly Editor** - Write and edit 6502 assembly code
 - **Real-time CPU State** - View registers, flags, and program counter
 - **Memory Viewer** - Inspect memory contents at any address
@@ -225,6 +226,7 @@ The demo features:
 ### UART Examples
 
 The demo includes example programs demonstrating interrupt-driven serial I/O:
+
 - **UART Echo (IRQ)** - Interrupt-driven character echo using hardware interrupts
 - **UART Hello World** - Simple string output demonstration
 - **UART IRQ Advanced** - Advanced interrupt example with character counting and auto-newline
@@ -253,16 +255,19 @@ cargo build --features wasm
 The project has two test suites:
 
 **Fast Tests** (~2 seconds, runs by default):
+
 ```bash
 cargo test
 ```
 
 **Functional Tests** (includes Klaus test, ~6 seconds):
+
 ```bash
 cargo test -- --ignored
 ```
 
 **All Tests** (comprehensive, ~8 seconds):
+
 ```bash
 cargo test && cargo test -- --ignored
 ```
@@ -364,8 +369,8 @@ CI runs both suites to ensure correctness while keeping local development fast.
 
 Licensed under either of:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
 
@@ -380,7 +385,3 @@ at your option.
 - [6502.org](http://www.6502.org/) - The 6502 microprocessor resource
 - [Visual 6502](http://visual6502.org/) - Visual transistor-level simulation
 - [Easy 6502](https://skilldrick.github.io/easy6502/) - Learn 6502 assembly
-
----
-
-Built with ❤️ in Rust
