@@ -696,10 +696,90 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
         // Calculate instruction size to advance address
         let mnemonic = line.mnemonic.as_ref().unwrap();
 
-        // Determine addressing mode (without resolving labels yet)
+        // Determine addressing mode, using symbol table to resolve constants for accurate sizing
         let mode = if let Some(ref operand) = line.operand {
+            // First try standard detection
             match parser::detect_addressing_mode_or_label(operand) {
-                Ok(m) => m,
+                Ok(m) => {
+                    // If it's Absolute mode and the operand looks like a symbol,
+                    // check if it's a constant that fits in zero-page
+                    if m == crate::addressing::AddressingMode::Absolute {
+                        let trimmed = operand.trim();
+                        let normalized = trimmed.to_uppercase();
+                        // Check for indexed modes that should stay Absolute
+                        if !normalized.contains(',')
+                            && !normalized.starts_with('#')
+                            && !normalized.starts_with('(')
+                            && !normalized.starts_with('$')
+                            && !normalized.starts_with('%')
+                            && !normalized.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                        {
+                            // This looks like a symbol reference - check symbol table
+                            if let Some(sym) = symbol_table.lookup_symbol_ignore_case(&normalized) {
+                                if sym.kind == SymbolKind::Constant && sym.value <= 0xFF {
+                                    // Use ZeroPage instead of Absolute
+                                    crate::addressing::AddressingMode::ZeroPage
+                                } else {
+                                    m
+                                }
+                            } else {
+                                m // Unknown symbol, keep Absolute (it might be a forward label)
+                            }
+                        } else {
+                            m
+                        }
+                    } else if m == crate::addressing::AddressingMode::AbsoluteX {
+                        // Check if indexed mode should be ZeroPageX
+                        let trimmed = operand.trim();
+                        if let Some(comma_pos) = trimmed.find(',') {
+                            let base = trimmed[..comma_pos].trim().to_uppercase();
+                            if !base.starts_with('$')
+                                && !base.starts_with('%')
+                                && !base.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                            {
+                                if let Some(sym) = symbol_table.lookup_symbol_ignore_case(&base) {
+                                    if sym.kind == SymbolKind::Constant && sym.value <= 0xFF {
+                                        crate::addressing::AddressingMode::ZeroPageX
+                                    } else {
+                                        m
+                                    }
+                                } else {
+                                    m
+                                }
+                            } else {
+                                m
+                            }
+                        } else {
+                            m
+                        }
+                    } else if m == crate::addressing::AddressingMode::AbsoluteY {
+                        // Check if indexed mode should be ZeroPageY
+                        let trimmed = operand.trim();
+                        if let Some(comma_pos) = trimmed.find(',') {
+                            let base = trimmed[..comma_pos].trim().to_uppercase();
+                            if !base.starts_with('$')
+                                && !base.starts_with('%')
+                                && !base.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                            {
+                                if let Some(sym) = symbol_table.lookup_symbol_ignore_case(&base) {
+                                    if sym.kind == SymbolKind::Constant && sym.value <= 0xFF {
+                                        crate::addressing::AddressingMode::ZeroPageY
+                                    } else {
+                                        m
+                                    }
+                                } else {
+                                    m
+                                }
+                            } else {
+                                m
+                            }
+                        } else {
+                            m
+                        }
+                    } else {
+                        m
+                    }
+                }
                 Err(_) => {
                     // Error will be caught in Pass 2
                     crate::addressing::AddressingMode::Implicit
