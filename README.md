@@ -7,24 +7,21 @@
 > A cycle-accurate NMOS 6502 CPU emulator library with WebAssembly bindings.
 
 **lib6502** is a faithful emulation of the iconic MOS Technology 6502 processor,
-written in Rust with zero external dependencies and usable as a library for
-projects that need to emulate both the CPU and related hardware.
+written in Rust, usable as a library for projects that need to emulate both the
+CPU and related hardware.
 
 ## Features
 
 - **🎯 Cycle-Accurate Emulation** - Precisely tracks CPU cycles including
   page-crossing penalties
-- **🔧 Zero Dependencies** - Core library has no external dependencies, fully
-  `no_std` compatible
 - **🌐 WebAssembly Ready** - Runs in browsers with optional WASM bindings
   ([try the demo](https://gregbell.github.io/lib6502/))
 - **🏗️ Modular Architecture** - Trait-based design lets you plug in custom
   memory implementations
-- **📝 Built-in Assembler/Disassembler** - Write 6502 assembly directly in your
+- **📝 Full Assembler/Disassembler** - Write 6502 assembly directly in your
   programs
 - **✅ Extensively Tested** - 1,470+ unit tests plus Klaus Dormann's
   comprehensive functional test (96M+ cycles, all 151 opcodes validated)
-- **📚 Well Documented** - Comprehensive documentation and examples
 
 ## Quick Start
 
