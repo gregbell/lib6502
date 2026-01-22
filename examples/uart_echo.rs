@@ -13,6 +13,8 @@
 //! - 0xC000-0xFFFF: 16KB ROM (reset vector)
 
 use lib6502::{Device, MappedMemory, MemoryBus, RamDevice, RomDevice, Uart6551, CPU};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn main() {
     println!("6502 UART Echo Mode Example");
@@ -133,17 +135,19 @@ fn main() {
         .add_device(0x0000, Box::new(RamDevice::new(32768)))
         .unwrap();
 
-    let mut uart2 = Uart6551::new();
+    let uart2 = Rc::new(RefCell::new(Uart6551::new()));
 
     // Set transmit callback
-    uart2.set_transmit_callback(|byte| {
+    uart2.borrow_mut().set_transmit_callback(|byte| {
         print!("{}", byte as char);
         std::io::Write::flush(&mut std::io::stdout()).unwrap();
     });
 
     // Enable echo mode (bit 3 of command register)
     println!("Enabling echo mode (command register bit 3 = 1)");
-    memory2.add_device(0x8000, Box::new(uart2)).unwrap();
+    memory2
+        .add_shared_device(0x8000, Rc::clone(&uart2))
+        .unwrap();
 
     // Write to command register to enable echo
     memory2.write(0x8002, 0x08); // Set bit 3
@@ -155,21 +159,10 @@ fn main() {
     println!("Input:  \"Echo test\"");
     print!("Output: ");
 
-    // Need to get mutable access to UART to call receive_byte
-    // In this example, we'll demonstrate by creating a new UART with echo enabled
-    let mut uart3 = Uart6551::new();
-    uart3.set_transmit_callback(|byte| {
-        print!("{}", byte as char);
-        std::io::Write::flush(&mut std::io::stdout()).unwrap();
-    });
-
-    // Enable echo mode
-    uart3.write(2, 0x08); // Write to command register (offset 2)
-
-    // Receive bytes - they should automatically echo
+    // Receive bytes via the shared UART handle - they should automatically echo
     let test_input = "Echo test\n";
     for &byte in test_input.as_bytes() {
-        uart3.receive_byte(byte);
+        uart2.borrow_mut().receive_byte(byte);
     }
 
     println!("\n\nEcho mode demonstration complete!");

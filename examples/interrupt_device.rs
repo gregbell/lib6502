@@ -1,7 +1,7 @@
 //! Example: Interrupt-Capable Timer Device
 //!
 //! This example demonstrates how to implement an interrupt-capable device for
-//! the 6502 emulator using memory-mapped registers and the InterruptDevice trait.
+//! the 6502 emulator using memory-mapped registers and `Device::has_interrupt()`.
 //!
 //! # Timer Device Overview
 //!

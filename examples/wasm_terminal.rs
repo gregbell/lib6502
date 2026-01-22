@@ -22,6 +22,7 @@
 //! #[wasm_bindgen]
 //! pub struct Emulator {
 //!     cpu: CPU<MappedMemory>,
+//!     uart: Rc<RefCell<Uart6551>>,
 //!     // Store callback reference to prevent it from being dropped
 //!     _transmit_callback: Rc<RefCell<Box<dyn Fn(u8)>>>,
 //! }
@@ -37,7 +38,7 @@
 //!             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
 //!
 //!         // Add UART at 0x8000
-//!         let mut uart = Uart6551::new();
+//!         let uart = Rc::new(RefCell::new(Uart6551::new()));
 //!
 //!         // Create transmit callback that calls JavaScript function
 //!         let callback: Rc<RefCell<Box<dyn Fn(u8)>>> = Rc::new(RefCell::new(Box::new(move |byte: u8| {
@@ -48,11 +49,11 @@
 //!
 //!         // Clone for UART
 //!         let callback_clone = Rc::clone(&callback);
-//!         uart.set_transmit_callback(move |byte| {
+//!         uart.borrow_mut().set_transmit_callback(move |byte| {
 //!             (callback_clone.borrow())(byte);
 //!         });
 //!
-//!         memory.add_device(0x8000, Box::new(uart))
+//!         memory.add_shared_device(0x8000, Rc::clone(&uart))
 //!             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
 //!
 //!         // Add 16KB ROM at 0xC000 with reset vector
@@ -66,6 +67,7 @@
 //!
 //!         Ok(Emulator {
 //!             cpu,
+//!             uart,
 //!             _transmit_callback: callback,
 //!         })
 //!     }
@@ -87,13 +89,7 @@
 //!     /// Handle character input from terminal (e.g., xterm.js onData event)
 //!     #[wasm_bindgen]
 //!     pub fn receive_char(&mut self, byte: u8) -> Result<(), JsValue> {
-//!         // Get mutable access to UART device at 0x8000
-//!         // Note: This requires unsafe or a different architecture
-//!         // In practice, you'd need to expose receive_byte through the memory interface
-//!         // or store the UART separately
-//!
-//!         // For now, this is a pattern demonstration
-//!         // Real implementation would need architecture adjustments
+//!         self.uart.borrow_mut().receive_byte(byte);
 //!         Ok(())
 //!     }
 //!
@@ -233,16 +229,15 @@
 //!
 //! ## UART Receive Pattern
 //!
-//! The UART device's `receive_byte()` method needs to be called from JavaScript
-//! when terminal input occurs. There are two architectural approaches:
-//!
-//! ### Approach 1: Store UART Separately (Recommended)
+//! The UART device's `receive_byte()` method should be called from JavaScript
+//! when terminal input occurs. Use `add_shared_device()` so the UART is both
+//! registered with the memory map and accessible through a shared handle:
 //!
 //! ```rust,ignore
 //! #[wasm_bindgen]
 //! pub struct Emulator {
 //!     cpu: CPU<MappedMemory>,
-//!     uart: Rc<RefCell<Uart6551>>,  // Separate reference
+//!     uart: Rc<RefCell<Uart6551>>,  // Shared handle for receive_byte()
 //! }
 //!
 //! #[wasm_bindgen]
@@ -250,18 +245,6 @@
 //!     #[wasm_bindgen]
 //!     pub fn receive_char(&mut self, byte: u8) {
 //!         self.uart.borrow_mut().receive_byte(byte);
-//!     }
-//! }
-//! ```
-//!
-//! ### Approach 2: Expose Through Memory Interface
-//!
-//! Add a method to MappedMemory to access devices by address:
-//!
-//! ```rust,ignore
-//! impl MappedMemory {
-//!     pub fn get_device_mut(&mut self, addr: u16) -> Option<&mut Box<dyn Device>> {
-//!         // Return mutable reference to device at address
 //!     }
 //! }
 //! ```
