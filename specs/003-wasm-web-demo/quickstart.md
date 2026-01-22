@@ -233,7 +233,7 @@ git push origin main
 # GitHub Actions will:
 # 1. Build WASM
 # 2. Deploy to GitHub Pages
-# 3. Available at https://username.github.io/6502/
+# 3. Available at https://gregbell.github.io/lib6502/
 ```
 
 **View deployment status**:
@@ -367,7 +367,7 @@ function updateUI() {
 ## Getting Help
 
 **Common Issues**:
-- Check [GitHub Issues](https://github.com/username/6502/issues)
+- Check [GitHub Issues](https://github.com/gregbell/lib6502/issues)
 - Review [WASM API Contract](./contracts/wasm-api.md)
 - Consult [Research Notes](./research.md)
 

@@ -1,6 +1,6 @@
 # lib6502
 
-[![CI](https://github.com/your-org/6502/workflows/CI/badge.svg)](https://github.com/your-org/6502/actions)
+[![CI](https://github.com/gregbell/lib6502/workflows/CI/badge.svg)](https://github.com/gregbell/lib6502/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
 
@@ -17,7 +17,7 @@ projects that need to emulate both the CPU and related hardware.
 - **🔧 Zero Dependencies** - Core library has no external dependencies, fully
   `no_std` compatible
 - **🌐 WebAssembly Ready** - Runs in browsers with optional WASM bindings
-  ([try the demo](https://your-org.github.io/6502/))
+  ([try the demo](https://gregbell.github.io/lib6502/))
 - **🏗️ Modular Architecture** - Trait-based design lets you plug in custom
   memory implementations
 - **📝 Built-in Assembler/Disassembler** - Write 6502 assembly directly in your
