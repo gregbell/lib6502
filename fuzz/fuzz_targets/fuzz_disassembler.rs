@@ -51,8 +51,10 @@ fuzz_target!(|input: FuzzInput| {
         assert!(instr.size_bytes >= 1 && instr.size_bytes <= 3);
 
         // Operand bytes length should be consistent with size
-        // (for illegal opcodes emitted as .byte, operand_bytes may be empty)
-        assert!(instr.operand_bytes.len() <= (instr.size_bytes - 1) as usize);
+        // For regular instructions: operand_bytes.len() == size_bytes - 1
+        // For .byte pseudo-instructions (illegal opcodes): operand_bytes contains the byte value
+        // so operand_bytes.len() may equal size_bytes
+        assert!(instr.operand_bytes.len() <= instr.size_bytes as usize);
 
         total_size += instr.size_bytes as usize;
         expected_address = expected_address.wrapping_add(instr.size_bytes as u16);

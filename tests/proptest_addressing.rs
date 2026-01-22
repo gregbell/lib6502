@@ -329,7 +329,7 @@ proptest! {
     fn prop_indirect_indexed_page_crossing(
         zp_addr in 0u8..=254u8,
         base_lo in 0u8..=255u8,
-        base_hi in 0u8..=0x7Eu8,
+        base_hi in 1u8..=0x7Eu8,  // High byte >= 1 to avoid zero page overlap
         y in 0u8..=255u8,
     ) {
         let mut cpu = setup_cpu();
@@ -339,11 +339,16 @@ proptest! {
         let effective_addr = base_addr.wrapping_add(y as u16);
         let page_crossed = (base_addr & 0xFF00) != (effective_addr & 0xFF00);
 
+        // Skip if effective address overlaps with zero page (where pointer is stored)
+        if effective_addr <= 0xFF {
+            return Ok(());
+        }
+
         // Store pointer at zero page
         cpu.memory_mut().write(zp_addr as u16, base_lo);
         cpu.memory_mut().write((zp_addr + 1) as u16, base_hi);
 
-        // Store some value at effective address
+        // Store some value at effective address (safe now - no ZP overlap)
         if effective_addr < 0xFF00 {
             cpu.memory_mut().write(effective_addr, 0x42);
         }
