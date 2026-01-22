@@ -9,4 +9,4 @@ mod keyboard;
 
 pub use c64_memory::C64Memory;
 pub use c64_system::{C64System, Region};
-pub use keyboard::{keys, Keyboard};
+pub use keyboard::{keys, map_pc_keycode, KeyMapping, Keyboard};

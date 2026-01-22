@@ -103,9 +103,9 @@
 ### Keyboard Input
 
 - [x] T034 [US1] Implement C64 keyboard matrix (8x8 matrix state) in c64-emu/src/system/keyboard.rs
-- [ ] T035 [US1] Implement CIA1 keyboard scanning (port A/B matrix) in src/devices/c64/cia.rs
-- [ ] T036 [US1] Implement PC-to-C64 key mapping table in src/c64/keyboard.rs
-- [ ] T037 [US1] Implement RESTORE key (NMI trigger) in src/c64/keyboard.rs
+- [x] T035 [US1] Implement CIA1 keyboard scanning (port A/B matrix) in c64-emu/src/system/c64_memory.rs
+- [x] T036 [US1] Implement PC-to-C64 key mapping table in c64-emu/src/system/keyboard.rs
+- [x] T037 [US1] Implement RESTORE key (NMI trigger) in c64-emu/src/system/c64_system.rs
 
 ### WASM Display API
 
@@ -412,14 +412,14 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 |-------|-------|-----------|-------------|
 | Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
-| Phase 3: US1 | T029-T050 | 6/22 | Boot, keyboard, display |
+| Phase 3: US1 | T029-T050 | 9/22 | Boot, keyboard, display |
 | Phase 4: US2 | T051-T066 | 0/16 | Disk image loading |
 | Phase 5: US3 | T067-T091 | 0/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **33/132** | |
+| **Total** | **132 tasks** | **36/132** | |
 
 ---
 
