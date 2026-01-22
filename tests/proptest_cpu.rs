@@ -33,8 +33,19 @@ fn non_branching_opcodes() -> Vec<u8> {
             m.implemented
                 && !matches!(
                     m.mnemonic,
-                    "BCC" | "BCS" | "BEQ" | "BMI" | "BNE" | "BPL" | "BVC" | "BVS" | "JMP" | "JSR"
-                        | "RTS" | "RTI" | "BRK"
+                    "BCC"
+                        | "BCS"
+                        | "BEQ"
+                        | "BMI"
+                        | "BNE"
+                        | "BPL"
+                        | "BVC"
+                        | "BVS"
+                        | "JMP"
+                        | "JSR"
+                        | "RTS"
+                        | "RTI"
+                        | "BRK"
                 )
         })
         .map(|(i, _)| i as u8)
@@ -51,7 +62,8 @@ fn nz_affecting_opcodes() -> Vec<u8> {
             m.implemented
                 && matches!(
                     m.mnemonic,
-                    "LDA" | "LDX"
+                    "LDA"
+                        | "LDX"
                         | "LDY"
                         | "TAX"
                         | "TAY"
@@ -815,8 +827,8 @@ fn setup_memory_for_instruction(cpu: &mut CPU<FlatMemory>, opcode: u8, operand1:
         AddressingMode::Absolute | AddressingMode::AbsoluteX | AddressingMode::AbsoluteY => {
             // Ensure there's valid data at the absolute address
             let addr = (operand2 as u16) << 8 | (operand1 as u16);
-            if addr < 0xFF00 {
-                // Avoid writing to vectors
+            // Avoid writing to vectors and avoid overwriting the instruction at 0x8000-0x8002
+            if addr < 0xFF00 && !(0x8000..=0x8002).contains(&addr) {
                 cpu.memory_mut().write(addr, 0x42);
             }
         }
@@ -824,8 +836,7 @@ fn setup_memory_for_instruction(cpu: &mut CPU<FlatMemory>, opcode: u8, operand1:
             // Set up indirect pointer
             let zp_addr = operand1 as u16;
             cpu.memory_mut().write(zp_addr, 0x00);
-            cpu.memory_mut()
-                .write(zp_addr.wrapping_add(1) & 0xFF, 0x40);
+            cpu.memory_mut().write(zp_addr.wrapping_add(1) & 0xFF, 0x40);
             cpu.memory_mut().write(0x4000, 0x42);
         }
         AddressingMode::Indirect => {

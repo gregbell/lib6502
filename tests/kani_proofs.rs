@@ -43,7 +43,7 @@ mod kani_proofs {
         // Verify it's always in the stack page
         kani::assert(
             stack_addr >= 0x0100 && stack_addr <= 0x01FF,
-            "Stack address must be in range 0x0100-0x01FF"
+            "Stack address must be in range 0x0100-0x01FF",
         );
     }
 
@@ -55,7 +55,7 @@ mod kani_proofs {
 
         kani::assert(
             (stack_addr >> 8) == 0x01,
-            "Stack address high byte must be 0x01"
+            "Stack address high byte must be 0x01",
         );
     }
 
@@ -102,7 +102,10 @@ mod kani_proofs {
         // Alternative: check if result exceeds 8 bits
         let carry_out_alt = sum >= 0x100;
 
-        kani::assert(carry_out == carry_out_alt, "Carry flag computations must match");
+        kani::assert(
+            carry_out == carry_out_alt,
+            "Carry flag computations must match",
+        );
     }
 
     /// Proof: Overflow flag is set correctly for signed addition
@@ -125,7 +128,10 @@ mod kani_proofs {
         // Alternative computation using XOR
         let overflow_alt = ((a ^ result) & (m ^ result) & 0x80) != 0;
 
-        kani::assert(overflow == overflow_alt, "Overflow flag computations must match");
+        kani::assert(
+            overflow == overflow_alt,
+            "Overflow flag computations must match",
+        );
     }
 
     // ========== Zero Page Wrap Proofs ==========
@@ -142,7 +148,7 @@ mod kani_proofs {
         // Result must be in zero page (0x0000-0x00FF)
         kani::assert(
             effective_addr <= 0x00FF,
-            "Zero page + X must stay in zero page"
+            "Zero page + X must stay in zero page",
         );
     }
 
@@ -156,7 +162,7 @@ mod kani_proofs {
 
         kani::assert(
             effective_addr <= 0x00FF,
-            "Zero page + Y must stay in zero page"
+            "Zero page + Y must stay in zero page",
         );
     }
 
@@ -181,7 +187,7 @@ mod kani_proofs {
 
         kani::assert(
             page_crossed == page_crossed_alt,
-            "Page crossing detection must match"
+            "Page crossing detection must match",
         );
     }
 
@@ -205,7 +211,7 @@ mod kani_proofs {
         if no_wrap {
             kani::assert(
                 target >= pc.wrapping_add(2),
-                "Forward branch target must be >= PC + 2"
+                "Forward branch target must be >= PC + 2",
             );
         }
     }
@@ -239,7 +245,7 @@ mod kani_proofs {
 
         kani::assert(
             metadata.size_bytes >= 1 && metadata.size_bytes <= 3,
-            "All opcode sizes must be 1-3 bytes"
+            "All opcode sizes must be 1-3 bytes",
         );
     }
 
@@ -254,7 +260,7 @@ mod kani_proofs {
         if metadata.implemented {
             kani::assert(
                 metadata.base_cycles >= 2 && metadata.base_cycles <= 7,
-                "Implemented opcode cycles must be 2-7"
+                "Implemented opcode cycles must be 2-7",
             );
         }
     }
@@ -302,13 +308,27 @@ mod kani_proofs {
 
         // Build status register (bit 5 always 1)
         let mut status: u8 = 0b00100000;
-        if n { status |= 0b10000000; }
-        if v { status |= 0b01000000; }
-        if b { status |= 0b00010000; }
-        if d { status |= 0b00001000; }
-        if i { status |= 0b00000100; }
-        if z { status |= 0b00000010; }
-        if c { status |= 0b00000001; }
+        if n {
+            status |= 0b10000000;
+        }
+        if v {
+            status |= 0b01000000;
+        }
+        if b {
+            status |= 0b00010000;
+        }
+        if d {
+            status |= 0b00001000;
+        }
+        if i {
+            status |= 0b00000100;
+        }
+        if z {
+            status |= 0b00000010;
+        }
+        if c {
+            status |= 0b00000001;
+        }
 
         // Verify each flag can be extracted correctly
         kani::assert(((status >> 7) & 1) == n as u8, "N flag in bit 7");
@@ -336,7 +356,10 @@ mod kani_proofs {
         kani::assert(result == expected, "ASL should double the value");
 
         // Verify carry is original bit 7
-        kani::assert(carry == (value >= 0x80), "ASL carry should be original bit 7");
+        kani::assert(
+            carry == (value >= 0x80),
+            "ASL carry should be original bit 7",
+        );
     }
 
     /// Proof: LSR (Logical Shift Right) is correct
@@ -352,7 +375,10 @@ mod kani_proofs {
         kani::assert(result == expected, "LSR should halve the value");
 
         // Verify carry is original bit 0
-        kani::assert(carry == (value & 1 != 0), "LSR carry should be original bit 0");
+        kani::assert(
+            carry == (value & 1 != 0),
+            "LSR carry should be original bit 0",
+        );
 
         // Verify N flag is always clear (bit 7 is 0 after shift right)
         kani::assert((result & 0x80) == 0, "LSR result always has N=0");

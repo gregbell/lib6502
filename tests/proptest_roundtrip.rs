@@ -20,7 +20,7 @@ fn generate_instruction_bytes(opcode: u8) -> Vec<u8> {
 
     // Add operand bytes based on instruction size
     match metadata.size_bytes {
-        1 => {} // No operands
+        1 => {}                // No operands
         2 => bytes.push(0x42), // One operand byte
         3 => {
             bytes.push(0x00); // Low byte
@@ -48,9 +48,8 @@ fn roundtrippable_opcodes() -> Vec<u8> {
         .iter()
         .enumerate()
         .filter(|(_, m)| {
-            m.implemented
-                && m.mnemonic != "???"
-                && m.addressing_mode != AddressingMode::Relative // Branches need labels
+            m.implemented && m.mnemonic != "???" && m.addressing_mode != AddressingMode::Relative
+            // Branches need labels
         })
         .map(|(i, _)| i as u8)
         .collect()
@@ -450,8 +449,8 @@ fn test_all_load_store_opcodes_roundtrip() {
         assert_eq!(instructions.len(), 1, "Opcode 0x{:02X}", opcode);
 
         let source = format_instruction_as_source(&instructions[0]);
-        let assembled = assemble(&source)
-            .unwrap_or_else(|_| panic!("Should assemble opcode 0x{:02X}", opcode));
+        let assembled =
+            assemble(&source).unwrap_or_else(|_| panic!("Should assemble opcode 0x{:02X}", opcode));
 
         assert_eq!(
             assembled.bytes, original_bytes,
@@ -503,8 +502,8 @@ fn test_all_implicit_opcodes_roundtrip() {
         assert_eq!(instructions.len(), 1, "Opcode 0x{:02X}", opcode);
 
         let source = format_instruction_as_source(&instructions[0]);
-        let assembled = assemble(&source)
-            .unwrap_or_else(|_| panic!("Should assemble opcode 0x{:02X}", opcode));
+        let assembled =
+            assemble(&source).unwrap_or_else(|_| panic!("Should assemble opcode 0x{:02X}", opcode));
 
         assert_eq!(
             assembled.bytes, original_bytes,
