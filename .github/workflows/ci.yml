@@ -44,6 +44,9 @@ jobs:
       - name: Run fast tests
         run: cargo test --verbose
 
+      - name: Build examples
+        run: cargo build --examples
+
       - name: Run Klaus functional test
         run: cargo test --test functional_klaus klaus_6502_functional_test -- --ignored --nocapture
 
