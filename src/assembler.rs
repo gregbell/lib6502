@@ -712,7 +712,11 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                             && !normalized.starts_with('(')
                             && !normalized.starts_with('$')
                             && !normalized.starts_with('%')
-                            && !normalized.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                            && !normalized
+                                .chars()
+                                .next()
+                                .map(|c| c.is_ascii_digit())
+                                .unwrap_or(false)
                         {
                             // This looks like a symbol reference - check symbol table
                             if let Some(sym) = symbol_table.lookup_symbol_ignore_case(&normalized) {
@@ -735,7 +739,11 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                             let base = trimmed[..comma_pos].trim().to_uppercase();
                             if !base.starts_with('$')
                                 && !base.starts_with('%')
-                                && !base.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                                && !base
+                                    .chars()
+                                    .next()
+                                    .map(|c| c.is_ascii_digit())
+                                    .unwrap_or(false)
                             {
                                 if let Some(sym) = symbol_table.lookup_symbol_ignore_case(&base) {
                                     if sym.kind == SymbolKind::Constant && sym.value <= 0xFF {
@@ -759,7 +767,11 @@ pub fn assemble(source: &str) -> Result<AssemblerOutput, Vec<AssemblerError>> {
                             let base = trimmed[..comma_pos].trim().to_uppercase();
                             if !base.starts_with('$')
                                 && !base.starts_with('%')
-                                && !base.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                                && !base
+                                    .chars()
+                                    .next()
+                                    .map(|c| c.is_ascii_digit())
+                                    .unwrap_or(false)
                             {
                                 if let Some(sym) = symbol_table.lookup_symbol_ignore_case(&base) {
                                     if sym.kind == SymbolKind::Constant && sym.value <= 0xFF {
