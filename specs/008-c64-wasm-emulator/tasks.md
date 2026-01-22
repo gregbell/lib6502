@@ -94,11 +94,11 @@
 
 ### VIC-II Rendering
 
-- [ ] T029 [US1] Implement standard text mode rendering (40x25 chars, 8x8 font) in src/devices/c64/vic_ii.rs
-- [ ] T030 [US1] Implement character ROM lookup for text display in src/devices/c64/vic_ii.rs
-- [ ] T031 [US1] Implement scanline-based frame rendering (312 PAL / 263 NTSC lines) in src/devices/c64/vic_ii.rs
-- [ ] T032 [US1] Implement border and background color rendering in src/devices/c64/vic_ii.rs
-- [ ] T033 [US1] Implement raster counter and raster interrupt generation in src/devices/c64/vic_ii.rs
+- [x] T029 [US1] Implement standard text mode rendering (40x25 chars, 8x8 font) in c64-emu/src/devices/vic_ii.rs
+- [x] T030 [US1] Implement character ROM lookup for text display in c64-emu/src/devices/vic_ii.rs
+- [x] T031 [US1] Implement scanline-based frame rendering (312 PAL / 263 NTSC lines) in c64-emu/src/system/c64_system.rs
+- [x] T032 [US1] Implement border and background color rendering in c64-emu/src/devices/vic_ii.rs
+- [x] T033 [US1] Implement raster counter and raster interrupt generation in c64-emu/src/devices/vic_ii.rs (already done in Phase 2)
 
 ### Keyboard Input
 
@@ -412,14 +412,14 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 |-------|-------|-----------|-------------|
 | Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
-| Phase 3: US1 | T029-T050 | 0/22 | Boot, keyboard, display |
+| Phase 3: US1 | T029-T050 | 5/22 | Boot, keyboard, display |
 | Phase 4: US2 | T051-T066 | 0/16 | Disk image loading |
 | Phase 5: US3 | T067-T091 | 0/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **27/132** | |
+| **Total** | **132 tasks** | **32/132** | |
 
 ---
 

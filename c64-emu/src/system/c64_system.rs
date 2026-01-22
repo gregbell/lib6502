@@ -4,7 +4,7 @@
 //! CPU execution, VIC-II rendering, SID audio, and CIA timing.
 
 use super::C64Memory;
-use lib6502::{CPU, MemoryBus, OPCODE_TABLE};
+use lib6502::{Device, CPU, MemoryBus, OPCODE_TABLE};
 
 /// C64 region (PAL or NTSC) affecting timing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -161,6 +161,62 @@ impl C64System {
         self.reset();
     }
 
+    /// Render one scanline of the display.
+    ///
+    /// This extracts the necessary memory regions (screen RAM, color RAM,
+    /// character ROM) and calls the VIC-II scanline renderer.
+    fn render_scanline(&mut self, scanline: u16) {
+        let mem = self.cpu.memory_mut();
+
+        // Get VIC-II memory pointers from register $D018
+        // Bits 4-7: Screen memory base address (× $0400)
+        // Bits 1-3: Character memory base address (× $0800)
+        let mem_pointers = mem.vic.read(0x18);
+
+        // Calculate screen RAM base address within VIC bank
+        // Default: $0400 (screen RAM at $0400-$07E7)
+        let screen_offset = ((mem_pointers >> 4) & 0x0F) as u16 * 0x0400;
+
+        // Calculate character base address within VIC bank
+        // Bits 1-3 of $D018: character base × $0800
+        // Default: $1000 (character ROM at $1000-$1FFF in bank 0)
+        let char_offset = ((mem_pointers >> 1) & 0x07) as u16 * 0x0800;
+
+        // Get VIC bank (0-3) from CIA2 port A
+        let vic_bank = mem.vic_bank();
+        let bank_base = (vic_bank as u16) << 14; // 0, $4000, $8000, $C000
+
+        // Build screen RAM slice (1000 bytes for 40x25 screen)
+        // VIC-II reads from its own address space (with bank offset)
+        let mut screen_ram = [0u8; 1000];
+        for (i, byte) in screen_ram.iter_mut().enumerate() {
+            let addr = screen_offset + i as u16;
+            *byte = mem.vic_read(addr);
+        }
+
+        // Build character ROM/RAM slice (2048 bytes for 256 characters × 8 lines)
+        // In banks 0 and 2, character ROM is visible at $1000-$1FFF
+        // In other banks/addresses, character data comes from RAM
+        let mut char_data = [0u8; 2048];
+        for (i, byte) in char_data.iter_mut().enumerate() {
+            let addr = char_offset + i as u16;
+            *byte = mem.vic_read(addr);
+        }
+
+        // Get color RAM directly (always at $D800, not banked)
+        let mut color_ram = [0u8; 1000];
+        for (i, byte) in color_ram.iter_mut().enumerate() {
+            *byte = mem.color_ram.read(i as u16) & 0x0F;
+        }
+
+        // Call VIC-II scanline renderer
+        mem.vic
+            .step_scanline(scanline, &char_data, &screen_ram, &color_ram);
+
+        // Suppress unused warning for bank_base (will be used when VIC bank selection is refined)
+        let _ = bank_base;
+    }
+
     /// Execute one full frame of emulation.
     ///
     /// This is the main emulation loop entry point. Call this at the frame rate
@@ -206,6 +262,10 @@ impl C64System {
             self.cycle_in_scanline += cycles as u16;
             while self.cycle_in_scanline >= self.region.cycles_per_line() {
                 self.cycle_in_scanline -= self.region.cycles_per_line();
+
+                // Render the current scanline before advancing
+                self.render_scanline(self.current_scanline);
+
                 self.current_scanline += 1;
 
                 // Check for raster interrupt
@@ -346,11 +406,17 @@ impl C64System {
         self.running = false;
     }
 
-    /// Get framebuffer as a flat array.
-    pub fn get_framebuffer(&self) -> Vec<u8> {
-        // Note: We need to access the VIC without mutable borrow
-        // For now, return empty - will be properly implemented when rendering is added
-        vec![0u8; 320 * 200]
+    /// Get framebuffer as a flat array (mutable version).
+    ///
+    /// Returns a copy of the framebuffer as a flat Vec<u8> with 320×200 pixels.
+    /// Each pixel is an indexed color value (0-15).
+    pub fn get_framebuffer_flat(&mut self) -> Vec<u8> {
+        let fb = self.cpu.memory_mut().vic.framebuffer();
+        let mut result = Vec::with_capacity(320 * 200);
+        for row in fb.iter() {
+            result.extend_from_slice(row);
+        }
+        result
     }
 
     /// Get audio samples from SID.
