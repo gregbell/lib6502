@@ -12,7 +12,7 @@
 //! - 0x8000-0x8003: UART (4 registers)
 //! - 0xC000-0xFFFF: 16KB ROM (reset vector)
 
-use lib6502::{Device, MappedMemory, MemoryBus, RamDevice, RomDevice, Uart6551, CPU};
+use lib6502::{MappedMemory, MemoryBus, RamDevice, RomDevice, Uart6551, CPU};
 use std::cell::RefCell;
 use std::rc::Rc;
 
