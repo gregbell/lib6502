@@ -1,13 +1,9 @@
-[workspace]
-members = [".", "c64-emu"]
-resolver = "2"
-
 [package]
-name = "lib6502"
+name = "c64-emu"
 version = "0.1.0"
 edition = "2021"
 authors = ["Greg Bell"]
-description = "A cycle-accurate NMOS 6502 CPU emulator library with WebAssembly bindings"
+description = "A Commodore 64 emulator built on lib6502, running in the browser via WebAssembly"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/gregbell/lib6502"
 readme = "README.md"
@@ -16,11 +12,15 @@ readme = "README.md"
 wasm-opt = false
 
 [lib]
-name = "lib6502"
+name = "c64_emu"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# Core 6502 CPU emulator
+lib6502 = { path = ".." }
+
+# WASM bindings (optional, enabled with "wasm" feature)
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 
@@ -29,4 +29,4 @@ js-sys = { version = "0.3", optional = true }
 
 [features]
 default = []
-wasm = ["wasm-bindgen", "js-sys"]
+wasm = ["wasm-bindgen", "js-sys", "lib6502/wasm"]
