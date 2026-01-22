@@ -1262,8 +1262,8 @@ ABS_IDX = $3000
 "#;
 
     let result = assemble(source);
-    if result.is_err() {
-        eprintln!("Assembly errors: {:#?}", result.as_ref().unwrap_err());
+    if let Err(err) = result.as_ref() {
+        eprintln!("Assembly errors: {:#?}", err);
     }
     assert!(
         result.is_ok(),
@@ -1344,8 +1344,8 @@ HANDLE_LF:
 "#;
 
     let result = assemble(source);
-    if result.is_err() {
-        eprintln!("Assembly errors: {:#?}", result.as_ref().unwrap_err());
+    if let Err(err) = result.as_ref() {
+        eprintln!("Assembly errors: {:#?}", err);
     }
     assert!(
         result.is_ok(),
