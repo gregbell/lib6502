@@ -122,16 +122,16 @@ match assemble(source) {
 
 ```rust
 use lib6502::{disassemble, DisassemblyOptions};
+use lib6502::disassembler::formatter::format_hex_dump;
 
 let bytes = vec![0xA9, 0x42, 0x8D, 0x00, 0x80];
 let options = DisassemblyOptions {
     start_address: 0x8000,
-    show_bytes: true,
+    ..Default::default()
 };
 
-for instruction in disassemble(&bytes, options) {
-    println!("{:04X}: {}", instruction.address, instruction.text);
-}
+let instructions = disassemble(&bytes, options);
+println!("{}", format_hex_dump(&instructions));
 // Output:
 // 8000: A9 42     LDA #$42
 // 8002: 8D 00 80  STA $8000
@@ -177,8 +177,8 @@ The [`examples/`](examples/) directory contains:
 - **`bench_lexer.rs`** - Lexer performance benchmark
   (`cargo run --release --example bench_lexer`)
 - **`constants.rs`** - Using assembler constants in source code
-- **`interrupt_device.rs`** - Interrupt-capable timer device with
-  `InterruptDevice`
+- **`interrupt_device.rs`** - Interrupt-capable timer device using
+  `Device::has_interrupt()`
 - **`memory_mapped_system.rs`** - RAM/ROM memory-mapped system setup
 - **`simple_ram.rs`** - Basic CPU setup and execution
 - **`simple_asm.rs`** - Assembler usage
