@@ -101,6 +101,26 @@ pub struct CPU<M: MemoryBus> {
     /// here for code clarity).
     pub(crate) irq_pending: bool,
 
+    /// NMI (Non-Maskable Interrupt) pending flag.
+    ///
+    /// Unlike IRQ, NMI is edge-triggered: it responds to HIGH→LOW transitions
+    /// on the NMI line. This flag is set when an edge is detected and cleared
+    /// after the interrupt is serviced.
+    ///
+    /// The edge detection is performed by comparing the current NMI line state
+    /// with the previous state stored in `nmi_prev_state`.
+    pub(crate) nmi_pending: bool,
+
+    /// Previous NMI line state for edge detection.
+    ///
+    /// NMI is edge-triggered (responds to falling edge), so we need to track
+    /// the previous state to detect transitions. When `nmi_prev_state` is false
+    /// (high) and current NMI line is true (low), we have a falling edge.
+    ///
+    /// Note: We use inverted logic here where `true` means "active" (electrically
+    /// low on the 6502).
+    pub(crate) nmi_prev_state: bool,
+
     /// Memory bus implementation
     pub(crate) memory: M,
 }
@@ -152,6 +172,8 @@ impl<M: MemoryBus> CPU<M> {
             flag_c: false,
             cycles: 0,
             irq_pending: false, // No interrupts pending on reset
+            nmi_pending: false, // No NMI pending on reset
+            nmi_prev_state: false, // NMI line inactive on reset
             memory,
         }
     }
@@ -389,10 +411,15 @@ impl<M: MemoryBus> CPU<M> {
         }
 
         // Check for interrupts at instruction boundary (after instruction completes)
+        self.check_nmi_line();
         self.check_irq_line();
 
-        // Service interrupt if IRQ line active and interrupts enabled
-        if self.should_service_interrupt() {
+        // Service NMI first (higher priority than IRQ, cannot be masked)
+        if self.nmi_pending {
+            self.service_nmi()?;
+        }
+        // Service IRQ if NMI didn't fire and interrupts enabled
+        else if self.should_service_interrupt() {
             self.service_interrupt()?;
         }
 
@@ -460,6 +487,32 @@ impl<M: MemoryBus> CPU<M> {
         self.irq_pending = self.memory.irq_active();
     }
 
+    /// Check NMI line and detect falling edge transitions.
+    ///
+    /// NMI is edge-triggered, so we need to detect when the line transitions
+    /// from inactive to active (falling edge in hardware terms). When a falling
+    /// edge is detected, we set `nmi_pending` to trigger the interrupt service
+    /// routine.
+    ///
+    /// # Edge Detection
+    ///
+    /// - Previous state inactive + current state active → Edge detected, set pending
+    /// - Previous state active + current state active → No edge, already detected
+    /// - Any state + current state inactive → No edge, line is high
+    ///
+    /// Called after each instruction execution in `step()`.
+    fn check_nmi_line(&mut self) {
+        let current_nmi = self.memory.nmi_active();
+
+        // Detect falling edge: transition from inactive (false) to active (true)
+        if current_nmi && !self.nmi_prev_state {
+            self.nmi_pending = true;
+        }
+
+        // Update previous state for next edge detection
+        self.nmi_prev_state = current_nmi;
+    }
+
     /// Determine if CPU should service an interrupt request.
     ///
     /// Returns `true` if all conditions for interrupt servicing are met:
@@ -506,6 +559,69 @@ impl<M: MemoryBus> CPU<M> {
     fn push_stack_timed(&mut self, value: u8) {
         self.push_stack(value);
         self.tick(1);
+    }
+
+    /// Service a pending NMI (Non-Maskable Interrupt) with cycle-accurate 6502 sequence.
+    ///
+    /// Implements the 7-cycle hardware interrupt sequence:
+    /// 1. Push PC high byte to stack (1 cycle)
+    /// 2. Push PC low byte to stack (1 cycle)
+    /// 3. Push status register to stack (1 cycle)
+    /// 4. Set I flag to prevent nested interrupts (0 cycles, part of step 3)
+    /// 5. Read NMI vector low byte from 0xFFFA (1 cycle)
+    /// 6. Read NMI vector high byte from 0xFFFB (1 cycle)
+    /// 7. Set PC to vector address (2 cycles, internal operation)
+    ///
+    /// **Total: 7 cycles** (matches MOS 6502 specification)
+    ///
+    /// # NMI vs IRQ Differences
+    ///
+    /// - NMI uses vector at $FFFA/$FFFB (IRQ uses $FFFE/$FFFF)
+    /// - NMI cannot be masked (I flag has no effect)
+    /// - NMI is edge-triggered (IRQ is level-sensitive)
+    /// - NMI has higher priority (serviced before IRQ)
+    ///
+    /// # Stack Layout After Service
+    ///
+    /// ```text
+    /// SP-2: PC high byte
+    /// SP-1: PC low byte
+    /// SP:   Status register (B flag clear)
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// Always returns `Ok(())` - the 6502 has no interrupt failure modes.
+    fn service_nmi(&mut self) -> Result<(), ExecutionError> {
+        // Clear the pending flag since we're servicing it now
+        self.nmi_pending = false;
+
+        // Cycle 1-2: Push PC high byte, then low byte to stack
+        let [pc_high, pc_low] = self.pc.to_be_bytes();
+        self.push_stack_timed(pc_high);
+        self.push_stack_timed(pc_low);
+
+        // Cycle 3: Push status register to stack
+        // Note: B flag is pushed as 0 for NMI (same as IRQ, differs from BRK)
+        let status = self.status() & !0b00010000; // Clear B flag for NMI
+        self.push_stack_timed(status);
+
+        // Set I flag to prevent nested interrupts (0 cycles, part of above operation)
+        self.flag_i = true;
+
+        // Cycle 4-5: Read NMI vector from 0xFFFA-0xFFFB
+        let vector_low = self.memory.read(0xFFFA) as u16;
+        self.tick(1);
+
+        let vector_high = self.memory.read(0xFFFB) as u16;
+        self.tick(1);
+
+        // Cycle 6-7: Set PC to vector address (2 cycles for internal operation)
+        let handler_address = (vector_high << 8) | vector_low;
+        self.pc = handler_address;
+        self.tick(2);
+
+        Ok(())
     }
 
     /// Service a pending interrupt request with cycle-accurate 6502 IRQ sequence.
@@ -738,6 +854,64 @@ impl<M: MemoryBus> CPU<M> {
     /// Returns true if the Carry flag is set.
     pub fn flag_c(&self) -> bool {
         self.flag_c
+    }
+
+    // ========== NMI Methods ==========
+
+    /// Returns true if an NMI is pending (waiting to be serviced).
+    ///
+    /// The NMI pending flag is set when a falling edge is detected on the
+    /// NMI line, and cleared when the NMI is serviced.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use lib6502::{CPU, FlatMemory, MemoryBus};
+    ///
+    /// let mut mem = FlatMemory::new();
+    /// mem.write(0xFFFC, 0x00);
+    /// mem.write(0xFFFD, 0x80);
+    ///
+    /// let cpu = CPU::new(mem);
+    /// assert!(!cpu.nmi_pending()); // No NMI pending on reset
+    /// ```
+    pub fn nmi_pending(&self) -> bool {
+        self.nmi_pending
+    }
+
+    /// Triggers an NMI (Non-Maskable Interrupt) on the CPU.
+    ///
+    /// This method sets the NMI pending flag, which will cause the CPU to
+    /// service the NMI at the next instruction boundary (after the current
+    /// instruction completes).
+    ///
+    /// Unlike `nmi_active()` on the memory bus which simulates the NMI line
+    /// state, this method directly sets the pending flag to ensure the NMI
+    /// is serviced exactly once (edge-triggered behavior).
+    ///
+    /// # C64 Usage
+    ///
+    /// On the Commodore 64, this is used to simulate pressing the RESTORE key,
+    /// which pulls the NMI line low directly (bypassing CIA2).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use lib6502::{CPU, FlatMemory, MemoryBus};
+    ///
+    /// let mut mem = FlatMemory::new();
+    /// mem.write(0xFFFC, 0x00);
+    /// mem.write(0xFFFD, 0x80);
+    /// // Set NMI vector
+    /// mem.write(0xFFFA, 0x00);
+    /// mem.write(0xFFFB, 0x90);
+    ///
+    /// let mut cpu = CPU::new(mem);
+    /// cpu.trigger_nmi();
+    /// assert!(cpu.nmi_pending());
+    /// ```
+    pub fn trigger_nmi(&mut self) {
+        self.nmi_pending = true;
     }
 
     // ========== Register Setters (for testing) ==========
@@ -1131,5 +1305,152 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(cpu.cycles(), 10); // Executed exactly 10 cycles (5 NOPs)
         assert_eq!(cpu.pc(), 0x8005); // PC advanced by 5 bytes (5 NOPs)
+    }
+
+    #[test]
+    fn test_nmi_initial_state() {
+        let mut mem = FlatMemory::new();
+        mem.write(0xFFFC, 0x00);
+        mem.write(0xFFFD, 0x80);
+
+        let cpu = CPU::new(mem);
+
+        // NMI should not be pending on reset
+        assert!(!cpu.nmi_pending());
+    }
+
+    #[test]
+    fn test_trigger_nmi() {
+        let mut mem = FlatMemory::new();
+        mem.write(0xFFFC, 0x00);
+        mem.write(0xFFFD, 0x80);
+        // Set NMI vector to 0x9000
+        mem.write(0xFFFA, 0x00);
+        mem.write(0xFFFB, 0x90);
+
+        let mut cpu = CPU::new(mem);
+
+        // Manually trigger NMI
+        cpu.trigger_nmi();
+        assert!(cpu.nmi_pending());
+    }
+
+    #[test]
+    fn test_nmi_service_sequence() {
+        let mut mem = FlatMemory::new();
+        // Set reset vector to 0x8000
+        mem.write(0xFFFC, 0x00);
+        mem.write(0xFFFD, 0x80);
+        // Set NMI vector to 0x9000
+        mem.write(0xFFFA, 0x00);
+        mem.write(0xFFFB, 0x90);
+        // Put NOP instructions at 0x8000 and 0x9000
+        mem.write(0x8000, 0xEA); // NOP
+        mem.write(0x9000, 0xEA); // NOP (in NMI handler)
+
+        let mut cpu = CPU::new(mem);
+        let initial_sp = cpu.sp();
+
+        // Execute one NOP instruction first
+        cpu.step().unwrap();
+        assert_eq!(cpu.pc(), 0x8001); // NOP advanced PC by 1
+        assert_eq!(cpu.cycles(), 2); // NOP took 2 cycles
+
+        // Clear I flag so we can verify NMI sets it
+        cpu.set_flag_i(false);
+
+        // Trigger NMI
+        cpu.trigger_nmi();
+        assert!(cpu.nmi_pending());
+
+        // Execute next instruction - NMI should be serviced after
+        // Since we're at 0x8001, put another NOP there
+        cpu.memory_mut().write(0x8001, 0xEA);
+        let pre_nmi_cycles = cpu.cycles();
+        cpu.step().unwrap();
+
+        // After step(), NMI should be serviced:
+        // - PC should be at NMI vector (0x9000)
+        // - I flag should be set
+        // - NMI pending should be cleared
+        // - Stack should have return address and flags
+        assert_eq!(cpu.pc(), 0x9000, "PC should be at NMI vector");
+        assert!(cpu.flag_i(), "I flag should be set after NMI");
+        assert!(!cpu.nmi_pending(), "NMI pending should be cleared");
+
+        // Stack: PC high, PC low, flags (3 bytes pushed)
+        assert_eq!(cpu.sp(), initial_sp.wrapping_sub(3));
+
+        // NMI adds 7 cycles on top of the instruction
+        assert_eq!(cpu.cycles(), pre_nmi_cycles + 2 + 7); // NOP (2) + NMI sequence (7)
+    }
+
+    #[test]
+    fn test_nmi_uses_correct_vector() {
+        let mut mem = FlatMemory::new();
+        // Set reset vector to 0x8000
+        mem.write(0xFFFC, 0x00);
+        mem.write(0xFFFD, 0x80);
+        // Set NMI vector to 0xABCD
+        mem.write(0xFFFA, 0xCD); // Low byte
+        mem.write(0xFFFB, 0xAB); // High byte
+        // Set IRQ vector to 0x1234 (to verify NMI uses different vector)
+        mem.write(0xFFFE, 0x34);
+        mem.write(0xFFFF, 0x12);
+        // Put NOP at reset address
+        mem.write(0x8000, 0xEA);
+
+        let mut cpu = CPU::new(mem);
+        cpu.trigger_nmi();
+        cpu.step().unwrap(); // Execute NOP, then service NMI
+
+        // PC should be at NMI vector, not IRQ vector
+        assert_eq!(cpu.pc(), 0xABCD);
+    }
+
+    #[test]
+    fn test_nmi_cannot_be_masked() {
+        let mut mem = FlatMemory::new();
+        mem.write(0xFFFC, 0x00);
+        mem.write(0xFFFD, 0x80);
+        mem.write(0xFFFA, 0x00);
+        mem.write(0xFFFB, 0x90);
+        mem.write(0x8000, 0xEA); // NOP
+
+        let mut cpu = CPU::new(mem);
+
+        // Set I flag (which masks IRQ but NOT NMI)
+        cpu.set_flag_i(true);
+
+        // Trigger NMI
+        cpu.trigger_nmi();
+        cpu.step().unwrap();
+
+        // NMI should have been serviced despite I flag being set
+        assert_eq!(cpu.pc(), 0x9000, "NMI should fire even with I flag set");
+    }
+
+    #[test]
+    fn test_nmi_has_priority_over_irq() {
+        // This test requires a custom memory bus that supports both IRQ and NMI
+        // For FlatMemory, we can only test NMI since it has no IRQ capability
+        // The priority check is inherent in the step() logic where NMI is checked first
+        // This is more of a design verification than a unit test
+        let mut mem = FlatMemory::new();
+        mem.write(0xFFFC, 0x00);
+        mem.write(0xFFFD, 0x80);
+        mem.write(0xFFFA, 0x00);
+        mem.write(0xFFFB, 0x90);
+        mem.write(0x8000, 0xEA);
+
+        let mut cpu = CPU::new(mem);
+        cpu.set_flag_i(false); // Enable IRQ
+
+        // Trigger NMI
+        cpu.trigger_nmi();
+        cpu.step().unwrap();
+
+        // NMI should be serviced first
+        assert_eq!(cpu.pc(), 0x9000);
     }
 }

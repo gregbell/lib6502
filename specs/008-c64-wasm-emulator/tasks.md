@@ -38,7 +38,7 @@
 
 ### CPU Extensions
 
-- [ ] T007 Add NMI support to CPU (nmi_pending flag, nmi_active method, NMI vector $FFFA) in src/cpu.rs
+- [x] T007 Add NMI support to CPU (nmi_pending flag, nmi_active method, NMI vector $FFFA) in src/cpu.rs
 - [x] T008 Implement 6510 I/O port device (Port6510 struct, $00-$01 mapping, bank bits) → c64-emu/src/devices/port_6510.rs
 
 ### Memory Architecture
@@ -411,7 +411,7 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase | Tasks | Completed | Description |
 |-------|-------|-----------|-------------|
 | Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
-| Phase 2: Foundational | T007-T028 | 21/22 | Core infrastructure |
+| Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
 | Phase 3: US1 | T029-T050 | 0/22 | Boot, keyboard, display |
 | Phase 4: US2 | T051-T066 | 0/16 | Disk image loading |
 | Phase 5: US3 | T067-T091 | 0/25 | Graphics & audio |
@@ -419,7 +419,7 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **26/132** | |
+| **Total** | **132 tasks** | **27/132** | |
 
 ---
 

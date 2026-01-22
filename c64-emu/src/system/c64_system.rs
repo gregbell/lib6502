@@ -283,8 +283,12 @@ impl C64System {
     }
 
     /// Trigger RESTORE key (NMI).
+    ///
+    /// The RESTORE key on a real C64 is connected directly to the NMI line
+    /// (it doesn't go through CIA2 like other keys). Pressing RESTORE pulls
+    /// the NMI line low, which triggers a non-maskable interrupt.
     pub fn restore_key(&mut self) {
-        // TODO: Implement NMI triggering (T037)
+        self.cpu.trigger_nmi();
     }
 
     /// Get reference to CPU (for debugging).

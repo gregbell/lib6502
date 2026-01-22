@@ -330,6 +330,13 @@ impl MemoryBus for C64Memory {
         // CIA1 generates IRQ, VIC-II can also generate IRQ
         self.cia1.has_interrupt() || self.vic.has_interrupt()
     }
+
+    fn nmi_active(&self) -> bool {
+        // CIA2 generates NMI (not IRQ)
+        // The RESTORE key also directly triggers NMI but that's handled
+        // separately via CPU::trigger_nmi()
+        self.cia2.has_interrupt()
+    }
 }
 
 #[cfg(test)]
