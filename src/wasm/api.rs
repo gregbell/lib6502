@@ -4,8 +4,8 @@
 //! and assembly/disassembly operations.
 
 use crate::{
-    assemble, disassemble, Device, DisassemblyOptions, MappedMemory, MemoryBus, RamDevice,
-    RomDevice, Uart6551, CPU,
+    assemble, disassemble, Device, DisassemblyOptions, InterruptDevice, MappedMemory, MemoryBus,
+    RamDevice, RomDevice, Uart6551, CPU,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -42,6 +42,16 @@ impl Device for SharedUart {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
+        Some(self)
+    }
+}
+
+impl InterruptDevice for SharedUart {
+    fn has_interrupt(&self) -> bool {
+        self.uart.borrow().has_interrupt()
     }
 }
 
