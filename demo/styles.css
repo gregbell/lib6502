@@ -215,63 +215,16 @@ button.danger {
     height: 400px;
 }
 
-.code-input, .code-highlight {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
+.cm-editor {
     height: 100%;
-    margin: 0;
+}
+
+.cm-gutters {
+    border-radius: 4px 0 0 4px;
+}
+
+.cm-editor .cm-content {
     padding: 12px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    line-height: 1.5;
-    white-space: pre;
-    overflow: auto;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-}
-
-.code-input {
-    z-index: 2;
-    color: transparent;
-    caret-color: var(--text-primary);
-    background: transparent;
-    resize: none;
-}
-
-.code-input::selection {
-    background: rgba(74, 158, 255, 0.3);
-}
-
-.code-highlight {
-    z-index: 1;
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    pointer-events: none;
-}
-
-.asm-instruction {
-    color: #FF79C6;
-    font-weight: 500;
-}
-
-.asm-label {
-    color: #50FA7B;
-    font-weight: 500;
-}
-
-.asm-comment {
-    color: #6272A4;
-    font-style: italic;
-}
-
-.asm-hex {
-    color: #BD93F9;
-}
-
-.asm-immediate {
-    color: #FFB86C;
 }
 
 /* Controls Component */

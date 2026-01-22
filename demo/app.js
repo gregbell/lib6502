@@ -108,7 +108,7 @@ class App {
 
     handleKeyboard(e) {
         // Only handle shortcuts when not typing in editor
-        if (e.target.tagName === 'TEXTAREA') return;
+        if (e.target.closest && e.target.closest('.cm-editor')) return;
 
         switch (e.key) {
             case ' ':
@@ -248,7 +248,9 @@ class App {
     }
 
     showError(message) {
-        this.errorDisplay.show(message);
+        if (this.errorDisplay) {
+            this.errorDisplay.show(message);
+        }
         console.error(message);
     }
 

@@ -1,0 +1,16 @@
+{
+  "name": "lib6502-demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:editor",
+    "build:editor": "esbuild components/codemirror-entry.js --bundle --format=esm --platform=browser --target=es2020 --outfile=vendor/codemirror.js"
+  },
+  "devDependencies": {
+    "@codemirror/commands": "^6.7.1",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.35.0",
+    "esbuild": "^0.24.0"
+  }
+}
