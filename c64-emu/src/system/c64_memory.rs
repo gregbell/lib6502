@@ -12,6 +12,7 @@
 //! - $D000-$DFFF: I/O, Character ROM, or RAM
 //! - $E000-$FFFF: KERNAL ROM or RAM
 
+use super::keyboard::Keyboard;
 use crate::devices::{Cia6526, ColorRam, Port6510, Sid6581, VicII};
 use lib6502::{Device, MemoryBus};
 
@@ -52,6 +53,9 @@ pub struct C64Memory {
     /// Color RAM.
     pub color_ram: ColorRam,
 
+    /// Keyboard matrix.
+    pub keyboard: Keyboard,
+
     /// ROMs loaded flag.
     roms_loaded: bool,
 }
@@ -76,6 +80,7 @@ impl C64Memory {
             cia1: Cia6526::new_cia1(),
             cia2: Cia6526::new_cia2(),
             color_ram: ColorRam::new(),
+            keyboard: Keyboard::new(),
             roms_loaded: false,
         }
     }
@@ -203,6 +208,7 @@ impl C64Memory {
         self.cia1.reset();
         self.cia2.reset();
         self.color_ram.reset();
+        self.keyboard.release_all();
     }
 
     /// Get the offset within an I/O device for a given address.
@@ -248,7 +254,22 @@ impl MemoryBus for C64Memory {
                         // Color RAM ($D800-$DBFF)
                         0xD800..=0xDBFF => self.color_ram.read(addr - 0xD800),
                         // CIA1 ($DC00-$DCFF)
-                        0xDC00..=0xDCFF => self.cia1.read(self.io_offset(addr)),
+                        0xDC00..=0xDCFF => {
+                            let offset = self.io_offset(addr) & 0x0F;
+                            if offset == 0x01 {
+                                // Reading Port B - combine keyboard scan with joystick
+                                // Get column select from Port A output
+                                let col_select = self.cia1.port_a.output();
+                                // Scan keyboard matrix
+                                let kb_rows = self.keyboard.scan(col_select);
+                                // Combine with existing external_b (joystick)
+                                let combined = self.cia1.external_b & kb_rows;
+                                // Return combined value through CIA port logic
+                                self.cia1.port_b.read(combined)
+                            } else {
+                                self.cia1.read(self.io_offset(addr))
+                            }
+                        }
                         // CIA2 ($DD00-$DDFF)
                         0xDD00..=0xDDFF => self.cia2.read(self.io_offset(addr)),
                         // Unmapped I/O ($DE00-$DFFF) - typically expansion port
@@ -437,5 +458,69 @@ mod tests {
         // Read back (upper nibble is "floating")
         let val = mem.read(0xD800);
         assert_eq!(val & 0x0F, 0x03);
+    }
+
+    #[test]
+    fn test_keyboard_matrix_via_cia1() {
+        let mut mem = C64Memory::new();
+
+        // Configure CIA1 Port A as all outputs (for column select)
+        mem.write(0xDC02, 0xFF); // DDRA = all outputs
+
+        // Configure CIA1 Port B as all inputs (for row read)
+        mem.write(0xDC03, 0x00); // DDRB = all inputs
+
+        // No keys pressed: reading Port B should return 0xFF
+        mem.write(0xDC00, 0x00); // Select all columns (active low)
+        assert_eq!(mem.read(0xDC01), 0xFF); // No rows pulled low
+
+        // Press the 'A' key (row 1, col 2)
+        mem.keyboard.key_down(1, 2);
+
+        // Select column 2 (bit 2 = 0)
+        mem.write(0xDC00, 0xFB); // 0b11111011 = select column 2
+        let port_b = mem.read(0xDC01);
+        // Row 1 should be low (bit 1 = 0)
+        assert_eq!(port_b & 0x02, 0x00, "Row 1 should be low when A is pressed");
+        // Other rows should be high
+        assert_eq!(port_b & 0xFD, 0xFD, "Other rows should be high");
+
+        // Select column 0 only - 'A' is not in this column
+        mem.write(0xDC00, 0xFE); // 0b11111110 = select column 0
+        assert_eq!(mem.read(0xDC01), 0xFF); // No rows pulled low
+
+        // Release the key
+        mem.keyboard.key_up(1, 2);
+        mem.write(0xDC00, 0xFB); // Select column 2 again
+        assert_eq!(mem.read(0xDC01), 0xFF); // Now all rows are high
+    }
+
+    #[test]
+    fn test_keyboard_multiple_keys() {
+        let mut mem = C64Memory::new();
+
+        // Configure CIA1 ports
+        mem.write(0xDC02, 0xFF); // DDRA = all outputs
+        mem.write(0xDC03, 0x00); // DDRB = all inputs
+
+        // Press 'A' (row 1, col 2) and 'S' (row 1, col 5)
+        mem.keyboard.key_down(1, 2);
+        mem.keyboard.key_down(1, 5);
+
+        // Select all columns
+        mem.write(0xDC00, 0x00);
+        let port_b = mem.read(0xDC01);
+        // Row 1 should be low
+        assert_eq!(port_b & 0x02, 0x00);
+
+        // Press 'D' (row 2, col 2)
+        mem.keyboard.key_down(2, 2);
+
+        // Select column 2 - should see rows 1 and 2 low
+        mem.write(0xDC00, 0xFB);
+        let port_b = mem.read(0xDC01);
+        assert_eq!(port_b & 0x02, 0x00, "Row 1 should be low");
+        assert_eq!(port_b & 0x04, 0x00, "Row 2 should be low");
+        assert_eq!(port_b & 0xF9, 0xF9, "Other rows should be high");
     }
 }

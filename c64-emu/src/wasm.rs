@@ -96,8 +96,8 @@ impl C64Emulator {
     /// Get the framebuffer as a flat array of indexed colors (0-15).
     /// Returns 64000 bytes (320x200).
     #[wasm_bindgen]
-    pub fn get_framebuffer(&self) -> Vec<u8> {
-        self.system.get_framebuffer()
+    pub fn get_framebuffer(&mut self) -> Vec<u8> {
+        self.system.get_framebuffer_flat()
     }
 
     /// Get audio samples generated since last call.

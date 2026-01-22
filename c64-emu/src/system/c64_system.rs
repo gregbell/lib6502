@@ -318,16 +318,45 @@ impl C64System {
 
     /// Handle a key press on the C64 keyboard matrix.
     ///
-    /// row and col are 0-7 corresponding to the C64 8x8 keyboard matrix.
-    pub fn key_down(&mut self, _row: u8, _col: u8) {
-        // TODO: Implement keyboard matrix handling (T034-T037)
+    /// Row and col are 0-7 corresponding to the C64 8x8 keyboard matrix.
+    /// See `keyboard::keys` module for key constants.
+    ///
+    /// # Example
+    /// ```ignore
+    /// use c64_emu::system::keys;
+    ///
+    /// // Press the 'A' key
+    /// c64.key_down(keys::A.0, keys::A.1);
+    ///
+    /// // Or directly with coordinates
+    /// c64.key_down(1, 2); // 'A' is at row 1, col 2
+    /// ```
+    pub fn key_down(&mut self, row: u8, col: u8) {
+        if row < 8 && col < 8 {
+            self.cpu.memory_mut().keyboard.key_down(row, col);
+        }
     }
 
     /// Handle a key release on the C64 keyboard matrix.
     ///
-    /// row and col are 0-7 corresponding to the C64 8x8 keyboard matrix.
-    pub fn key_up(&mut self, _row: u8, _col: u8) {
-        // TODO: Implement keyboard matrix handling (T034-T037)
+    /// Row and col are 0-7 corresponding to the C64 8x8 keyboard matrix.
+    /// See `keyboard::keys` module for key constants.
+    pub fn key_up(&mut self, row: u8, col: u8) {
+        if row < 8 && col < 8 {
+            self.cpu.memory_mut().keyboard.key_up(row, col);
+        }
+    }
+
+    /// Release all keys on the keyboard.
+    ///
+    /// Useful when the browser tab loses focus or before loading a new program.
+    pub fn release_all_keys(&mut self) {
+        self.cpu.memory_mut().keyboard.release_all();
+    }
+
+    /// Check if a specific key is pressed.
+    pub fn is_key_pressed(&mut self, row: u8, col: u8) -> bool {
+        self.cpu.memory_mut().keyboard.is_key_pressed(row, col)
     }
 
     /// Set joystick state for a port.
