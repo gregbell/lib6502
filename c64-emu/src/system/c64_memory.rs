@@ -96,10 +96,7 @@ impl C64Memory {
     /// `Ok(())` if ROMs are valid sizes, `Err` with message otherwise.
     pub fn load_roms(&mut self, basic: &[u8], kernal: &[u8], charrom: &[u8]) -> Result<(), String> {
         if basic.len() != 8192 {
-            return Err(format!(
-                "BASIC ROM must be 8192 bytes, got {}",
-                basic.len()
-            ));
+            return Err(format!("BASIC ROM must be 8192 bytes, got {}", basic.len()));
         }
         if kernal.len() != 8192 {
             return Err(format!(
@@ -369,8 +366,8 @@ mod tests {
         let mem = C64Memory::new();
         assert!(!mem.roms_loaded());
         assert_eq!(mem.read(0x00), 0x2F); // DDR default
-        // Port data register returns effective value considering DDR and external input
-        // DDR=0x2F, data=0x37, external=0 => effective = (0x37 & 0x2F) | 0 = 0x27
+                                          // Port data register returns effective value considering DDR and external input
+                                          // DDR=0x2F, data=0x37, external=0 => effective = (0x37 & 0x2F) | 0 = 0x27
         assert_eq!(mem.read(0x01), 0x27);
     }
 

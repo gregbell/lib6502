@@ -454,10 +454,16 @@ mod tests {
 
         // Check the framebuffer
         // First pixel (x=0) should be white (color 1) because bit 7 is set
-        assert_eq!(vic.framebuffer[0][0], 1, "First pixel should be foreground color");
+        assert_eq!(
+            vic.framebuffer[0][0], 1,
+            "First pixel should be foreground color"
+        );
 
         // Second pixel (x=1) should be background (blue = 6) because bit 6 is 0
-        assert_eq!(vic.framebuffer[0][1], 6, "Second pixel should be background color");
+        assert_eq!(
+            vic.framebuffer[0][1], 6,
+            "Second pixel should be background color"
+        );
     }
 
     #[test]
@@ -487,12 +493,20 @@ mod tests {
 
         // First 8 pixels (character 0) should all be background color (6 = blue)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[0][x], 6, "Char 0 pixel {} should be background", x);
+            assert_eq!(
+                vic.framebuffer[0][x], 6,
+                "Char 0 pixel {} should be background",
+                x
+            );
         }
 
         // Next 8 pixels (character 1) should all be foreground color (3 = cyan)
         for x in 8..16 {
-            assert_eq!(vic.framebuffer[0][x], 3, "Char 1 pixel {} should be foreground", x);
+            assert_eq!(
+                vic.framebuffer[0][x], 3,
+                "Char 1 pixel {} should be foreground",
+                x
+            );
         }
     }
 
@@ -525,8 +539,14 @@ mod tests {
         }
 
         // Check first row, first line (display_line 0)
-        assert_eq!(vic.framebuffer[0][0], 1, "Pixel 0,0 should be foreground (1 bit in 0xAA)");
-        assert_eq!(vic.framebuffer[0][1], 6, "Pixel 0,1 should be background (0 bit in 0xAA)");
+        assert_eq!(
+            vic.framebuffer[0][0], 1,
+            "Pixel 0,0 should be foreground (1 bit in 0xAA)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][1], 6,
+            "Pixel 0,1 should be background (0 bit in 0xAA)"
+        );
 
         // Check second row (display_line 8)
         assert_eq!(vic.framebuffer[8][0], 1, "Pixel 8,0 should be foreground");
@@ -551,7 +571,10 @@ mod tests {
 
         // All pixels should be background color (6) when display is disabled
         for x in 0..SCREEN_WIDTH {
-            assert_eq!(vic.framebuffer[0][x], 6, "All pixels should be background when DEN=0");
+            assert_eq!(
+                vic.framebuffer[0][x], 6,
+                "All pixels should be background when DEN=0"
+            );
         }
     }
 
@@ -574,6 +597,9 @@ mod tests {
         vic.step_scanline(0, &char_rom, &screen_ram, &color_ram);
 
         // Framebuffer should remain unchanged (all 0xFF)
-        assert_eq!(vic.framebuffer[0][0], 0xFF, "Border scanline should not modify framebuffer");
+        assert_eq!(
+            vic.framebuffer[0][0], 0xFF,
+            "Border scanline should not modify framebuffer"
+        );
     }
 }

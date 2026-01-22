@@ -4,7 +4,7 @@
 //! CPU execution, VIC-II rendering, SID audio, and CIA timing.
 
 use super::C64Memory;
-use lib6502::{Device, CPU, MemoryBus, OPCODE_TABLE};
+use lib6502::{Device, MemoryBus, CPU, OPCODE_TABLE};
 
 /// C64 region (PAL or NTSC) affecting timing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -49,12 +49,11 @@ impl Region {
     /// Get the frame rate in Hz.
     pub fn frame_rate(&self) -> f32 {
         match self {
-            Region::PAL => 50.125, // Exact: 985248 / (312 * 63)
+            Region::PAL => 50.125,  // Exact: 985248 / (312 * 63)
             Region::NTSC => 59.826, // Exact: 1022727 / (263 * 65)
         }
     }
 }
-
 
 /// Commodore 64 emulator system.
 ///
@@ -276,7 +275,10 @@ impl C64System {
                 }
 
                 // Update VIC-II raster position
-                self.cpu.memory_mut().vic.advance_scanline(self.region.scanlines());
+                self.cpu
+                    .memory_mut()
+                    .vic
+                    .advance_scanline(self.region.scanlines());
             }
         }
 
