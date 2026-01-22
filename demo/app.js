@@ -204,7 +204,8 @@ class App {
                 this.controlPanel.setMode('idle');
             }
         } catch (error) {
-            this.showError(`Execution error: ${error}`);
+            const errorMsg = error.message || error.toString() || String(error);
+            this.showError(`Execution error: ${errorMsg}`);
             this.mode = 'idle';
             this.controlPanel.setMode('idle');
         }
@@ -311,7 +312,8 @@ class App {
                 this.controlPanel.setMode('idle');
             }
         } catch (error) {
-            this.showError(`Runtime error: ${error}`);
+            const errorMsg = error.message || error.toString() || String(error);
+            this.showError(`Runtime error: ${errorMsg}`);
             this.mode = 'idle';
             this.controlPanel.setMode('idle');
         }
