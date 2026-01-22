@@ -53,6 +53,94 @@ jobs:
       - name: Run assembler/disassembler round-trip test
         run: cargo test --test functional_assembler_disassembler klaus_assembler_disassembler_roundtrip -- --ignored --nocapture
 
+  proptest-extended:
+    name: Property Tests (Extended)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run extended property tests (100k cases)
+        env:
+          PROPTEST_CASES: 100000
+        run: cargo test --release --test proptest_cpu --test proptest_addressing --test proptest_assembler --test proptest_roundtrip -- --test-threads=2
+
+  fuzz:
+    name: Fuzz Testing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Fuzz CPU step (60s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_cpu_step -- -max_total_time=60
+
+      - name: Fuzz assembler (60s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_assembler -- -max_total_time=60
+
+      - name: Fuzz disassembler (60s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_disassembler -- -max_total_time=60
+
+  kani:
+    name: Kani Verification
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Kani
+        uses: model-checking/kani-github-action@v1.1
+        with:
+          enable-propproof: false
+
+      - name: Run Kani proofs
+        run: cargo kani --tests
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
