@@ -7,7 +7,7 @@
 //! - Device interrupt acknowledgment
 //! - Multiple device coordination
 
-use lib6502::{Device, InterruptDevice, MappedMemory, MemoryBus, RamDevice, CPU};
+use lib6502::{Device, MappedMemory, MemoryBus, RamDevice, CPU};
 use std::any::Any;
 
 /// Mock interrupt device for testing.
@@ -39,12 +39,6 @@ impl MockInterruptDevice {
     }
 
     fn is_interrupt_pending(&self) -> bool {
-        self.interrupt_pending
-    }
-}
-
-impl InterruptDevice for MockInterruptDevice {
-    fn has_interrupt(&self) -> bool {
         self.interrupt_pending
     }
 }
@@ -81,8 +75,8 @@ impl Device for MockInterruptDevice {
         self
     }
 
-    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
-        Some(self)
+    fn has_interrupt(&self) -> bool {
+        self.interrupt_pending
     }
 }
 
@@ -119,10 +113,10 @@ fn test_interrupt_device_trait() {
     // Test that mock device correctly implements InterruptDevice
     let mut device = MockInterruptDevice::new();
 
-    assert!(!InterruptDevice::has_interrupt(&device));
+    assert!(!device.has_interrupt());
 
     device.trigger_interrupt();
-    assert!(InterruptDevice::has_interrupt(&device));
+    assert!(device.has_interrupt());
 }
 
 #[test]
@@ -697,4 +691,180 @@ fn test_isr_polls_multiple_devices() {
     // IRQ line should be inactive after all devices acknowledged
     // Note: This assertion may fail if ISR cannot fully execute
     // assert!(!cpu.memory_mut().irq_active(), "IRQ line should be inactive after ISR");
+}
+
+// ========== Shared Device Tests ==========
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+/// Mock interrupt device for shared device testing.
+struct SharedMockDevice {
+    interrupt_pending: bool,
+    data: u8,
+}
+
+impl SharedMockDevice {
+    fn new() -> Self {
+        Self {
+            interrupt_pending: false,
+            data: 0,
+        }
+    }
+
+    fn trigger_interrupt(&mut self) {
+        self.interrupt_pending = true;
+    }
+}
+
+impl Device for SharedMockDevice {
+    fn read(&self, offset: u16) -> u8 {
+        match offset {
+            0 => {
+                if self.interrupt_pending {
+                    0x80
+                } else {
+                    0
+                }
+            }
+            1 => self.data,
+            _ => 0x00,
+        }
+    }
+
+    fn write(&mut self, offset: u16, value: u8) {
+        match offset {
+            0 => {
+                if value & 0x80 != 0 {
+                    self.interrupt_pending = false;
+                }
+            }
+            1 => self.data = value,
+            _ => {}
+        }
+    }
+
+    fn size(&self) -> u16 {
+        4
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn has_interrupt(&self) -> bool {
+        self.interrupt_pending
+    }
+}
+
+#[test]
+fn test_add_shared_device() {
+    let mut memory = MappedMemory::new();
+
+    // Create a shared device
+    let device = Rc::new(RefCell::new(SharedMockDevice::new()));
+
+    // Add to memory mapper
+    let result = memory.add_shared_device(0xD000, Rc::clone(&device));
+    assert!(result.is_ok(), "Should successfully add shared device");
+
+    // Write via memory mapper
+    memory.write(0xD001, 0x42);
+
+    // Read via memory mapper
+    assert_eq!(memory.read(0xD001), 0x42);
+
+    // Access directly through Rc handle
+    assert_eq!(device.borrow().data, 0x42);
+
+    // Modify directly and verify through memory mapper
+    device.borrow_mut().data = 0x99;
+    assert_eq!(memory.read(0xD001), 0x99);
+}
+
+#[test]
+fn test_shared_device_irq_active() {
+    let mut memory = MappedMemory::new();
+
+    // Create a shared interrupt device
+    let device = Rc::new(RefCell::new(SharedMockDevice::new()));
+    memory
+        .add_shared_device(0xD000, Rc::clone(&device))
+        .unwrap();
+
+    // Initially no interrupt
+    assert!(!memory.irq_active());
+
+    // Trigger interrupt through direct access
+    device.borrow_mut().trigger_interrupt();
+
+    // IRQ line should be active
+    assert!(memory.irq_active());
+
+    // Clear interrupt through memory write
+    memory.write(0xD000, 0x80);
+
+    // IRQ line should be inactive
+    assert!(!memory.irq_active());
+}
+
+#[test]
+fn test_shared_device_overlap_detection() {
+    let mut memory = MappedMemory::new();
+
+    // Add owned device at 0x1000-0x10FF
+    memory
+        .add_device(0x1000, Box::new(RamDevice::new(256)))
+        .unwrap();
+
+    // Try to add shared device that overlaps
+    let device = Rc::new(RefCell::new(SharedMockDevice::new()));
+    let result = memory.add_shared_device(0x1080, Rc::clone(&device));
+    assert!(
+        result.is_err(),
+        "Should reject shared device that overlaps with owned device"
+    );
+
+    // Add shared device in non-overlapping area
+    let result = memory.add_shared_device(0x2000, Rc::clone(&device));
+    assert!(result.is_ok(), "Should accept shared device in empty area");
+
+    // Try to add another shared device that overlaps with first shared device
+    let device2 = Rc::new(RefCell::new(SharedMockDevice::new()));
+    let result = memory.add_shared_device(0x2002, device2);
+    assert!(
+        result.is_err(),
+        "Should reject shared device that overlaps with another shared device"
+    );
+}
+
+#[test]
+fn test_get_device_at_returns_none_for_shared() {
+    let mut memory = MappedMemory::new();
+
+    // Add owned device
+    memory
+        .add_device(0x1000, Box::new(RamDevice::new(256)))
+        .unwrap();
+
+    // Add shared device
+    let device = Rc::new(RefCell::new(SharedMockDevice::new()));
+    memory
+        .add_shared_device(0x2000, Rc::clone(&device))
+        .unwrap();
+
+    // get_device_at should work for owned device
+    let owned = memory.get_device_at::<RamDevice>(0x1000);
+    assert!(owned.is_some(), "Should find owned device");
+
+    // get_device_at should return None for shared device
+    let shared = memory.get_device_at::<SharedMockDevice>(0x2000);
+    assert!(
+        shared.is_none(),
+        "Should return None for shared device (users keep their Rc handle)"
+    );
 }

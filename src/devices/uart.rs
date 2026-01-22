@@ -3,7 +3,7 @@
 //! Provides serial communication via memory-mapped registers with callback interface
 //! for external terminal integration.
 
-use super::{Device, InterruptDevice};
+use super::Device;
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -389,12 +389,6 @@ impl Device for Uart6551 {
         self
     }
 
-    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
-        Some(self)
-    }
-}
-
-impl InterruptDevice for Uart6551 {
     fn has_interrupt(&self) -> bool {
         *self.interrupt_pending.borrow()
     }

@@ -30,15 +30,15 @@
 
 use crate::MemoryBus;
 use std::any::Any;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 // Device implementations
-pub mod interrupts;
 pub mod ram;
 pub mod rom;
 pub mod uart;
 
 // Re-export device types
-pub use interrupts::InterruptDevice;
 pub use ram::RamDevice;
 pub use rom::RomDevice;
 pub use uart::Uart6551;
@@ -127,37 +127,40 @@ pub trait Device {
     /// where `T` is the concrete device type.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    /// Cast this device to an `InterruptDevice` trait object if it supports interrupts.
+    /// Check if device has a pending interrupt request.
     ///
-    /// This method provides a clean way for the memory bus to check if a device
-    /// is interrupt-capable without requiring all devices to implement interrupt
-    /// functionality.
+    /// Returns `true` if the device has an unserviced interrupt that should
+    /// contribute to the CPU's IRQ line state. Devices that don't support
+    /// interrupts (RAM, ROM, etc.) return `false` (the default).
+    ///
+    /// # Contract
+    ///
+    /// - **MUST** return `true` when device has pending interrupt
+    /// - **MUST** return `false` when interrupt has been acknowledged/cleared
+    /// - **MUST NOT** modify device state (read-only query)
+    /// - **MUST** be deterministic (same result if called multiple times)
+    /// - **SHOULD** be O(1) performance (called after every instruction)
+    ///
+    /// # Hardware Semantics
+    ///
+    /// This method represents the device's contribution to the shared IRQ line.
+    /// The CPU will OR together all devices' `has_interrupt()` results to
+    /// determine the overall IRQ line state.
     ///
     /// # Default Implementation
     ///
-    /// Returns `None` for devices that don't support interrupts (RAM, ROM, etc.).
-    /// Interrupt-capable devices should override this to return `Some(self)`.
-    ///
-    /// # Returns
-    ///
-    /// - `Some(&dyn InterruptDevice)` if device supports interrupts
-    /// - `None` if device doesn't support interrupts
+    /// Returns `false` for devices that don't support interrupts (RAM, ROM, etc.).
+    /// Interrupt-capable devices should override this to return their interrupt state.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use lib6502::{Device, InterruptDevice};
+    /// use lib6502::Device;
     /// use std::any::Any;
     ///
     /// // Interrupt-capable device
     /// struct TimerDevice {
     ///     interrupt_pending: bool,
-    /// }
-    ///
-    /// impl InterruptDevice for TimerDevice {
-    ///     fn has_interrupt(&self) -> bool {
-    ///         self.interrupt_pending
-    ///     }
     /// }
     ///
     /// impl Device for TimerDevice {
@@ -168,13 +171,13 @@ pub trait Device {
     ///     fn as_any_mut(&mut self) -> &mut dyn Any { self }
     ///
     ///     // Override to expose interrupt capability
-    ///     fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
-    ///         Some(self)
+    ///     fn has_interrupt(&self) -> bool {
+    ///         self.interrupt_pending
     ///     }
     /// }
     /// ```
-    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
-        None // Default: device doesn't support interrupts
+    fn has_interrupt(&self) -> bool {
+        false // Default: device doesn't support interrupts
     }
 }
 
@@ -234,10 +237,39 @@ impl AddressRange {
     }
 }
 
+/// Holds a device either as owned (Box) or shared (Rc<RefCell>).
+///
+/// This enum allows devices to be registered with MappedMemory while still
+/// being accessible externally through a shared reference.
+enum DeviceHolder {
+    /// Device owned exclusively by MappedMemory
+    Owned(Box<dyn Device>),
+    /// Device shared with external code via Rc<RefCell>
+    Shared(Rc<RefCell<dyn Device>>),
+}
+
+impl DeviceHolder {
+    /// Get the size of the held device.
+    fn size(&self) -> u16 {
+        match self {
+            DeviceHolder::Owned(device) => device.size(),
+            DeviceHolder::Shared(device) => device.borrow().size(),
+        }
+    }
+
+    /// Check if the held device has a pending interrupt.
+    fn has_interrupt(&self) -> bool {
+        match self {
+            DeviceHolder::Owned(device) => device.has_interrupt(),
+            DeviceHolder::Shared(device) => device.borrow().has_interrupt(),
+        }
+    }
+}
+
 /// Internal mapping of a device to a base address.
 struct DeviceMapping {
     base_addr: u16,
-    device: Box<dyn Device>,
+    device: DeviceHolder,
 }
 
 impl DeviceMapping {
@@ -396,11 +428,91 @@ impl MappedMemory {
         }
 
         // No overlap, add the device
-        self.devices.push(DeviceMapping { base_addr, device });
+        self.devices.push(DeviceMapping {
+            base_addr,
+            device: DeviceHolder::Owned(device),
+        });
         Ok(())
     }
 
-    /// Find device that handles the given address and return mutable reference with offset.
+    /// Register a shared device at the specified base address.
+    ///
+    /// This method allows devices to be shared via `Rc<RefCell<dyn Device>>`,
+    /// enabling external code to retain access to the device while it's also
+    /// registered with the memory mapper.
+    ///
+    /// The device will occupy addresses from `base_addr` to `base_addr + device.size() - 1`.
+    /// Registration fails if the new device's address range overlaps with any existing device.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `D` - The concrete device type (must implement `Device + 'static`)
+    ///
+    /// # Arguments
+    ///
+    /// * `base_addr` - Starting address for the device in the memory map
+    /// * `device` - Shared device reference
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Device registered successfully
+    /// * `Err(DeviceError::OverlapError)` - Address range overlaps with existing device
+    ///
+    /// # Note
+    ///
+    /// Shared devices cannot be retrieved via `get_device_at()` or `get_device_at_mut()`.
+    /// Users retain their `Rc<RefCell<D>>` handle for direct access.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use lib6502::{MappedMemory, Uart6551};
+    /// use std::cell::RefCell;
+    /// use std::rc::Rc;
+    ///
+    /// let mut memory = MappedMemory::new();
+    ///
+    /// // Create shared UART
+    /// let uart = Rc::new(RefCell::new(Uart6551::new()));
+    ///
+    /// // Register with memory mapper
+    /// memory.add_shared_device(0x8000, Rc::clone(&uart)).unwrap();
+    ///
+    /// // Can still access UART directly
+    /// uart.borrow_mut().receive_byte(b'A');
+    /// ```
+    #[must_use = "ignoring device registration errors can lead to silent failures"]
+    pub fn add_shared_device<D: Device + 'static>(
+        &mut self,
+        base_addr: u16,
+        device: Rc<RefCell<D>>,
+    ) -> Result<(), DeviceError> {
+        let device_size = device.borrow().size();
+        let new_range = AddressRange::new(base_addr, device_size);
+
+        // Check for overlaps with existing devices
+        for mapping in &self.devices {
+            let existing_range = mapping.range();
+
+            if new_range.overlaps(&existing_range) {
+                return Err(DeviceError::OverlapError {
+                    new_base: base_addr,
+                    new_size: device_size,
+                    existing_base: mapping.base_addr,
+                    existing_size: mapping.device.size(),
+                });
+            }
+        }
+
+        // No overlap, add the device
+        self.devices.push(DeviceMapping {
+            base_addr,
+            device: DeviceHolder::Shared(device),
+        });
+        Ok(())
+    }
+
+    /// Find owned device that handles the given address and return mutable reference with offset.
     ///
     /// # Arguments
     ///
@@ -408,21 +520,24 @@ impl MappedMemory {
     ///
     /// # Returns
     ///
-    /// * `Some((&mut dyn Device, offset))` - Device and offset if address is mapped
-    /// * `None` - If address is not mapped to any device
-    fn find_device(&mut self, addr: u16) -> Option<(&mut dyn Device, u16)> {
+    /// * `Some((&mut dyn Device, offset))` - Device and offset if address is mapped to owned device
+    /// * `None` - If address is not mapped or is mapped to a shared device
+    fn find_owned_device(&mut self, addr: u16) -> Option<(&mut dyn Device, u16)> {
         for mapping in &mut self.devices {
             let range = mapping.range();
 
             if range.contains(addr) {
                 let offset = addr - mapping.base_addr;
-                return Some((mapping.device.as_mut(), offset));
+                if let DeviceHolder::Owned(ref mut device) = mapping.device {
+                    return Some((device.as_mut(), offset));
+                }
+                return None; // Shared device - can't return reference
             }
         }
         None
     }
 
-    /// Find device that handles the given address and return immutable reference with offset.
+    /// Find owned device that handles the given address and return immutable reference with offset.
     ///
     /// # Arguments
     ///
@@ -430,15 +545,18 @@ impl MappedMemory {
     ///
     /// # Returns
     ///
-    /// * `Some((&dyn Device, offset))` - Device and offset if address is mapped
-    /// * `None` - If address is not mapped to any device
-    fn find_device_immut(&self, addr: u16) -> Option<(&dyn Device, u16)> {
+    /// * `Some((&dyn Device, offset))` - Device and offset if address is mapped to owned device
+    /// * `None` - If address is not mapped or is mapped to a shared device
+    fn find_owned_device_immut(&self, addr: u16) -> Option<(&dyn Device, u16)> {
         for mapping in &self.devices {
             let range = mapping.range();
 
             if range.contains(addr) {
                 let offset = addr - mapping.base_addr;
-                return Some((mapping.device.as_ref(), offset));
+                if let DeviceHolder::Owned(ref device) = mapping.device {
+                    return Some((device.as_ref(), offset));
+                }
+                return None; // Shared device - can't return reference
             }
         }
         None
@@ -481,7 +599,7 @@ impl MappedMemory {
     /// }
     /// ```
     pub fn get_device_at<T: Device + 'static>(&self, addr: u16) -> Option<&T> {
-        if let Some((device, _)) = self.find_device_immut(addr) {
+        if let Some((device, _)) = self.find_owned_device_immut(addr) {
             device.as_any().downcast_ref::<T>()
         } else {
             None
@@ -521,7 +639,7 @@ impl MappedMemory {
     /// }
     /// ```
     pub fn get_device_at_mut<T: Device + 'static>(&mut self, addr: u16) -> Option<&mut T> {
-        if let Some((device, _)) = self.find_device(addr) {
+        if let Some((device, _)) = self.find_owned_device(addr) {
             device.as_any_mut().downcast_mut::<T>()
         } else {
             None
@@ -537,16 +655,30 @@ impl Default for MappedMemory {
 
 impl MemoryBus for MappedMemory {
     fn read(&self, addr: u16) -> u8 {
-        if let Some((device, offset)) = self.find_device_immut(addr) {
-            device.read(offset)
-        } else {
-            self.unmapped_value
+        for mapping in &self.devices {
+            let range = mapping.range();
+            if range.contains(addr) {
+                let offset = addr - mapping.base_addr;
+                return match &mapping.device {
+                    DeviceHolder::Owned(device) => device.read(offset),
+                    DeviceHolder::Shared(device) => device.borrow().read(offset),
+                };
+            }
         }
+        self.unmapped_value
     }
 
     fn write(&mut self, addr: u16, value: u8) {
-        if let Some((device, offset)) = self.find_device(addr) {
-            device.write(offset, value);
+        for mapping in &mut self.devices {
+            let range = mapping.range();
+            if range.contains(addr) {
+                let offset = addr - mapping.base_addr;
+                match &mut mapping.device {
+                    DeviceHolder::Owned(device) => device.write(offset, value),
+                    DeviceHolder::Shared(device) => device.borrow_mut().write(offset, value),
+                }
+                return;
+            }
         }
         // Unmapped writes are silently ignored (matching 6502 hardware behavior)
     }
@@ -603,8 +735,7 @@ impl MemoryBus for MappedMemory {
         //
         self.devices
             .iter()
-            .filter_map(|mapping| mapping.device.as_interrupt_device())
-            .any(|interrupt_device| interrupt_device.has_interrupt())
+            .any(|mapping| mapping.device.has_interrupt())
     }
 }
 

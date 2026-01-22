@@ -43,7 +43,7 @@
 //! // See the main() function below for a complete working demonstration
 //! ```
 
-use lib6502::{Device, InterruptDevice, MappedMemory, MemoryBus, RamDevice, CPU};
+use lib6502::{Device, MappedMemory, MemoryBus, RamDevice, CPU};
 use std::any::Any;
 
 /// Interrupt-capable timer device with memory-mapped registers.
@@ -190,12 +190,6 @@ impl TimerDevice {
     }
 }
 
-impl InterruptDevice for TimerDevice {
-    fn has_interrupt(&self) -> bool {
-        self.interrupt_pending
-    }
-}
-
 impl Device for TimerDevice {
     fn read(&self, offset: u16) -> u8 {
         match offset {
@@ -260,8 +254,8 @@ impl Device for TimerDevice {
         self
     }
 
-    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
-        Some(self)
+    fn has_interrupt(&self) -> bool {
+        self.interrupt_pending
     }
 }
 
@@ -423,12 +417,6 @@ impl UartDevice {
     }
 }
 
-impl InterruptDevice for UartDevice {
-    fn has_interrupt(&self) -> bool {
-        self.interrupt_pending
-    }
-}
-
 impl Device for UartDevice {
     fn read(&self, offset: u16) -> u8 {
         match offset {
@@ -502,8 +490,8 @@ impl Device for UartDevice {
         self
     }
 
-    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
-        Some(self)
+    fn has_interrupt(&self) -> bool {
+        self.interrupt_pending
     }
 }
 
@@ -664,7 +652,7 @@ fn main() {
                     println!(
                         "  Timer: counter={}, interrupt={}",
                         timer.counter(),
-                        InterruptDevice::has_interrupt(timer)
+                        timer.has_interrupt()
                     );
                 }
 
@@ -681,12 +669,12 @@ fn main() {
                             } else {
                                 '?'
                             },
-                            InterruptDevice::has_interrupt(uart)
+                            uart.has_interrupt()
                         );
                     }
                 } else if let Some(uart) = cpu.memory_mut().get_device_at_mut::<UartDevice>(0xD100)
                 {
-                    println!("  UART: interrupt={}", InterruptDevice::has_interrupt(uart));
+                    println!("  UART: interrupt={}", uart.has_interrupt());
                 }
 
                 // Show IRQ line state

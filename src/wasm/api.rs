@@ -4,56 +4,12 @@
 //! and assembly/disassembly operations.
 
 use crate::{
-    assemble, disassemble, Device, DisassemblyOptions, InterruptDevice, MappedMemory, MemoryBus,
-    RamDevice, RomDevice, Uart6551, CPU,
+    assemble, disassemble, Device, DisassemblyOptions, MappedMemory, MemoryBus, RamDevice,
+    RomDevice, Uart6551, CPU,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
-
-/// Shared UART wrapper that implements Device
-/// Allows the UART to be used both in MappedMemory and accessed separately for receive_byte()
-struct SharedUart {
-    uart: Rc<RefCell<Uart6551>>,
-}
-
-impl SharedUart {
-    fn new(uart: Rc<RefCell<Uart6551>>) -> Self {
-        SharedUart { uart }
-    }
-}
-
-impl Device for SharedUart {
-    fn read(&self, offset: u16) -> u8 {
-        self.uart.borrow().read(offset)
-    }
-
-    fn write(&mut self, offset: u16, value: u8) {
-        self.uart.borrow_mut().write(offset, value);
-    }
-
-    fn size(&self) -> u16 {
-        self.uart.borrow().size()
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-
-    fn as_interrupt_device(&self) -> Option<&dyn InterruptDevice> {
-        Some(self)
-    }
-}
-
-impl InterruptDevice for SharedUart {
-    fn has_interrupt(&self) -> bool {
-        self.uart.borrow().has_interrupt()
-    }
-}
 
 /// JavaScript-compatible error wrapper
 #[wasm_bindgen]
@@ -186,9 +142,9 @@ impl Emulator6502 {
             let _ = on_transmit_clone.call1(&JsValue::NULL, &JsValue::from_str(&char_str));
         });
 
-        // Add UART at $A000-$A003 using SharedUart wrapper
+        // Add UART at $A000-$A003 using shared device
         memory
-            .add_device(0xA000, Box::new(SharedUart::new(Rc::clone(&uart))))
+            .add_shared_device(0xA000, Rc::clone(&uart))
             .expect("Failed to add UART device");
 
         // Add ROM at $C000-$FEFF (15872 bytes, excludes vector page)
@@ -265,9 +221,9 @@ impl Emulator6502 {
             let _ = on_transmit_clone.call1(&JsValue::NULL, &JsValue::from_str(&char_str));
         });
 
-        // Add UART at $A000-$A003 using SharedUart wrapper
+        // Add UART at $A000-$A003 using shared device
         memory
-            .add_device(0xA000, Box::new(SharedUart::new(Rc::clone(&uart))))
+            .add_shared_device(0xA000, Rc::clone(&uart))
             .expect("Failed to add UART device");
 
         // Add ROM at $C000-$FEFF (15872 bytes, excludes vector page)

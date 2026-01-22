@@ -249,20 +249,16 @@ matching real 6502 behavior.
 
 ### Creating Interrupt-Capable Devices
 
-Devices implement both `Device` and `InterruptDevice` traits:
+Devices implement the `Device` trait with `has_interrupt()` returning `true` when
+an interrupt is pending (the default returns `false`):
 
 ```rust
-use lib6502::{Device, InterruptDevice};
+use lib6502::Device;
+use std::any::Any;
 
 struct TimerDevice {
     interrupt_pending: bool,
     // ... device fields
-}
-
-impl InterruptDevice for TimerDevice {
-    fn has_interrupt(&self) -> bool {
-        self.interrupt_pending
-    }
 }
 
 impl Device for TimerDevice {
@@ -284,13 +280,39 @@ impl Device for TimerDevice {
         }
     }
 
-    // ... implement as_any(), as_any_mut()
+    fn as_any(&self) -> &dyn Any { self }
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
+    // Override to signal interrupt capability
     fn has_interrupt(&self) -> bool {
-        <Self as InterruptDevice>::has_interrupt(self)  // Delegate to InterruptDevice
+        self.interrupt_pending
     }
 }
 ```
+
+### Shared Device Ownership
+
+Devices can be shared via `Rc<RefCell<dyn Device>>` for external access while
+registered with the memory mapper:
+
+```rust
+use lib6502::{MappedMemory, Uart6551};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+let mut memory = MappedMemory::new();
+
+// Create shared UART
+let uart = Rc::new(RefCell::new(Uart6551::new()));
+
+// Register with memory mapper (read/write work via MappedMemory)
+memory.add_shared_device(0xA000, Rc::clone(&uart)).unwrap();
+
+// Direct access via Rc handle (e.g., for receive_byte())
+uart.borrow_mut().receive_byte(b'A');
+```
+
+Note: `get_device_at()` returns `None` for shared devices - use your `Rc` handle.
 
 ### Interrupt Service Routine (ISR) Pattern
 
