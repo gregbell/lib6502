@@ -348,6 +348,109 @@ impl C64Emulator {
         }
     }
 
+    /// Debug function to test keyboard input by pressing a key and returning what should appear.
+    /// Returns a string with the key mapping details for verification.
+    #[wasm_bindgen]
+    pub fn debug_key_mapping(&self, keycode: &str) -> Option<String> {
+        map_pc_keycode(keycode).map(|m| {
+            format!(
+                "keycode={}, row={}, col={}, requires_shift={}",
+                keycode, m.row, m.col, m.requires_shift
+            )
+        })
+    }
+
+    /// Debug function to get comprehensive keyboard state.
+    /// Returns a string with CIA1 DDR values and keyboard matrix info.
+    #[wasm_bindgen]
+    pub fn debug_keyboard_state(&mut self) -> String {
+        let regs = self.system.get_cia1_registers();
+        let port_a_data = regs[0];
+        let port_b_data = regs[1];
+        let port_a_ddr = regs[2];
+        let port_b_ddr = regs[3];
+
+        format!(
+            "CIA1 State:\n\
+             $DC00 (Port A Data): ${:02X}\n\
+             $DC01 (Port B Data): ${:02X}\n\
+             $DC02 (Port A DDR): ${:02X} (should be $FF for keyboard)\n\
+             $DC03 (Port B DDR): ${:02X} (should be $00 for keyboard)\n\
+             Port A output: ${:02X}\n",
+            port_a_data,
+            port_b_data,
+            port_a_ddr,
+            port_b_ddr,
+            port_a_data & port_a_ddr
+        )
+    }
+
+    /// Debug function to test keyboard scanning.
+    /// Press a key, call this function, and it will scan the keyboard matrix
+    /// and report what it finds.
+    #[wasm_bindgen]
+    pub fn debug_keyboard_scan(&mut self) -> String {
+        let mut result = String::from("Keyboard scan results:\n");
+
+        // Scan each column
+        for col in 0..8u8 {
+            // Simulate selecting this column
+            let col_select = !(1u8 << col);
+
+            // Get keyboard state for this column
+            // We need to poke $DC00, read $DC01, then restore
+            let old_dc00 = self.system.peek(0xDC00);
+            self.system.poke(0xDC00, col_select);
+            let dc01 = self.system.peek(0xDC01);
+            self.system.poke(0xDC00, old_dc00);
+
+            // Check which rows are active (low)
+            for row in 0..8u8 {
+                if dc01 & (1 << row) == 0 {
+                    result.push_str(&format!(
+                        "  Key detected: col={}, row={} (keyboard_code={})\n",
+                        col,
+                        row,
+                        col * 8 + row
+                    ));
+                }
+            }
+        }
+
+        if result == "Keyboard scan results:\n" {
+            result.push_str("  No keys pressed\n");
+        }
+
+        result
+    }
+
+    /// Debug function to directly check the keyboard matrix at a position.
+    /// Returns true if the key at (row, col) is pressed.
+    #[wasm_bindgen]
+    pub fn debug_is_key_pressed(&mut self, row: u8, col: u8) -> bool {
+        self.system.is_key_pressed(row, col)
+    }
+
+    /// Debug function to print the entire keyboard matrix state.
+    #[wasm_bindgen]
+    pub fn debug_keyboard_matrix(&mut self) -> String {
+        let mut result = String::from("Keyboard matrix:\n      Col: 0 1 2 3 4 5 6 7\n");
+
+        for row in 0..8u8 {
+            result.push_str(&format!("Row {}: ", row));
+            for col in 0..8u8 {
+                if self.system.is_key_pressed(row, col) {
+                    result.push_str("X ");
+                } else {
+                    result.push_str(". ");
+                }
+            }
+            result.push('\n');
+        }
+
+        result
+    }
+
     /// Signal key release using PC keycode (DOM KeyboardEvent.code).
     ///
     /// See `key_down_pc` for supported keycodes.
@@ -679,12 +782,7 @@ impl C64Emulator {
     #[wasm_bindgen]
     pub fn get_bank_config(&mut self) -> Vec<u8> {
         let (loram, hiram, charen, vic_bank) = self.system.get_bank_config();
-        vec![
-            loram as u8,
-            hiram as u8,
-            charen as u8,
-            vic_bank,
-        ]
+        vec![loram as u8, hiram as u8, charen as u8, vic_bank]
     }
 
     /// Get all VIC-II registers.

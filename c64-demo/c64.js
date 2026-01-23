@@ -48,6 +48,8 @@ const SAVE_SLOT_COUNT = 4;
 const SETTINGS_STORAGE_KEY = 'c64_settings';
 
 // Default settings
+// NOTE: Joystick mappings intentionally avoid common typing keys (WASD, Space)
+// to prevent interference when typing in BASIC. Users can remap in Settings.
 const DEFAULT_SETTINGS = {
     scale: '2',
     scanlines: false,
@@ -55,18 +57,18 @@ const DEFAULT_SETTINGS = {
     region: 'pal',
     joystickMappings: {
         port1: {
-            up: 'KeyW',
-            down: 'KeyS',
-            left: 'KeyA',
-            right: 'KeyD',
-            fire: 'ControlLeft'
+            up: 'Numpad8',
+            down: 'Numpad2',
+            left: 'Numpad4',
+            right: 'Numpad6',
+            fire: 'Numpad0'
         },
         port2: {
             up: 'ArrowUp',
             down: 'ArrowDown',
             left: 'ArrowLeft',
             right: 'ArrowRight',
-            fire: 'Space'
+            fire: 'ShiftRight'
         }
     }
 };

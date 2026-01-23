@@ -445,7 +445,12 @@ impl Cia6526 {
         // Serial data register
         regs[0x0C] = self.sdr;
         // Interrupt control (flags with pending bit)
-        regs[0x0D] = self.interrupt_flags.get() | if self.interrupt_pending.get() { 0x80 } else { 0 };
+        regs[0x0D] = self.interrupt_flags.get()
+            | if self.interrupt_pending.get() {
+                0x80
+            } else {
+                0
+            };
         // Control registers
         regs[0x0E] = self.cra;
         regs[0x0F] = self.crb;

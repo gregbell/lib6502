@@ -23,10 +23,11 @@ lib6502 = { path = ".." }
 # WASM bindings (optional, enabled with "wasm" feature)
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", optional = true, features = ["console"] }
 
 [dev-dependencies]
 # Use standard Rust test framework
 
 [features]
 default = []
-wasm = ["wasm-bindgen", "js-sys", "lib6502/wasm"]
+wasm = ["wasm-bindgen", "js-sys", "web-sys", "lib6502/wasm"]
