@@ -6,9 +6,11 @@
 mod c64_memory;
 mod c64_system;
 pub mod disk_1541;
+pub mod iec_bus;
 mod keyboard;
 
 pub use c64_memory::C64Memory;
 pub use c64_system::{C64System, Region};
 pub use disk_1541::{ChannelMode, D64Error, D64Image, Drive1541, DriveChannel, DriveStatus};
+pub use iec_bus::{IecBus, IecState};
 pub use keyboard::{keys, map_pc_keycode, KeyMapping, Keyboard};

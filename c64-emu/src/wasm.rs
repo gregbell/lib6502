@@ -268,6 +268,69 @@ impl C64Emulator {
     pub fn release_all_keys(&mut self) {
         self.system.release_all_keys();
     }
+
+    // =========================================================================
+    // Disk Drive API (T060-T063)
+    // =========================================================================
+
+    /// Mount a D64 disk image in virtual drive 8.
+    ///
+    /// D64 is the standard disk image format for C64, containing a complete
+    /// 1541 disk (170KB, 35 tracks, 683 sectors).
+    ///
+    /// # Arguments
+    /// * `data` - Complete D64 file contents (174,848 bytes standard, 175,531 with errors)
+    ///
+    /// # Returns
+    /// `true` if mounted successfully, `false` on error.
+    #[wasm_bindgen]
+    pub fn mount_d64(&mut self, data: &[u8]) -> bool {
+        self.system.mount_d64(data.to_vec()).is_ok()
+    }
+
+    /// Unmount the current disk image from drive 8.
+    #[wasm_bindgen]
+    pub fn unmount_d64(&mut self) {
+        self.system.unmount_d64();
+    }
+
+    /// Check if a disk image is mounted in drive 8.
+    #[wasm_bindgen]
+    pub fn has_mounted_disk(&self) -> bool {
+        self.system.has_mounted_disk()
+    }
+
+    /// Get the name of the mounted disk (if any).
+    ///
+    /// Returns the disk name as stored in the D64 directory header.
+    #[wasm_bindgen]
+    pub fn disk_name(&self) -> Option<String> {
+        self.system.disk_name()
+    }
+
+    /// Inject "RUN" command into the keyboard buffer.
+    ///
+    /// This simulates typing "RUN" followed by RETURN, which is useful
+    /// after loading a BASIC program to automatically execute it.
+    ///
+    /// Typical usage pattern:
+    /// 1. Load a PRG file with `load_prg()`
+    /// 2. Call `inject_basic_run()` to auto-execute
+    #[wasm_bindgen]
+    pub fn inject_basic_run(&mut self) {
+        self.system.inject_basic_run();
+    }
+
+    /// Inject a string into the keyboard buffer.
+    ///
+    /// This simulates typing the given string. Maximum 10 characters
+    /// (the size of the C64 keyboard buffer).
+    ///
+    /// Characters are automatically converted from ASCII to PETSCII.
+    #[wasm_bindgen]
+    pub fn inject_keys(&mut self, text: &str) {
+        self.system.inject_keys(text);
+    }
 }
 
 impl Default for C64Emulator {

@@ -147,16 +147,16 @@
 
 ### IEC Protocol
 
-- [ ] T057 [US2] Implement high-level IEC command handling (LISTEN, TALK, OPEN, CLOSE) in src/c64/disk_1541.rs
-- [ ] T058 [US2] Implement CIA2 IEC bus signal routing (bits 3-7 of port A) in src/devices/c64/cia.rs
-- [ ] T059 [US2] Integrate drive with C64System for bus communication in src/c64/mod.rs
+- [x] T057 [US2] Implement high-level IEC command handling (LISTEN, TALK, OPEN, CLOSE) in c64-emu/src/system/iec_bus.rs
+- [x] T058 [US2] Implement CIA2 IEC bus signal routing (bits 3-7 of port A) - Not needed for high-level emulation
+- [x] T059 [US2] Integrate drive with C64System for bus communication in c64-emu/src/system/c64_system.rs
 
 ### WASM Disk API
 
-- [ ] T060 [US2] Implement mount_d64() with size validation in src/wasm/c64_api.rs
-- [ ] T061 [US2] Implement unmount_d64() and has_mounted_disk() in src/wasm/c64_api.rs
-- [ ] T062 [US2] Implement load_prg() for direct memory loading in src/wasm/c64_api.rs
-- [ ] T063 [US2] Implement inject_basic_run() for auto-run after load in src/wasm/c64_api.rs
+- [x] T060 [US2] Implement mount_d64() with size validation in c64-emu/src/wasm.rs
+- [x] T061 [US2] Implement unmount_d64() and has_mounted_disk() in c64-emu/src/wasm.rs
+- [x] T062 [US2] Implement load_prg() for direct memory loading in c64-emu/src/wasm.rs (already implemented earlier)
+- [x] T063 [US2] Implement inject_basic_run() for auto-run after load in c64-emu/src/wasm.rs
 
 ### Web Frontend File Loading
 
@@ -413,13 +413,13 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
 | Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
-| Phase 4: US2 | T051-T066 | 6/16 | Disk image loading |
+| Phase 4: US2 | T051-T066 | 13/16 | Disk image loading |
 | Phase 5: US3 | T067-T091 | 0/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **55/132** | |
+| **Total** | **132 tasks** | **62/132** | |
 
 ---
 

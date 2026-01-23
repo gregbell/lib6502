@@ -3,6 +3,7 @@
 //! This module provides the top-level `C64System` struct that coordinates
 //! CPU execution, VIC-II rendering, SID audio, and CIA timing.
 
+use super::iec_bus::IecBus;
 use super::C64Memory;
 use lib6502::{Device, MemoryBus, CPU, OPCODE_TABLE};
 
@@ -77,6 +78,9 @@ pub struct C64System {
 
     /// Whether emulation is running.
     running: bool,
+
+    /// IEC bus for disk drive communication.
+    iec_bus: IecBus,
 }
 
 impl C64System {
@@ -92,6 +96,7 @@ impl C64System {
             cycle_in_scanline: 0,
             frame_count: 0,
             running: false,
+            iec_bus: IecBus::new(),
         }
     }
 
@@ -132,6 +137,8 @@ impl C64System {
     /// Reset the C64 to power-on state.
     pub fn reset(&mut self) {
         self.cpu.memory_mut().reset();
+        // Reset IEC bus (but keep mounted disk)
+        self.iec_bus.reset();
         // Reinitialize CPU by reading reset vector
         // lib6502 CPU doesn't have a reset() method, so we manually reset state
         let pc_low = self.cpu.memory_mut().read(0xFFFC) as u16;
@@ -515,6 +522,98 @@ impl C64System {
     pub fn pc(&self) -> u16 {
         self.cpu.pc()
     }
+
+    // =========================================================================
+    // Disk Drive API (T057-T059)
+    // =========================================================================
+
+    /// Get a reference to the IEC bus.
+    pub fn iec_bus(&self) -> &IecBus {
+        &self.iec_bus
+    }
+
+    /// Get a mutable reference to the IEC bus.
+    pub fn iec_bus_mut(&mut self) -> &mut IecBus {
+        &mut self.iec_bus
+    }
+
+    /// Mount a D64 disk image in drive 8.
+    ///
+    /// # Arguments
+    /// * `data` - Raw D64 file data (174,848 or 175,531 bytes)
+    ///
+    /// # Returns
+    /// `Ok(())` if mounted successfully, `Err` with error message otherwise.
+    pub fn mount_d64(&mut self, data: Vec<u8>) -> Result<(), String> {
+        self.iec_bus.drive_mut().mount(data).map_err(|e| e.to_string())
+    }
+
+    /// Unmount the current disk image.
+    pub fn unmount_d64(&mut self) {
+        self.iec_bus.drive_mut().unmount();
+    }
+
+    /// Check if a disk is mounted.
+    pub fn has_mounted_disk(&self) -> bool {
+        self.iec_bus.has_disk()
+    }
+
+    /// Get the disk name (if a disk is mounted).
+    pub fn disk_name(&self) -> Option<String> {
+        self.iec_bus.drive().image().and_then(|img| img.disk_name().ok())
+    }
+
+    /// Inject "RUN" command into the keyboard buffer.
+    ///
+    /// This simulates typing "RUN" followed by RETURN, which is useful
+    /// after loading a BASIC program to auto-execute it.
+    pub fn inject_basic_run(&mut self) {
+        // KERNAL keyboard buffer is at $0277-$0280 (10 bytes)
+        // Buffer length is at $C6
+        let mem = self.cpu.memory_mut();
+
+        // "RUN" + RETURN
+        let run_cmd = [0x52, 0x55, 0x4E, 0x0D]; // R, U, N, CR
+
+        for (i, &byte) in run_cmd.iter().enumerate() {
+            mem.write(0x0277 + i as u16, byte);
+        }
+
+        // Set buffer length
+        mem.write(0x00C6, run_cmd.len() as u8);
+    }
+
+    /// Inject a string into the keyboard buffer.
+    ///
+    /// This simulates typing the given string. Maximum 10 characters.
+    /// Characters are converted from ASCII to PETSCII.
+    pub fn inject_keys(&mut self, text: &str) {
+        let mem = self.cpu.memory_mut();
+        let bytes: Vec<u8> = text.bytes()
+            .take(10)  // Max 10 characters in buffer
+            .map(|b| ascii_to_petscii(b))
+            .collect();
+
+        for (i, &byte) in bytes.iter().enumerate() {
+            mem.write(0x0277 + i as u16, byte);
+        }
+
+        mem.write(0x00C6, bytes.len() as u8);
+    }
+}
+
+/// Convert ASCII character to PETSCII.
+fn ascii_to_petscii(c: u8) -> u8 {
+    match c {
+        // Lowercase letters → uppercase PETSCII
+        b'a'..=b'z' => c - 32,
+        // Uppercase letters stay the same
+        b'A'..=b'Z' => c,
+        // CR/LF → CR
+        b'\n' | b'\r' => 0x0D,
+        // Most other ASCII characters are the same
+        _ => c,
+    }
 }
 
 #[cfg(test)]
@@ -564,5 +663,52 @@ mod tests {
 
         c64.resume();
         assert!(c64.is_running());
+    }
+
+    #[test]
+    fn test_iec_bus_integration() {
+        let c64 = C64System::new(Region::PAL);
+        assert!(!c64.has_mounted_disk());
+
+        // IEC bus should be initialized with device 8
+        assert_eq!(c64.iec_bus().drive().device_number(), 8);
+    }
+
+    #[test]
+    fn test_inject_keys() {
+        let mut c64 = C64System::new(Region::PAL);
+
+        c64.inject_keys("TEST");
+
+        // Check keyboard buffer
+        assert_eq!(c64.peek(0x0277), b'T');
+        assert_eq!(c64.peek(0x0278), b'E');
+        assert_eq!(c64.peek(0x0279), b'S');
+        assert_eq!(c64.peek(0x027A), b'T');
+        assert_eq!(c64.peek(0x00C6), 4); // Buffer length
+    }
+
+    #[test]
+    fn test_inject_basic_run() {
+        let mut c64 = C64System::new(Region::PAL);
+
+        c64.inject_basic_run();
+
+        // Check for "RUN" + CR in buffer
+        assert_eq!(c64.peek(0x0277), 0x52); // R
+        assert_eq!(c64.peek(0x0278), 0x55); // U
+        assert_eq!(c64.peek(0x0279), 0x4E); // N
+        assert_eq!(c64.peek(0x027A), 0x0D); // CR
+        assert_eq!(c64.peek(0x00C6), 4);    // Buffer length
+    }
+
+    #[test]
+    fn test_ascii_to_petscii() {
+        assert_eq!(ascii_to_petscii(b'A'), b'A');
+        assert_eq!(ascii_to_petscii(b'Z'), b'Z');
+        assert_eq!(ascii_to_petscii(b'a'), b'A');
+        assert_eq!(ascii_to_petscii(b'z'), b'Z');
+        assert_eq!(ascii_to_petscii(b'\n'), 0x0D);
+        assert_eq!(ascii_to_petscii(b'1'), b'1');
     }
 }
