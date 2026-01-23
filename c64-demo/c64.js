@@ -2380,8 +2380,8 @@ class C64App {
         if (code === mappings.port1.fire) return { port: 1, bit: JOY_FIRE };
 
         // Also support secondary fire keys that are hard-coded for convenience
-        if (code === 'ControlRight' || code === 'Numpad0') return { port: 2, bit: JOY_FIRE };
-        if (code === 'ShiftLeft') return { port: 1, bit: JOY_FIRE };
+        // NOTE: Only use keys that won't conflict with typing (avoid Shift, Ctrl, common keys)
+        if (code === 'Numpad0') return { port: 2, bit: JOY_FIRE };
 
         return null;
     }
