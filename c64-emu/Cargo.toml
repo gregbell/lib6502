@@ -29,5 +29,5 @@ web-sys = { version = "0.3", optional = true, features = ["console"] }
 # Use standard Rust test framework
 
 [features]
-default = []
+default = ["wasm"]
 wasm = ["wasm-bindgen", "js-sys", "web-sys", "lib6502/wasm"]
