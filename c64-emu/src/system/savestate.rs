@@ -662,12 +662,8 @@ impl SaveState {
         // SID global
         let sid_volume = data[pos];
         pos += 1;
-        let sid_sample_accumulator = f32::from_le_bytes([
-            data[pos],
-            data[pos + 1],
-            data[pos + 2],
-            data[pos + 3],
-        ]);
+        let sid_sample_accumulator =
+            f32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
         pos += 4;
         let sid_audio_enabled = data[pos] != 0;
         pos += 1;
@@ -893,23 +889,14 @@ impl SaveState {
         *pos += 1;
         let sustain_release = data[*pos];
         *pos += 1;
-        let accumulator = u32::from_le_bytes([
-            data[*pos],
-            data[*pos + 1],
-            data[*pos + 2],
-            data[*pos + 3],
-        ]);
+        let accumulator =
+            u32::from_le_bytes([data[*pos], data[*pos + 1], data[*pos + 2], data[*pos + 3]]);
         *pos += 4;
         let prev_msb = data[*pos] != 0;
         *pos += 1;
         let prev_bit19 = data[*pos] != 0;
         *pos += 1;
-        let lfsr = u32::from_le_bytes([
-            data[*pos],
-            data[*pos + 1],
-            data[*pos + 2],
-            data[*pos + 3],
-        ]);
+        let lfsr = u32::from_le_bytes([data[*pos], data[*pos + 1], data[*pos + 2], data[*pos + 3]]);
         *pos += 4;
         let envelope_state = data[*pos];
         *pos += 1;
@@ -983,19 +970,9 @@ impl SaveState {
         *pos += 1;
         let mode_bits = data[*pos];
         *pos += 1;
-        let low = f32::from_le_bytes([
-            data[*pos],
-            data[*pos + 1],
-            data[*pos + 2],
-            data[*pos + 3],
-        ]);
+        let low = f32::from_le_bytes([data[*pos], data[*pos + 1], data[*pos + 2], data[*pos + 3]]);
         *pos += 4;
-        let band = f32::from_le_bytes([
-            data[*pos],
-            data[*pos + 1],
-            data[*pos + 2],
-            data[*pos + 3],
-        ]);
+        let band = f32::from_le_bytes([data[*pos], data[*pos + 1], data[*pos + 2], data[*pos + 3]]);
         *pos += 4;
 
         Ok(SidFilterState {
@@ -1083,7 +1060,11 @@ impl SaveState {
         cia.tod.alarm_hours = state.tod_alarm_hours;
         cia.tod.stopped = state.tod_stopped;
         cia.tod.latched = state.tod_latched;
-        cia.set_tod_latch(state.tod_latch_tenths, state.tod_latch_seconds, state.tod_latch_minutes);
+        cia.set_tod_latch(
+            state.tod_latch_tenths,
+            state.tod_latch_seconds,
+            state.tod_latch_minutes,
+        );
 
         cia.sdr = state.sdr;
         cia.set_interrupt_flags(state.interrupt_flags);

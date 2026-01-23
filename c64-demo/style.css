@@ -848,6 +848,108 @@ footer a:hover {
 .setting-row label {
     color: var(--text-secondary);
     font-size: 13px;
+    flex: 1;
+}
+
+/* Settings panel enhancements */
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-header h2 {
+    font-size: 18px;
+    color: var(--accent-primary);
+    margin: 0;
+}
+
+.settings-header .btn {
+    padding: 4px 10px;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.settings-description {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-bottom: 12px;
+    font-style: italic;
+}
+
+.joystick-mapping-group {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.joystick-mapping-group h4 {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin: 0 0 10px 0;
+    font-weight: 500;
+}
+
+.key-remap-btn {
+    min-width: 100px;
+    padding: 6px 12px;
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.key-remap-btn:hover {
+    border-color: var(--accent-primary);
+    background: rgba(108, 94, 181, 0.1);
+}
+
+.key-remap-btn.listening {
+    border-color: var(--c64-yellow);
+    background: rgba(184, 199, 111, 0.2);
+    color: var(--c64-yellow);
+    animation: pulse-border 0.8s infinite;
+}
+
+@keyframes pulse-border {
+    0%, 100% { border-color: var(--c64-yellow); }
+    50% { border-color: var(--border); }
+}
+
+/* Volume slider in settings */
+#settings-volume {
+    width: 100px;
+}
+
+#settings-volume-value {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 40px;
+    text-align: right;
+}
+
+/* Checkbox styling */
+.control-group input[type="checkbox"],
+.setting-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
+}
+
+.control-group label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
 }
 
 /* ============================================

@@ -85,6 +85,13 @@
                     </select>
                 </div>
 
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="scanlines-checkbox">
+                        Scanlines
+                    </label>
+                </div>
+
                 <div class="control-group joystick-controls">
                     <button id="joystick-swap-btn" class="btn btn-secondary" title="Swap joystick ports (for games that use port 1)">Ports: Normal</button>
                     <span id="gamepad-indicator" class="gamepad-indicator" style="display: none;" title="Gamepad connected">🎮</span>
@@ -94,6 +101,10 @@
                     <button id="save-state-btn" class="btn btn-secondary" title="Download save state file">Save State</button>
                     <button id="load-state-btn" class="btn btn-secondary" title="Load save state file">Load State</button>
                     <input type="file" id="load-state-file" accept=".c64state,.sav" style="display: none;">
+                </div>
+
+                <div class="control-group">
+                    <button id="settings-btn" class="btn btn-secondary" title="Open settings panel">Settings</button>
                 </div>
             </div>
 
@@ -185,6 +196,119 @@
                 </div>
             </details>
         </section>
+
+        <!-- Settings Panel (slide-out) -->
+        <div id="settings-overlay" class="settings-overlay"></div>
+        <div id="settings-panel" class="settings-panel">
+            <div class="settings-header">
+                <h2>Settings</h2>
+                <button id="settings-close-btn" class="btn btn-secondary" title="Close settings">&times;</button>
+            </div>
+
+            <div class="settings-section">
+                <h3>Video</h3>
+                <div class="setting-row">
+                    <label for="settings-scale">Display Scale</label>
+                    <select id="settings-scale">
+                        <option value="1">1x (320×200)</option>
+                        <option value="2">2x (640×400)</option>
+                        <option value="3">3x (960×600)</option>
+                        <option value="fit">Fit to Window</option>
+                    </select>
+                </div>
+                <div class="setting-row">
+                    <label for="settings-scanlines">CRT Scanlines</label>
+                    <input type="checkbox" id="settings-scanlines">
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Audio</h3>
+                <div class="setting-row">
+                    <label for="settings-volume">Volume</label>
+                    <input type="range" id="settings-volume" min="0" max="100" value="50">
+                    <span id="settings-volume-value">50%</span>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Emulation</h3>
+                <div class="setting-row">
+                    <label for="settings-region">Region</label>
+                    <select id="settings-region">
+                        <option value="pal">PAL (50Hz, European)</option>
+                        <option value="ntsc">NTSC (60Hz, American)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Joystick Key Mapping</h3>
+                <p class="settings-description">Click a key field and press the desired key to remap.</p>
+
+                <div class="joystick-mapping-group">
+                    <h4>Joystick 2 (Primary)</h4>
+                    <div class="setting-row">
+                        <label>Up</label>
+                        <button class="key-remap-btn" data-port="2" data-action="up">Arrow Up</button>
+                    </div>
+                    <div class="setting-row">
+                        <label>Down</label>
+                        <button class="key-remap-btn" data-port="2" data-action="down">Arrow Down</button>
+                    </div>
+                    <div class="setting-row">
+                        <label>Left</label>
+                        <button class="key-remap-btn" data-port="2" data-action="left">Arrow Left</button>
+                    </div>
+                    <div class="setting-row">
+                        <label>Right</label>
+                        <button class="key-remap-btn" data-port="2" data-action="right">Arrow Right</button>
+                    </div>
+                    <div class="setting-row">
+                        <label>Fire</label>
+                        <button class="key-remap-btn" data-port="2" data-action="fire">Space</button>
+                    </div>
+                </div>
+
+                <div class="joystick-mapping-group">
+                    <h4>Joystick 1 (Secondary)</h4>
+                    <div class="setting-row">
+                        <label>Up</label>
+                        <button class="key-remap-btn" data-port="1" data-action="up">W</button>
+                    </div>
+                    <div class="setting-row">
+                        <label>Down</label>
+                        <button class="key-remap-btn" data-port="1" data-action="down">S</button>
+                    </div>
+                    <div class="setting-row">
+                        <label>Left</label>
+                        <button class="key-remap-btn" data-port="1" data-action="left">A</button>
+                    </div>
+                    <div class="setting-row">
+                        <label>Right</label>
+                        <button class="key-remap-btn" data-port="1" data-action="right">D</button>
+                    </div>
+                    <div class="setting-row">
+                        <label>Fire</label>
+                        <button class="key-remap-btn" data-port="1" data-action="fire">Left Ctrl</button>
+                    </div>
+                </div>
+
+                <button id="reset-keybindings-btn" class="btn btn-warning">Reset to Defaults</button>
+            </div>
+
+            <div class="settings-section">
+                <h3>Storage</h3>
+                <div class="setting-row">
+                    <label>Clear cached ROMs</label>
+                    <button id="clear-roms-btn" class="btn btn-danger">Clear ROMs</button>
+                </div>
+                <div class="setting-row">
+                    <label>Reset all settings</label>
+                    <button id="reset-settings-btn" class="btn btn-danger">Reset All</button>
+                </div>
+            </div>
+        </div>
     </main>
 
     <footer>

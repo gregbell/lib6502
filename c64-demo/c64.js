@@ -44,6 +44,33 @@ const ROM_STORAGE_KEYS = {
 const SAVE_SLOT_PREFIX = 'c64_savestate_slot_';
 const SAVE_SLOT_COUNT = 4;
 
+// LocalStorage key for settings
+const SETTINGS_STORAGE_KEY = 'c64_settings';
+
+// Default settings
+const DEFAULT_SETTINGS = {
+    scale: '2',
+    scanlines: false,
+    volume: 50,
+    region: 'pal',
+    joystickMappings: {
+        port1: {
+            up: 'KeyW',
+            down: 'KeyS',
+            left: 'KeyA',
+            right: 'KeyD',
+            fire: 'ControlLeft'
+        },
+        port2: {
+            up: 'ArrowUp',
+            down: 'ArrowDown',
+            left: 'ArrowLeft',
+            right: 'ArrowRight',
+            fire: 'Space'
+        }
+    }
+};
+
 /**
  * Main C64 Emulator Application
  */
@@ -104,6 +131,12 @@ class C64App {
         this.gamepadConnected = false;
         this.gamepadIndex = null;
         this.gamepadPollingId = null;
+
+        // Settings (T112-T118)
+        this.settings = { ...DEFAULT_SETTINGS };
+        this.scanlines = false;
+        this.settingsPanelOpen = false;
+        this.listeningForKey = null; // For joystick remapping
     }
 
     /**
@@ -113,6 +146,9 @@ class C64App {
         console.log('C64 Emulator initializing...');
 
         try {
+            // Load saved settings first
+            this.loadSettings();
+
             // Load WASM module
             await this.loadWasm();
 
@@ -124,6 +160,9 @@ class C64App {
 
             // Initialize joystick/gamepad support
             this.initJoystick();
+
+            // Apply loaded settings to UI
+            this.applySettingsToUI();
 
             // Check for cached ROMs
             await this.loadCachedRoms();
@@ -251,6 +290,14 @@ class C64App {
             });
         }
 
+        // Scanlines checkbox
+        const scanlinesCheckbox = document.getElementById('scanlines-checkbox');
+        if (scanlinesCheckbox) {
+            scanlinesCheckbox.addEventListener('change', (e) => {
+                this.setScanlines(e.target.checked);
+            });
+        }
+
         // Joystick swap button
         const joystickSwapBtn = document.getElementById('joystick-swap-btn');
         if (joystickSwapBtn) {
@@ -314,6 +361,9 @@ class C64App {
 
         // Save state controls (T109-T111)
         this.setupSaveStateHandlers();
+
+        // Settings panel controls (T112-T118)
+        this.setupSettingsHandlers();
     }
 
     /**
@@ -704,22 +754,6 @@ class C64App {
     }
 
     /**
-     * Set audio volume (0.0 to 1.0)
-     */
-    setVolume(volume) {
-        this.volume = Math.max(0, Math.min(1, volume));
-
-        if (this.audioWorkletNode) {
-            this.audioWorkletNode.port.postMessage({
-                type: 'volume',
-                value: this.volume
-            });
-        }
-
-        console.log(`Volume set to ${Math.round(this.volume * 100)}%`);
-    }
-
-    /**
      * Set audio mute state
      */
     setMute(muted) {
@@ -771,35 +805,6 @@ class C64App {
         this.checkForGamepads();
 
         console.log('Joystick system initialized');
-    }
-
-    /**
-     * Map keyboard key code to joystick action.
-     * Returns { port: 1|2, bit: JOY_* } or null if not a joystick key.
-     */
-    mapKeyToJoystick(code) {
-        // Default mapping: Arrow keys + Right Ctrl/Space for joystick 2
-        // WASD + Left Ctrl for joystick 1 (alternative)
-        const keyMap = {
-            // Joystick 2 (default for most games)
-            'ArrowUp': { port: 2, bit: JOY_UP },
-            'ArrowDown': { port: 2, bit: JOY_DOWN },
-            'ArrowLeft': { port: 2, bit: JOY_LEFT },
-            'ArrowRight': { port: 2, bit: JOY_RIGHT },
-            'ControlRight': { port: 2, bit: JOY_FIRE },
-            'Space': { port: 2, bit: JOY_FIRE },
-            'Numpad0': { port: 2, bit: JOY_FIRE },
-
-            // Joystick 1 (alternative controls)
-            'KeyW': { port: 1, bit: JOY_UP },
-            'KeyS': { port: 1, bit: JOY_DOWN },
-            'KeyA': { port: 1, bit: JOY_LEFT },
-            'KeyD': { port: 1, bit: JOY_RIGHT },
-            'ControlLeft': { port: 1, bit: JOY_FIRE },
-            'ShiftLeft': { port: 1, bit: JOY_FIRE },
-        };
-
-        return keyMap[code] || null;
     }
 
     /**
@@ -1220,31 +1225,6 @@ class C64App {
         this.setMute(!this.audioEnabled);
 
         console.log(this.audioEnabled ? 'Audio enabled' : 'Audio muted');
-    }
-
-    /**
-     * Set video region (PAL/NTSC)
-     */
-    setRegion(region) {
-        this.region = region;
-        // Region change would require recreating emulator with new settings
-        // For now, just store the preference
-        console.log(`Region set to: ${region.toUpperCase()}`);
-    }
-
-    /**
-     * Set display scale
-     */
-    setScale(scale) {
-        this.scale = scale;
-        const displayEl = document.getElementById('c64-display');
-        if (displayEl) {
-            // Remove existing scale classes
-            displayEl.classList.remove('scale-1x', 'scale-2x', 'scale-3x', 'scale-fit');
-            // Add new scale class
-            displayEl.classList.add(`scale-${scale}x`);
-        }
-        console.log(`Display scale set to: ${scale}`);
     }
 
     /**
@@ -1759,6 +1739,519 @@ class C64App {
             }
         }
     }
+
+    // =========================================================================
+    // Settings System (T112-T118)
+    // =========================================================================
+
+    /**
+     * Set up settings panel event handlers (T112-T118)
+     */
+    setupSettingsHandlers() {
+        // Settings button opens panel
+        const settingsBtn = document.getElementById('settings-btn');
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', () => this.openSettingsPanel());
+        }
+
+        // Close button and overlay close panel
+        const closeBtn = document.getElementById('settings-close-btn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.closeSettingsPanel());
+        }
+
+        const overlay = document.getElementById('settings-overlay');
+        if (overlay) {
+            overlay.addEventListener('click', () => this.closeSettingsPanel());
+        }
+
+        // Settings panel scale select (mirrors main control)
+        const settingsScale = document.getElementById('settings-scale');
+        if (settingsScale) {
+            settingsScale.addEventListener('change', (e) => {
+                this.setScale(e.target.value);
+                // Sync main control bar select
+                const mainSelect = document.getElementById('scale-select');
+                if (mainSelect) mainSelect.value = e.target.value;
+            });
+        }
+
+        // Settings panel scanlines checkbox (mirrors main control)
+        const settingsScanlines = document.getElementById('settings-scanlines');
+        if (settingsScanlines) {
+            settingsScanlines.addEventListener('change', (e) => {
+                this.setScanlines(e.target.checked);
+                // Sync main control bar checkbox
+                const mainCheckbox = document.getElementById('scanlines-checkbox');
+                if (mainCheckbox) mainCheckbox.checked = e.target.checked;
+            });
+        }
+
+        // Settings panel volume slider (mirrors main control)
+        const settingsVolume = document.getElementById('settings-volume');
+        const volumeValue = document.getElementById('settings-volume-value');
+        if (settingsVolume) {
+            settingsVolume.addEventListener('input', (e) => {
+                this.setVolume(e.target.value / 100);
+                if (volumeValue) volumeValue.textContent = `${e.target.value}%`;
+                // Sync main control bar slider
+                const mainSlider = document.getElementById('volume-slider');
+                if (mainSlider) mainSlider.value = e.target.value;
+            });
+        }
+
+        // Settings panel region select (mirrors main control)
+        const settingsRegion = document.getElementById('settings-region');
+        if (settingsRegion) {
+            settingsRegion.addEventListener('change', (e) => {
+                this.setRegion(e.target.value);
+                // Sync main control bar select
+                const mainSelect = document.getElementById('region-select');
+                if (mainSelect) mainSelect.value = e.target.value;
+            });
+        }
+
+        // Joystick key remapping buttons (T116)
+        document.querySelectorAll('.key-remap-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.startKeyRemapping(e.target));
+        });
+
+        // Reset key bindings button
+        const resetKeybindingsBtn = document.getElementById('reset-keybindings-btn');
+        if (resetKeybindingsBtn) {
+            resetKeybindingsBtn.addEventListener('click', () => this.resetJoystickMappings());
+        }
+
+        // Clear ROMs button
+        const clearRomsBtn = document.getElementById('clear-roms-btn');
+        if (clearRomsBtn) {
+            clearRomsBtn.addEventListener('click', () => this.clearCachedRoms());
+        }
+
+        // Reset all settings button
+        const resetSettingsBtn = document.getElementById('reset-settings-btn');
+        if (resetSettingsBtn) {
+            resetSettingsBtn.addEventListener('click', () => this.resetAllSettings());
+        }
+
+        // Listen for key presses when remapping
+        document.addEventListener('keydown', (e) => {
+            if (this.listeningForKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.completeKeyRemapping(e.code);
+            }
+        });
+    }
+
+    /**
+     * Open the settings panel
+     */
+    openSettingsPanel() {
+        const panel = document.getElementById('settings-panel');
+        const overlay = document.getElementById('settings-overlay');
+
+        if (panel) panel.classList.add('open');
+        if (overlay) overlay.classList.add('open');
+
+        this.settingsPanelOpen = true;
+
+        // Sync settings panel with current state
+        this.syncSettingsPanel();
+    }
+
+    /**
+     * Close the settings panel
+     */
+    closeSettingsPanel() {
+        const panel = document.getElementById('settings-panel');
+        const overlay = document.getElementById('settings-overlay');
+
+        if (panel) panel.classList.remove('open');
+        if (overlay) overlay.classList.remove('open');
+
+        this.settingsPanelOpen = false;
+
+        // Cancel any key remapping in progress
+        if (this.listeningForKey) {
+            this.cancelKeyRemapping();
+        }
+    }
+
+    /**
+     * Sync settings panel controls with current settings
+     */
+    syncSettingsPanel() {
+        // Scale
+        const settingsScale = document.getElementById('settings-scale');
+        if (settingsScale) settingsScale.value = this.settings.scale;
+
+        // Scanlines
+        const settingsScanlines = document.getElementById('settings-scanlines');
+        if (settingsScanlines) settingsScanlines.checked = this.settings.scanlines;
+
+        // Volume
+        const settingsVolume = document.getElementById('settings-volume');
+        const volumeValue = document.getElementById('settings-volume-value');
+        if (settingsVolume) settingsVolume.value = this.settings.volume;
+        if (volumeValue) volumeValue.textContent = `${this.settings.volume}%`;
+
+        // Region
+        const settingsRegion = document.getElementById('settings-region');
+        if (settingsRegion) settingsRegion.value = this.settings.region;
+
+        // Update joystick mapping button labels
+        this.updateJoystickMappingUI();
+    }
+
+    /**
+     * Set scanline effect on/off (T114)
+     */
+    setScanlines(enabled) {
+        this.scanlines = enabled;
+        this.settings.scanlines = enabled;
+
+        const displayEl = document.getElementById('c64-display');
+        if (displayEl) {
+            if (enabled) {
+                displayEl.classList.add('scanlines');
+            } else {
+                displayEl.classList.remove('scanlines');
+            }
+        }
+
+        this.saveSettings();
+        console.log(`Scanlines ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+    /**
+     * Override setScale to persist settings (T118)
+     */
+    setScale(scale) {
+        this.scale = scale;
+        this.settings.scale = scale;
+
+        const displayEl = document.getElementById('c64-display');
+        if (displayEl) {
+            // Remove existing scale classes
+            displayEl.classList.remove('scale-1x', 'scale-2x', 'scale-3x', 'scale-fit');
+            // Add new scale class
+            displayEl.classList.add(`scale-${scale}x`);
+        }
+
+        this.saveSettings();
+        console.log(`Display scale set to: ${scale}`);
+    }
+
+    /**
+     * Override setVolume to persist settings (T118)
+     */
+    setVolume(volume) {
+        this.volume = Math.max(0, Math.min(1, volume));
+        this.settings.volume = Math.round(this.volume * 100);
+
+        if (this.audioWorkletNode) {
+            this.audioWorkletNode.port.postMessage({
+                type: 'volume',
+                value: this.volume
+            });
+        }
+
+        this.saveSettings();
+        console.log(`Volume set to ${Math.round(this.volume * 100)}%`);
+    }
+
+    /**
+     * Override setRegion to persist settings (T118)
+     */
+    setRegion(region) {
+        this.region = region;
+        this.settings.region = region;
+        this.saveSettings();
+        console.log(`Region set to: ${region.toUpperCase()}`);
+    }
+
+    // =========================================================================
+    // Joystick Key Remapping (T116)
+    // =========================================================================
+
+    /**
+     * Start listening for a key to remap
+     */
+    startKeyRemapping(button) {
+        // Cancel any existing remapping
+        if (this.listeningForKey) {
+            this.cancelKeyRemapping();
+        }
+
+        this.listeningForKey = button;
+        button.classList.add('listening');
+        button.textContent = 'Press a key...';
+    }
+
+    /**
+     * Complete the key remapping with the pressed key
+     */
+    completeKeyRemapping(keyCode) {
+        if (!this.listeningForKey) return;
+
+        const button = this.listeningForKey;
+        const port = button.dataset.port;
+        const action = button.dataset.action;
+
+        // Update settings
+        const portKey = `port${port}`;
+        this.settings.joystickMappings[portKey][action] = keyCode;
+
+        // Update button label
+        button.textContent = this.getKeyDisplayName(keyCode);
+        button.classList.remove('listening');
+
+        this.listeningForKey = null;
+
+        // Rebuild the key mapping
+        this.rebuildJoystickKeyMap();
+
+        this.saveSettings();
+        console.log(`Mapped joystick ${port} ${action} to ${keyCode}`);
+    }
+
+    /**
+     * Cancel key remapping
+     */
+    cancelKeyRemapping() {
+        if (!this.listeningForKey) return;
+
+        const button = this.listeningForKey;
+        const port = button.dataset.port;
+        const action = button.dataset.action;
+
+        // Restore original label
+        const portKey = `port${port}`;
+        const currentKey = this.settings.joystickMappings[portKey][action];
+        button.textContent = this.getKeyDisplayName(currentKey);
+        button.classList.remove('listening');
+
+        this.listeningForKey = null;
+    }
+
+    /**
+     * Reset joystick mappings to defaults
+     */
+    resetJoystickMappings() {
+        this.settings.joystickMappings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.joystickMappings));
+        this.rebuildJoystickKeyMap();
+        this.updateJoystickMappingUI();
+        this.saveSettings();
+        console.log('Joystick mappings reset to defaults');
+    }
+
+    /**
+     * Update the joystick mapping UI to show current bindings
+     */
+    updateJoystickMappingUI() {
+        document.querySelectorAll('.key-remap-btn').forEach(btn => {
+            const port = btn.dataset.port;
+            const action = btn.dataset.action;
+            const portKey = `port${port}`;
+            const keyCode = this.settings.joystickMappings[portKey][action];
+            btn.textContent = this.getKeyDisplayName(keyCode);
+        });
+    }
+
+    /**
+     * Rebuild the joystick key map from settings
+     */
+    rebuildJoystickKeyMap() {
+        // The mapKeyToJoystick function will use this.settings.joystickMappings
+        // No additional action needed as mapKeyToJoystick is called dynamically
+    }
+
+    /**
+     * Override mapKeyToJoystick to use custom mappings (T116)
+     */
+    mapKeyToJoystick(code) {
+        const mappings = this.settings.joystickMappings;
+
+        // Check joystick 2 mappings
+        if (code === mappings.port2.up) return { port: 2, bit: JOY_UP };
+        if (code === mappings.port2.down) return { port: 2, bit: JOY_DOWN };
+        if (code === mappings.port2.left) return { port: 2, bit: JOY_LEFT };
+        if (code === mappings.port2.right) return { port: 2, bit: JOY_RIGHT };
+        if (code === mappings.port2.fire) return { port: 2, bit: JOY_FIRE };
+
+        // Check joystick 1 mappings
+        if (code === mappings.port1.up) return { port: 1, bit: JOY_UP };
+        if (code === mappings.port1.down) return { port: 1, bit: JOY_DOWN };
+        if (code === mappings.port1.left) return { port: 1, bit: JOY_LEFT };
+        if (code === mappings.port1.right) return { port: 1, bit: JOY_RIGHT };
+        if (code === mappings.port1.fire) return { port: 1, bit: JOY_FIRE };
+
+        // Also support secondary fire keys that are hard-coded for convenience
+        if (code === 'ControlRight' || code === 'Numpad0') return { port: 2, bit: JOY_FIRE };
+        if (code === 'ShiftLeft') return { port: 1, bit: JOY_FIRE };
+
+        return null;
+    }
+
+    /**
+     * Get a human-readable name for a key code
+     */
+    getKeyDisplayName(code) {
+        const keyNames = {
+            'ArrowUp': 'Arrow Up',
+            'ArrowDown': 'Arrow Down',
+            'ArrowLeft': 'Arrow Left',
+            'ArrowRight': 'Arrow Right',
+            'Space': 'Space',
+            'ControlLeft': 'Left Ctrl',
+            'ControlRight': 'Right Ctrl',
+            'ShiftLeft': 'Left Shift',
+            'ShiftRight': 'Right Shift',
+            'AltLeft': 'Left Alt',
+            'AltRight': 'Right Alt',
+            'Numpad0': 'Numpad 0',
+            'Numpad1': 'Numpad 1',
+            'Numpad2': 'Numpad 2',
+            'Numpad3': 'Numpad 3',
+            'Numpad4': 'Numpad 4',
+            'Numpad5': 'Numpad 5',
+            'Numpad6': 'Numpad 6',
+            'Numpad7': 'Numpad 7',
+            'Numpad8': 'Numpad 8',
+            'Numpad9': 'Numpad 9',
+            'Enter': 'Enter',
+            'Tab': 'Tab',
+            'Backspace': 'Backspace',
+            'Escape': 'Escape'
+        };
+
+        // Check if it's in the map
+        if (keyNames[code]) return keyNames[code];
+
+        // Handle letter keys (KeyA -> A)
+        if (code.startsWith('Key')) return code.substring(3);
+
+        // Handle digit keys (Digit1 -> 1)
+        if (code.startsWith('Digit')) return code.substring(5);
+
+        // Default: return the code as-is
+        return code;
+    }
+
+    // =========================================================================
+    // Settings Persistence (T118)
+    // =========================================================================
+
+    /**
+     * Load settings from localStorage
+     */
+    loadSettings() {
+        try {
+            const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Merge with defaults to handle new settings added in updates
+                this.settings = {
+                    ...DEFAULT_SETTINGS,
+                    ...parsed,
+                    joystickMappings: {
+                        ...DEFAULT_SETTINGS.joystickMappings,
+                        ...parsed.joystickMappings
+                    }
+                };
+                console.log('Settings loaded from localStorage');
+            }
+        } catch (error) {
+            console.warn('Failed to load settings:', error);
+            this.settings = { ...DEFAULT_SETTINGS };
+        }
+
+        // Apply loaded settings to instance variables
+        this.scale = this.settings.scale;
+        this.scanlines = this.settings.scanlines;
+        this.volume = this.settings.volume / 100;
+        this.region = this.settings.region;
+    }
+
+    /**
+     * Save settings to localStorage
+     */
+    saveSettings() {
+        try {
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(this.settings));
+        } catch (error) {
+            console.warn('Failed to save settings:', error);
+        }
+    }
+
+    /**
+     * Apply loaded settings to UI elements
+     */
+    applySettingsToUI() {
+        // Scale select
+        const scaleSelect = document.getElementById('scale-select');
+        if (scaleSelect) scaleSelect.value = this.settings.scale;
+        this.setScale(this.settings.scale);
+
+        // Scanlines checkbox
+        const scanlinesCheckbox = document.getElementById('scanlines-checkbox');
+        if (scanlinesCheckbox) scanlinesCheckbox.checked = this.settings.scanlines;
+        if (this.settings.scanlines) {
+            const displayEl = document.getElementById('c64-display');
+            if (displayEl) displayEl.classList.add('scanlines');
+        }
+
+        // Volume slider
+        const volumeSlider = document.getElementById('volume-slider');
+        if (volumeSlider) volumeSlider.value = this.settings.volume;
+
+        // Region select
+        const regionSelect = document.getElementById('region-select');
+        if (regionSelect) regionSelect.value = this.settings.region;
+        this.region = this.settings.region;
+    }
+
+    /**
+     * Clear cached ROMs from localStorage
+     */
+    clearCachedRoms() {
+        if (!confirm('Clear cached ROMs? You will need to upload them again.')) {
+            return;
+        }
+
+        for (const key of Object.values(ROM_STORAGE_KEYS)) {
+            localStorage.removeItem(key);
+        }
+
+        // Clear ROM status indicators
+        for (const romType of Object.keys(ROM_STORAGE_KEYS)) {
+            const statusEl = document.getElementById(`${romType}-status`);
+            if (statusEl) {
+                statusEl.textContent = '';
+                statusEl.className = 'rom-status';
+            }
+            this.roms[romType] = null;
+        }
+
+        this.updateStartButton();
+        console.log('Cached ROMs cleared');
+    }
+
+    /**
+     * Reset all settings to defaults
+     */
+    resetAllSettings() {
+        if (!confirm('Reset all settings to defaults?')) {
+            return;
+        }
+
+        this.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+        this.saveSettings();
+        this.applySettingsToUI();
+        this.syncSettingsPanel();
+        console.log('All settings reset to defaults');
+    }
 }
 
 // Initialize the application when the page loads
@@ -1769,4 +2262,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Export for debugging and potential use by components
 window.c64App = app;
-export { C64App, C64_PALETTE, ROM_SIZES, SAVE_SLOT_PREFIX, SAVE_SLOT_COUNT };
+export { C64App, C64_PALETTE, ROM_SIZES, SAVE_SLOT_PREFIX, SAVE_SLOT_COUNT, SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS };

@@ -286,14 +286,17 @@ impl IecBus {
 
         // Determine mode from channel number
         let mode = match self.active_channel {
-            0 => ChannelMode::Read,    // Default read channel
-            1 => ChannelMode::Write,   // Default write channel
+            0 => ChannelMode::Read,     // Default read channel
+            1 => ChannelMode::Write,    // Default write channel
             15 => ChannelMode::Command, // Command channel
-            _ => ChannelMode::Read,    // Other channels default to read
+            _ => ChannelMode::Read,     // Other channels default to read
         };
 
         // Open the file
-        if let Err(_e) = self.drive.open_channel(self.active_channel, &filename, mode) {
+        if let Err(_e) = self
+            .drive
+            .open_channel(self.active_channel, &filename, mode)
+        {
             self.last_status = 0x80; // Error
         } else {
             self.last_status = 0;
@@ -371,7 +374,7 @@ impl IecBus {
 /// Convert PETSCII character to ASCII.
 fn petscii_to_ascii(c: u8) -> char {
     match c {
-        0x00..=0x1F => ' ', // Control characters
+        0x00..=0x1F => ' ',       // Control characters
         0x20..=0x3F => c as char, // Numbers, some punctuation
         0x40 => '@',
         0x41..=0x5A => c as char, // Uppercase letters

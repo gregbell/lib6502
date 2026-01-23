@@ -284,15 +284,15 @@
 
 ### Settings Panel
 
-- [ ] T112 [US6] Create settings panel HTML structure in c64-demo/index.html
-- [ ] T113 [US6] Implement video scaling options (1x, 2x, 3x, fit) in c64-demo/components/screen.js
-- [ ] T114 [US6] Implement scanline CRT effect (CSS or canvas overlay) in c64-demo/components/screen.js
-- [ ] T115 [US6] Implement audio volume slider in c64-demo/components/audio.js
-- [ ] T116 [US6] Implement joystick key remapping UI in c64-demo/components/joystick.js
-- [ ] T117 [US6] Implement PAL/NTSC region toggle in c64-demo/components/controls.js
-- [ ] T118 [US6] Persist settings to localStorage in c64-demo/c64.js
+- [x] T112 [US6] Create settings panel HTML structure in c64-demo/index.html
+- [x] T113 [US6] Implement video scaling options (1x, 2x, 3x, fit) in c64-demo/c64.js
+- [x] T114 [US6] Implement scanline CRT effect (CSS or canvas overlay) in c64-demo/style.css and c64.js
+- [x] T115 [US6] Implement audio volume slider in c64-demo/c64.js
+- [x] T116 [US6] Implement joystick key remapping UI in c64-demo/c64.js
+- [x] T117 [US6] Implement PAL/NTSC region toggle in c64-demo/c64.js
+- [x] T118 [US6] Persist settings to localStorage in c64-demo/c64.js
 
-**Checkpoint**: User Story 6 complete - All customization options functional
+**Checkpoint**: User Story 6 complete - All customization options functional ✓ COMPLETE
 
 ---
 
@@ -417,9 +417,9 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 5: US3 | T067-T091 | 25/25 | Graphics & audio ✓ COMPLETE |
 | Phase 6: US4 | T092-T098 | 7/7 | Joystick controls ✓ COMPLETE |
 | Phase 7: US5 | T099-T111 | 13/13 | Save/load states ✓ COMPLETE |
-| Phase 8: US6 | T112-T118 | 0/7 | Settings |
+| Phase 8: US6 | T112-T118 | 7/7 | Settings ✓ COMPLETE |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **110/132** | |
+| **Total** | **132 tasks** | **117/132** | |
 
 ---
 

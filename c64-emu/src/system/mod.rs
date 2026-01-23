@@ -17,4 +17,6 @@ pub use disk_1541::{ChannelMode, D64Error, D64Image, Drive1541, DriveChannel, Dr
 pub use iec_bus::{IecBus, IecState};
 pub use joystick::{bits as joystick_bits, JoystickPorts, JoystickState};
 pub use keyboard::{keys, map_pc_keycode, KeyMapping, Keyboard};
-pub use savestate::{CiaState, SaveState, SidFilterState, SidVoiceState, SAVESTATE_MAGIC, SAVESTATE_VERSION};
+pub use savestate::{
+    CiaState, SaveState, SidFilterState, SidVoiceState, SAVESTATE_MAGIC, SAVESTATE_VERSION,
+};

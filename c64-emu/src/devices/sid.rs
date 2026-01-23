@@ -70,7 +70,6 @@ pub const DECAY_RELEASE_RATE_PERIODS: [u16; 16] = [
     31251, // 15: 24 s
 ];
 
-
 /// Envelope state machine phases.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvelopeState {
@@ -450,7 +449,6 @@ impl FilterMode {
         self.low_pass || self.band_pass || self.high_pass
     }
 }
-
 
 /// SID filter state.
 ///
@@ -916,9 +914,7 @@ impl Sid6581 {
                 EnvelopeState::Attack => ATTACK_RATE_PERIODS[voice.attack_rate() as usize],
                 EnvelopeState::Decay => DECAY_RELEASE_RATE_PERIODS[voice.decay_rate() as usize],
                 EnvelopeState::Sustain => 0, // No rate period needed for sustain
-                EnvelopeState::Release => {
-                    DECAY_RELEASE_RATE_PERIODS[voice.release_rate() as usize]
-                }
+                EnvelopeState::Release => DECAY_RELEASE_RATE_PERIODS[voice.release_rate() as usize],
             };
 
             // Check if it's time to update the envelope
@@ -2435,7 +2431,10 @@ mod tests {
         // Read from ENV3 register ($D41C = offset 0x1C)
         let readback = sid.read(0x1C);
 
-        assert_eq!(readback, 0xAB, "ENV3 readback should match envelope counter");
+        assert_eq!(
+            readback, 0xAB,
+            "ENV3 readback should match envelope counter"
+        );
     }
 
     #[test]
@@ -2688,7 +2687,10 @@ mod tests {
 
         // The output should reflect the low-pass state
         let output = filter.process(1.0, sample_rate);
-        assert!(output != 0.0, "LP filter should produce output after warmup");
+        assert!(
+            output != 0.0,
+            "LP filter should produce output after warmup"
+        );
     }
 
     #[test]
