@@ -84,6 +84,11 @@
                         <option value="fit">Fit</option>
                     </select>
                 </div>
+
+                <div class="control-group joystick-controls">
+                    <button id="joystick-swap-btn" class="btn btn-secondary" title="Swap joystick ports (for games that use port 1)">Ports: Normal</button>
+                    <span id="gamepad-indicator" class="gamepad-indicator" style="display: none;" title="Gamepad connected">🎮</span>
+                </div>
             </div>
 
             <!-- File Loading Section -->
@@ -110,6 +115,7 @@
             <details class="keyboard-help">
                 <summary>Keyboard Reference</summary>
                 <div class="keyboard-help-content">
+                    <h4>Special Keys</h4>
                     <table class="key-map-table">
                         <thead>
                             <tr>
@@ -124,11 +130,28 @@
                             <tr><td>Home</td><td>CLR/HOME</td></tr>
                             <tr><td>PageUp</td><td>RESTORE (NMI)</td></tr>
                             <tr><td>F1-F8</td><td>F1-F8</td></tr>
-                            <tr><td>Arrow Keys</td><td>Joystick (Port 2)</td></tr>
-                            <tr><td>Right Ctrl</td><td>Fire (Port 2)</td></tr>
                             <tr><td>Left Alt</td><td>Commodore Key</td></tr>
                         </tbody>
                     </table>
+
+                    <h4>Joystick Controls</h4>
+                    <table class="key-map-table">
+                        <thead>
+                            <tr>
+                                <th>Input</th>
+                                <th>Joystick 2 (Default)</th>
+                                <th>Joystick 1</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Up</td><td>Arrow Up</td><td>W</td></tr>
+                            <tr><td>Down</td><td>Arrow Down</td><td>S</td></tr>
+                            <tr><td>Left</td><td>Arrow Left</td><td>A</td></tr>
+                            <tr><td>Right</td><td>Arrow Right</td><td>D</td></tr>
+                            <tr><td>Fire</td><td>Right Ctrl / Space / Numpad 0</td><td>Left Ctrl / Left Shift</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="help-note">USB/Bluetooth gamepads are automatically detected and control Joystick 2.</p>
                 </div>
             </details>
         </section>

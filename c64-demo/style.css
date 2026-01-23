@@ -452,6 +452,31 @@ main {
 }
 
 /* ============================================
+   Joystick Controls
+   ============================================ */
+.joystick-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.joystick-controls .btn.active {
+    background: rgba(88, 141, 67, 0.2);
+    color: var(--c64-green);
+    border-color: var(--c64-green);
+}
+
+.gamepad-indicator {
+    font-size: 18px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ============================================
    File Loading Section
    ============================================ */
 .file-section {
@@ -626,6 +651,24 @@ main {
 .key-map-table td:first-child {
     color: var(--accent-primary);
     font-weight: 500;
+}
+
+.keyboard-help-content h4 {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.keyboard-help-content h4:not(:first-child) {
+    margin-top: 20px;
+}
+
+.help-note {
+    margin: 12px 0 0 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.8;
 }
 
 /* ============================================

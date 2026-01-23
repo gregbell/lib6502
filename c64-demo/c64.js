@@ -43,6 +43,13 @@ const ROM_STORAGE_KEYS = {
 /**
  * Main C64 Emulator Application
  */
+// Joystick bit constants (must match WASM exports)
+const JOY_UP = 0x01;
+const JOY_DOWN = 0x02;
+const JOY_LEFT = 0x04;
+const JOY_RIGHT = 0x08;
+const JOY_FIRE = 0x10;
+
 class C64App {
     constructor() {
         // WASM module reference
@@ -83,6 +90,16 @@ class C64App {
         this.audioContext = null;
         this.audioWorkletNode = null;
         this.audioSampleRate = 44100;
+
+        // Joystick state (T092-T098)
+        this.joystickState = {
+            port1: 0, // Physical port 1 state (bitmask)
+            port2: 0, // Physical port 2 state (bitmask)
+        };
+        this.joystickSwapped = false;
+        this.gamepadConnected = false;
+        this.gamepadIndex = null;
+        this.gamepadPollingId = null;
     }
 
     /**
@@ -100,6 +117,9 @@ class C64App {
 
             // Set up UI event handlers
             this.setupEventHandlers();
+
+            // Initialize joystick/gamepad support
+            this.initJoystick();
 
             // Check for cached ROMs
             await this.loadCachedRoms();
@@ -227,6 +247,12 @@ class C64App {
             });
         }
 
+        // Joystick swap button
+        const joystickSwapBtn = document.getElementById('joystick-swap-btn');
+        if (joystickSwapBtn) {
+            joystickSwapBtn.addEventListener('click', () => this.toggleJoystickSwap());
+        }
+
         // Keyboard events
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         document.addEventListener('keyup', (e) => this.handleKeyUp(e));
@@ -234,9 +260,10 @@ class C64App {
         // Tab visibility for auto-pause
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && this.running && !this.paused) {
-                // Release all keys when tab loses focus
+                // Release all keys and joysticks when tab loses focus
                 if (this.emulator) {
                     this.emulator.release_all_keys();
+                    this.releaseAllJoysticks();
                 }
             }
         });
@@ -669,6 +696,287 @@ class C64App {
         console.log('Audio system cleaned up');
     }
 
+    // =========================================================================
+    // Joystick System (T092-T098)
+    // =========================================================================
+
+    /**
+     * Initialize joystick/gamepad support.
+     * Sets up gamepad event listeners and starts polling if needed.
+     */
+    initJoystick() {
+        // Set up gamepad event listeners
+        window.addEventListener('gamepadconnected', (e) => this.handleGamepadConnected(e));
+        window.addEventListener('gamepaddisconnected', (e) => this.handleGamepadDisconnected(e));
+
+        // Check for already-connected gamepads (some browsers don't fire events)
+        this.checkForGamepads();
+
+        console.log('Joystick system initialized');
+    }
+
+    /**
+     * Map keyboard key code to joystick action.
+     * Returns { port: 1|2, bit: JOY_* } or null if not a joystick key.
+     */
+    mapKeyToJoystick(code) {
+        // Default mapping: Arrow keys + Right Ctrl/Space for joystick 2
+        // WASD + Left Ctrl for joystick 1 (alternative)
+        const keyMap = {
+            // Joystick 2 (default for most games)
+            'ArrowUp': { port: 2, bit: JOY_UP },
+            'ArrowDown': { port: 2, bit: JOY_DOWN },
+            'ArrowLeft': { port: 2, bit: JOY_LEFT },
+            'ArrowRight': { port: 2, bit: JOY_RIGHT },
+            'ControlRight': { port: 2, bit: JOY_FIRE },
+            'Space': { port: 2, bit: JOY_FIRE },
+            'Numpad0': { port: 2, bit: JOY_FIRE },
+
+            // Joystick 1 (alternative controls)
+            'KeyW': { port: 1, bit: JOY_UP },
+            'KeyS': { port: 1, bit: JOY_DOWN },
+            'KeyA': { port: 1, bit: JOY_LEFT },
+            'KeyD': { port: 1, bit: JOY_RIGHT },
+            'ControlLeft': { port: 1, bit: JOY_FIRE },
+            'ShiftLeft': { port: 1, bit: JOY_FIRE },
+        };
+
+        return keyMap[code] || null;
+    }
+
+    /**
+     * Handle joystick key press.
+     * Returns true if the key was handled as a joystick input.
+     */
+    handleJoystickKeyDown(code) {
+        const mapping = this.mapKeyToJoystick(code);
+        if (!mapping) {
+            return false;
+        }
+
+        // Update joystick state
+        if (mapping.port === 1) {
+            this.joystickState.port1 |= mapping.bit;
+        } else {
+            this.joystickState.port2 |= mapping.bit;
+        }
+
+        // Send to emulator
+        this.updateJoystickInEmulator();
+        return true;
+    }
+
+    /**
+     * Handle joystick key release.
+     * Returns true if the key was handled as a joystick input.
+     */
+    handleJoystickKeyUp(code) {
+        const mapping = this.mapKeyToJoystick(code);
+        if (!mapping) {
+            return false;
+        }
+
+        // Update joystick state
+        if (mapping.port === 1) {
+            this.joystickState.port1 &= ~mapping.bit;
+        } else {
+            this.joystickState.port2 &= ~mapping.bit;
+        }
+
+        // Send to emulator
+        this.updateJoystickInEmulator();
+        return true;
+    }
+
+    /**
+     * Send current joystick state to the emulator.
+     */
+    updateJoystickInEmulator() {
+        if (!this.emulator) {
+            return;
+        }
+
+        // Use the unified set_joystick API which respects port swap
+        this.emulator.set_joystick(1, this.joystickState.port1);
+        this.emulator.set_joystick(2, this.joystickState.port2);
+    }
+
+    /**
+     * Handle gamepad connected event.
+     */
+    handleGamepadConnected(event) {
+        console.log(`Gamepad connected: ${event.gamepad.id} (index ${event.gamepad.index})`);
+        this.gamepadConnected = true;
+        this.gamepadIndex = event.gamepad.index;
+
+        // Start polling for gamepad input
+        if (!this.gamepadPollingId) {
+            this.startGamepadPolling();
+        }
+
+        // Update UI
+        this.updateJoystickUI();
+    }
+
+    /**
+     * Handle gamepad disconnected event.
+     */
+    handleGamepadDisconnected(event) {
+        console.log(`Gamepad disconnected: ${event.gamepad.id}`);
+
+        if (this.gamepadIndex === event.gamepad.index) {
+            this.gamepadConnected = false;
+            this.gamepadIndex = null;
+
+            // Check if any other gamepads are still connected
+            this.checkForGamepads();
+        }
+
+        // Update UI
+        this.updateJoystickUI();
+    }
+
+    /**
+     * Check for already-connected gamepads.
+     */
+    checkForGamepads() {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        for (let i = 0; i < gamepads.length; i++) {
+            if (gamepads[i]) {
+                this.gamepadConnected = true;
+                this.gamepadIndex = i;
+                console.log(`Found connected gamepad: ${gamepads[i].id}`);
+
+                if (!this.gamepadPollingId) {
+                    this.startGamepadPolling();
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * Start polling for gamepad input.
+     * Gamepads must be polled because they don't generate events for button presses.
+     */
+    startGamepadPolling() {
+        const poll = () => {
+            if (!this.gamepadConnected || !this.running) {
+                this.gamepadPollingId = null;
+                return;
+            }
+
+            this.pollGamepad();
+            this.gamepadPollingId = requestAnimationFrame(poll);
+        };
+
+        this.gamepadPollingId = requestAnimationFrame(poll);
+    }
+
+    /**
+     * Poll gamepad state and update joystick.
+     */
+    pollGamepad() {
+        if (this.gamepadIndex === null) {
+            return;
+        }
+
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const gamepad = gamepads[this.gamepadIndex];
+
+        if (!gamepad) {
+            return;
+        }
+
+        // Standard gamepad mapping:
+        // Buttons: 0=A/X, 1=B/O, 2=X/Square, 3=Y/Triangle, etc.
+        // Axes: 0=Left X, 1=Left Y, 2=Right X, 3=Right Y
+
+        let state = 0;
+        const deadzone = 0.3;
+
+        // D-pad or left stick for directions
+        // D-pad buttons (12=Up, 13=Down, 14=Left, 15=Right)
+        if (gamepad.buttons[12]?.pressed) state |= JOY_UP;
+        if (gamepad.buttons[13]?.pressed) state |= JOY_DOWN;
+        if (gamepad.buttons[14]?.pressed) state |= JOY_LEFT;
+        if (gamepad.buttons[15]?.pressed) state |= JOY_RIGHT;
+
+        // Left analog stick
+        if (gamepad.axes[0] < -deadzone) state |= JOY_LEFT;
+        if (gamepad.axes[0] > deadzone) state |= JOY_RIGHT;
+        if (gamepad.axes[1] < -deadzone) state |= JOY_UP;
+        if (gamepad.axes[1] > deadzone) state |= JOY_DOWN;
+
+        // Fire buttons (A, B, X, Y, L1, R1 all work as fire)
+        if (gamepad.buttons[0]?.pressed ||  // A/X
+            gamepad.buttons[1]?.pressed ||  // B/O
+            gamepad.buttons[2]?.pressed ||  // X/Square
+            gamepad.buttons[3]?.pressed ||  // Y/Triangle
+            gamepad.buttons[4]?.pressed ||  // L1
+            gamepad.buttons[5]?.pressed) {  // R1
+            state |= JOY_FIRE;
+        }
+
+        // Gamepad controls joystick 2 by default (most common for C64 games)
+        this.joystickState.port2 = (this.joystickState.port2 & ~0x1F) | state;
+
+        // Update emulator
+        this.updateJoystickInEmulator();
+    }
+
+    /**
+     * Stop gamepad polling.
+     */
+    stopGamepadPolling() {
+        if (this.gamepadPollingId) {
+            cancelAnimationFrame(this.gamepadPollingId);
+            this.gamepadPollingId = null;
+        }
+    }
+
+    /**
+     * Toggle joystick port swap.
+     * When swapped, port 2 input goes to physical port 1 and vice versa.
+     */
+    toggleJoystickSwap() {
+        this.joystickSwapped = !this.joystickSwapped;
+
+        if (this.emulator) {
+            this.emulator.set_joystick_swap(this.joystickSwapped);
+        }
+
+        console.log(`Joystick ports ${this.joystickSwapped ? 'swapped' : 'normal'}`);
+        this.updateJoystickUI();
+    }
+
+    /**
+     * Update joystick-related UI elements.
+     */
+    updateJoystickUI() {
+        // Update swap button text
+        const swapBtn = document.getElementById('joystick-swap-btn');
+        if (swapBtn) {
+            swapBtn.textContent = this.joystickSwapped ? 'Ports: Swapped' : 'Ports: Normal';
+            swapBtn.classList.toggle('active', this.joystickSwapped);
+        }
+
+        // Update gamepad indicator
+        const gamepadIndicator = document.getElementById('gamepad-indicator');
+        if (gamepadIndicator) {
+            gamepadIndicator.style.display = this.gamepadConnected ? 'inline' : 'none';
+        }
+    }
+
+    /**
+     * Release all joystick buttons.
+     */
+    releaseAllJoysticks() {
+        this.joystickState.port1 = 0;
+        this.joystickState.port2 = 0;
+        this.updateJoystickInEmulator();
+    }
+
     /**
      * Render the current frame to the canvas
      */
@@ -750,6 +1058,12 @@ class C64App {
             return;
         }
 
+        // Check if this is a joystick key first
+        if (this.handleJoystickKeyDown(event.code)) {
+            event.preventDefault();
+            return;
+        }
+
         // Send to emulator via PC keycode mapping
         this.emulator.key_down_pc(event.code);
 
@@ -769,6 +1083,11 @@ class C64App {
 
         // Don't capture input when typing in form elements
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        // Check if this is a joystick key first
+        if (this.handleJoystickKeyUp(event.code)) {
             return;
         }
 

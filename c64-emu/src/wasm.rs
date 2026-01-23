@@ -5,7 +5,7 @@
 
 use wasm_bindgen::prelude::*;
 
-use crate::system::{map_pc_keycode, C64System, Region};
+use crate::system::{joystick_bits, map_pc_keycode, C64System, Region};
 
 /// Screen width in pixels.
 pub const SCREEN_WIDTH: u32 = 320;
@@ -15,6 +15,30 @@ pub const SCREEN_HEIGHT: u32 = 200;
 
 /// Framebuffer size in bytes (320 × 200 indexed color pixels).
 pub const FRAMEBUFFER_SIZE: u32 = SCREEN_WIDTH * SCREEN_HEIGHT;
+
+// ============================================================================
+// Joystick Constants (exported for JavaScript)
+// ============================================================================
+
+/// Joystick up direction bit.
+#[wasm_bindgen]
+pub const JOY_UP: u8 = joystick_bits::JOY_UP;
+
+/// Joystick down direction bit.
+#[wasm_bindgen]
+pub const JOY_DOWN: u8 = joystick_bits::JOY_DOWN;
+
+/// Joystick left direction bit.
+#[wasm_bindgen]
+pub const JOY_LEFT: u8 = joystick_bits::JOY_LEFT;
+
+/// Joystick right direction bit.
+#[wasm_bindgen]
+pub const JOY_RIGHT: u8 = joystick_bits::JOY_RIGHT;
+
+/// Joystick fire button bit.
+#[wasm_bindgen]
+pub const JOY_FIRE: u8 = joystick_bits::JOY_FIRE;
 
 /// WASM wrapper for the C64 emulator system.
 #[wasm_bindgen]
@@ -171,17 +195,85 @@ impl C64Emulator {
         self.system.key_up(row, col);
     }
 
+    // =========================================================================
+    // Joystick API (T092-T098)
+    // =========================================================================
+
+    /// Set joystick state for a logical port.
+    ///
+    /// This is the main joystick API that respects port swapping settings.
+    /// Most C64 games use port 2, so you'll typically call `set_joystick(2, state)`.
+    ///
+    /// # Arguments
+    /// * `port` - Logical port number (1 or 2)
+    /// * `state` - Bitmask of directions/fire (active-high):
+    ///   - Bit 0 (0x01): Up
+    ///   - Bit 1 (0x02): Down
+    ///   - Bit 2 (0x04): Left
+    ///   - Bit 3 (0x08): Right
+    ///   - Bit 4 (0x10): Fire
+    ///
+    /// # Example
+    /// ```javascript
+    /// // Press up + fire on joystick 2
+    /// emulator.set_joystick(2, JOY_UP | JOY_FIRE);
+    /// // Release all
+    /// emulator.set_joystick(2, 0);
+    /// ```
+    #[wasm_bindgen]
+    pub fn set_joystick(&mut self, port: u8, state: u8) {
+        self.system.set_joystick(port, state);
+    }
+
     /// Set joystick 1 state (directly on CIA1 port B).
-    /// Bits: 0=up, 1=down, 2=left, 3=right, 4=fire (accent-low).
+    ///
+    /// This bypasses port swap logic and sets physical port 1 directly.
+    /// Use `set_joystick(1, state)` if you want port swap to be respected.
+    ///
+    /// Bits: 0=up, 1=down, 2=left, 3=right, 4=fire (active-high).
     #[wasm_bindgen]
     pub fn set_joystick1(&mut self, state: u8) {
         self.system.set_joystick1(state);
     }
 
     /// Set joystick 2 state (directly on CIA1 port A).
+    ///
+    /// This bypasses port swap logic and sets physical port 2 directly.
+    /// Use `set_joystick(2, state)` if you want port swap to be respected.
+    ///
+    /// Bits: 0=up, 1=down, 2=left, 3=right, 4=fire (active-high).
     #[wasm_bindgen]
     pub fn set_joystick2(&mut self, state: u8) {
         self.system.set_joystick2(state);
+    }
+
+    /// Check if joystick ports are swapped.
+    ///
+    /// When swapped, port 2 input maps to physical port 1 and vice versa.
+    #[wasm_bindgen]
+    pub fn joystick_ports_swapped(&self) -> bool {
+        self.system.joystick_ports_swapped()
+    }
+
+    /// Set joystick port swap state.
+    ///
+    /// When swapped, port 2 input maps to physical port 1 and vice versa.
+    /// This is useful for games that use port 1 instead of the typical port 2.
+    #[wasm_bindgen]
+    pub fn set_joystick_swap(&mut self, swapped: bool) {
+        self.system.set_joystick_swap(swapped);
+    }
+
+    /// Toggle joystick port swap.
+    #[wasm_bindgen]
+    pub fn toggle_joystick_swap(&mut self) {
+        self.system.toggle_joystick_swap();
+    }
+
+    /// Release all joystick buttons on both ports.
+    #[wasm_bindgen]
+    pub fn release_all_joysticks(&mut self) {
+        self.system.release_all_joysticks();
     }
 
     /// Load a PRG file into memory.

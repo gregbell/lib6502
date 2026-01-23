@@ -4,6 +4,7 @@
 //! CPU execution, VIC-II rendering, SID audio, and CIA timing.
 
 use super::iec_bus::IecBus;
+use super::joystick::JoystickPorts;
 use super::C64Memory;
 use crate::devices::{SPRITE_COUNT, SPRITE_DATA_SIZE};
 use lib6502::{Device, MemoryBus, CPU, OPCODE_TABLE};
@@ -82,6 +83,9 @@ pub struct C64System {
 
     /// IEC bus for disk drive communication.
     iec_bus: IecBus,
+
+    /// Joystick ports manager.
+    joystick_ports: JoystickPorts,
 }
 
 impl C64System {
@@ -98,6 +102,7 @@ impl C64System {
             frame_count: 0,
             running: false,
             iec_bus: IecBus::new(),
+            joystick_ports: JoystickPorts::new(),
         }
     }
 
@@ -432,16 +437,63 @@ impl C64System {
         self.cpu.memory_mut().keyboard.is_key_pressed(row, col)
     }
 
-    /// Set joystick state for a port.
+    /// Set joystick state for a logical port.
     ///
-    /// Port 1 or 2, state is a bitmask:
+    /// This is the main API for joystick input. It respects port swapping,
+    /// so if ports are swapped, port 2 input goes to physical port 1.
+    ///
+    /// Port 1 or 2, state is a bitmask (active-high):
     /// - Bit 0: Up
     /// - Bit 1: Down
     /// - Bit 2: Left
     /// - Bit 3: Right
     /// - Bit 4: Fire
-    pub fn set_joystick(&mut self, _port: u8, _state: u8) {
-        // TODO: Implement joystick handling (T092-T094)
+    ///
+    /// Most C64 games use port 2 because port 1 interferes with keyboard scanning.
+    pub fn set_joystick(&mut self, port: u8, state: u8) {
+        self.joystick_ports.set_port(port, state);
+        // Update CIA1 with the physical port states
+        self.sync_joystick_to_cia();
+    }
+
+    /// Sync joystick state to CIA1 ports.
+    ///
+    /// This must be called after modifying joystick state to update the CIA.
+    fn sync_joystick_to_cia(&mut self) {
+        // Physical port 1 → CIA1 port B
+        // Physical port 2 → CIA1 port A
+        let port1_state = self.joystick_ports.physical_port1().get();
+        let port2_state = self.joystick_ports.physical_port2().get();
+
+        self.cpu.memory_mut().cia1.set_joystick_port_b(port1_state);
+        self.cpu.memory_mut().cia1.set_joystick_port_a(port2_state);
+    }
+
+    /// Check if joystick ports are swapped.
+    pub fn joystick_ports_swapped(&self) -> bool {
+        self.joystick_ports.is_swapped()
+    }
+
+    /// Set joystick port swap state.
+    ///
+    /// When swapped, port 2 input maps to physical port 1 and vice versa.
+    /// This is useful for games that use port 1 instead of port 2.
+    pub fn set_joystick_swap(&mut self, swapped: bool) {
+        self.joystick_ports.set_swapped(swapped);
+        // Re-sync to CIA after swap state change
+        self.sync_joystick_to_cia();
+    }
+
+    /// Toggle joystick port swap.
+    pub fn toggle_joystick_swap(&mut self) {
+        self.joystick_ports.toggle_swap();
+        self.sync_joystick_to_cia();
+    }
+
+    /// Release all joystick buttons on both ports.
+    pub fn release_all_joysticks(&mut self) {
+        self.joystick_ports.release_all();
+        self.sync_joystick_to_cia();
     }
 
     /// Trigger RESTORE key (NMI).
@@ -548,13 +600,21 @@ impl C64System {
         self.cpu.memory_mut().vic.raster()
     }
 
-    /// Set joystick 1 state.
+    /// Set joystick 1 state (physical port 1, CIA1 port B).
+    ///
+    /// This bypasses port swap logic and sets the physical port directly.
+    /// Use `set_joystick(1, state)` if you want port swap to be respected.
     pub fn set_joystick1(&mut self, state: u8) {
+        self.joystick_ports.physical_port1_mut().set(state);
         self.cpu.memory_mut().cia1.set_joystick_port_b(state);
     }
 
-    /// Set joystick 2 state.
+    /// Set joystick 2 state (physical port 2, CIA1 port A).
+    ///
+    /// This bypasses port swap logic and sets the physical port directly.
+    /// Use `set_joystick(2, state)` if you want port swap to be respected.
     pub fn set_joystick2(&mut self, state: u8) {
+        self.joystick_ports.physical_port2_mut().set(state);
         self.cpu.memory_mut().cia1.set_joystick_port_a(state);
     }
 

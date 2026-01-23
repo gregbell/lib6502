@@ -226,21 +226,21 @@
 
 ### Joystick Emulation
 
-- [ ] T092 [US4] Create JoystickPort struct with direction and fire state in src/c64/joystick.rs
-- [ ] T093 [US4] Implement CIA1 joystick reading (port A=joy2, port B=joy1) in src/devices/c64/cia.rs
-- [ ] T094 [US4] Handle keyboard/joystick port sharing (active low signals) in src/c64/joystick.rs
+- [x] T092 [US4] Create JoystickState struct with direction and fire state in c64-emu/src/system/joystick.rs
+- [x] T093 [US4] Implement CIA1 joystick reading (port A=joy2, port B=joy1) - Already in c64-emu/src/devices/cia.rs
+- [x] T094 [US4] Handle keyboard/joystick port sharing (active low signals) in c64-emu/src/system/c64_memory.rs
 
 ### WASM Joystick API
 
-- [ ] T095 [US4] Implement set_joystick(port, state) with bitmask in src/wasm/c64_api.rs
+- [x] T095 [US4] Implement set_joystick(port, state) with bitmask and port swap support in c64-emu/src/wasm.rs
 
 ### Web Frontend Input
 
-- [ ] T096 [US4] Implement arrow key to joystick mapping in c64-demo/components/joystick.js
-- [ ] T097 [US4] Implement Gamepad API integration in c64-demo/components/joystick.js
-- [ ] T098 [US4] Add joystick port swap control to UI in c64-demo/components/controls.js
+- [x] T096 [US4] Implement arrow key to joystick mapping in c64-demo/c64.js
+- [x] T097 [US4] Implement Gamepad API integration in c64-demo/c64.js
+- [x] T098 [US4] Add joystick port swap control to UI in c64-demo/index.html and c64-demo/c64.js
 
-**Checkpoint**: User Story 4 complete - Games playable with keyboard and gamepad
+**Checkpoint**: User Story 4 complete - Games playable with keyboard and gamepad ✓ COMPLETE
 
 ---
 
@@ -415,11 +415,11 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
 | Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
 | Phase 5: US3 | T067-T091 | 25/25 | Graphics & audio ✓ COMPLETE |
-| Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
+| Phase 6: US4 | T092-T098 | 7/7 | Joystick controls ✓ COMPLETE |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **90/132** | |
+| **Total** | **132 tasks** | **97/132** | |
 
 ---
 
