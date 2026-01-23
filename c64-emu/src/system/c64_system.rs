@@ -5,6 +5,7 @@
 
 use super::iec_bus::IecBus;
 use super::C64Memory;
+use crate::devices::vic_ii::{SPRITE_COUNT, SPRITE_DATA_SIZE};
 use lib6502::{Device, MemoryBus, CPU, OPCODE_TABLE};
 
 /// C64 region (PAL or NTSC) affecting timing.
@@ -243,6 +244,47 @@ impl C64System {
 
         // Suppress unused warning for bank_base (will be used when VIC bank selection is refined)
         let _ = bank_base;
+
+        // Render sprites on top of the background (T072)
+        // Sprites are rendered after background so they appear on top
+        // (T075 will add proper priority handling)
+        let sprite_data = self.fetch_sprite_data_for_rendering(&screen_ram);
+        self.cpu
+            .memory_mut()
+            .vic
+            .render_sprites_scanline(scanline, &sprite_data);
+    }
+
+    /// Fetch sprite data for rendering the current scanline.
+    ///
+    /// This method fetches the 63-byte data block for each enabled sprite
+    /// from VIC memory. The data is used by `render_sprites_scanline`.
+    fn fetch_sprite_data_for_rendering(
+        &mut self,
+        screen_ram: &[u8],
+    ) -> [[u8; SPRITE_DATA_SIZE]; SPRITE_COUNT] {
+        let mem = self.cpu.memory_mut();
+
+        // Check which sprites are enabled
+        let enabled = mem.vic.sprite_enable_bits();
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+
+        // Only fetch data for enabled sprites
+        for sprite_num in 0..SPRITE_COUNT {
+            if enabled & (1 << sprite_num) != 0 {
+                // Get sprite pointer from screen RAM + $3F8
+                let pointer = mem.vic.get_sprite_pointer(screen_ram, sprite_num);
+
+                // Fetch 63 bytes of sprite data
+                // Sprite data address = pointer * 64
+                let base_addr = (pointer as u16) * 64;
+                for i in 0..SPRITE_DATA_SIZE {
+                    sprite_data[sprite_num][i] = mem.vic_read(base_addr + i as u16);
+                }
+            }
+        }
+
+        sprite_data
     }
 
     /// Execute one full frame of emulation.

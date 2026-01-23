@@ -20,4 +20,4 @@ pub use cia::Cia6526;
 pub use color_ram::ColorRam;
 pub use port_6510::Port6510;
 pub use sid::Sid6581;
-pub use vic_ii::VicII;
+pub use vic_ii::{VicII, SPRITE_COUNT, SPRITE_DATA_SIZE, SPRITE_HEIGHT, SPRITE_WIDTH};

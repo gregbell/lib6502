@@ -34,7 +34,6 @@ pub const SPRITE_COUNT: usize = 8;
 pub const SPRITE_HEIGHT: usize = 21;
 
 /// Width of each sprite in pixels (24 pixels = 3 bytes).
-#[allow(dead_code)] // Will be used in T072 (sprite rendering)
 pub const SPRITE_WIDTH: usize = 24;
 
 /// Bytes per sprite line (3 bytes = 24 pixels).
@@ -919,6 +918,163 @@ impl VicII {
         }
 
         all_data
+    }
+
+    // =========================================================================
+    // Sprite Rendering (T072)
+    // =========================================================================
+
+    /// Render sprites for a single scanline.
+    ///
+    /// This renders all enabled sprites onto the current scanline of the framebuffer.
+    /// Sprites are rendered in priority order (sprite 0 has highest priority).
+    ///
+    /// # Arguments
+    /// * `scanline` - The current raster line (0-311 PAL, 0-262 NTSC)
+    /// * `sprite_data` - Array of 8 sprite data blocks (63 bytes each)
+    ///
+    /// This method handles:
+    /// - Standard hires sprites (24x21 pixels, 1 color)
+    /// - Sprite enable/disable via register $D015
+    /// - Sprite X/Y positioning (9-bit X, 8-bit Y)
+    /// - Sprite colors from registers $D027-$D02E
+    ///
+    /// NOTE: This is the basic implementation (T072). Additional features are in:
+    /// - T073: Multicolor sprite mode
+    /// - T074: X/Y expansion (double size)
+    /// - T075: Sprite priority (sprite-to-sprite, sprite-to-background)
+    /// - T076: Collision detection
+    pub fn render_sprites_scanline(
+        &mut self,
+        scanline: u16,
+        sprite_data: &[[u8; SPRITE_DATA_SIZE]; SPRITE_COUNT],
+    ) {
+        // Calculate the display line (relative to the visible area)
+        let display_start = DISPLAY_START_LINE_PAL;
+        let display_end = display_start + SCREEN_HEIGHT as u16;
+
+        // Check if we're in the visible display area
+        if scanline < display_start || scanline >= display_end {
+            return;
+        }
+
+        let display_line = (scanline - display_start) as usize;
+        let enabled = self.sprite_enable_bits();
+
+        // Nothing to do if no sprites are enabled
+        if enabled == 0 {
+            return;
+        }
+
+        // Render sprites in reverse order so that sprite 0 has highest priority
+        // (drawn last, appearing on top)
+        for sprite_num in (0..SPRITE_COUNT).rev() {
+            // Skip if sprite is not enabled
+            if enabled & (1 << sprite_num) == 0 {
+                continue;
+            }
+
+            // Get sprite position
+            // Sprite Y coordinate is the raster line where sprite starts
+            // Note: C64 sprites have a 50-pixel Y offset (first visible line)
+            let sprite_y = self.sprite_y(sprite_num) as u16;
+
+            // Check Y expansion (T074 - basic support for visibility check)
+            let y_expand = self.sprite_y_expand(sprite_num);
+            let effective_height = if y_expand {
+                SPRITE_HEIGHT * 2
+            } else {
+                SPRITE_HEIGHT
+            };
+
+            // Calculate which line within the sprite we're rendering
+            // Sprite Y position is in screen coordinates, not raster coordinates
+            // The sprite appears starting at the Y position relative to the display area
+            // We add 1 because the VIC-II displays sprites starting at Y+1
+            let sprite_start_line = sprite_y.wrapping_sub(1);
+            let sprite_end_line = sprite_start_line.wrapping_add(effective_height as u16);
+
+            // Check if this scanline intersects the sprite
+            let relative_scanline = scanline.wrapping_sub(display_start);
+            if relative_scanline < sprite_start_line || relative_scanline >= sprite_end_line {
+                continue;
+            }
+
+            // Calculate which line of the sprite data to use
+            let sprite_line_offset = relative_scanline.wrapping_sub(sprite_start_line) as usize;
+            let sprite_data_line = if y_expand {
+                sprite_line_offset / 2
+            } else {
+                sprite_line_offset
+            };
+
+            // Safety check - don't read past sprite data
+            if sprite_data_line >= SPRITE_HEIGHT {
+                continue;
+            }
+
+            // Get sprite X position (9-bit)
+            let sprite_x = self.sprite_x(sprite_num);
+
+            // Get sprite color
+            let sprite_color = self.sprite_color(sprite_num);
+
+            // Check X expansion (T074 - basic support)
+            let x_expand = self.sprite_x_expand(sprite_num);
+            let effective_width = if x_expand {
+                SPRITE_WIDTH * 2
+            } else {
+                SPRITE_WIDTH
+            };
+
+            // Get the 3 bytes of sprite data for this line
+            let data_offset = sprite_data_line * SPRITE_BYTES_PER_LINE;
+            let line_data = &sprite_data[sprite_num][data_offset..data_offset + SPRITE_BYTES_PER_LINE];
+
+            // Render each pixel of the sprite line
+            // In standard hires mode: 24 pixels from 3 bytes (8 pixels per byte)
+            // Bit 7 of each byte is the leftmost pixel
+            for byte_idx in 0..SPRITE_BYTES_PER_LINE {
+                let byte = line_data[byte_idx];
+
+                for bit_idx in 0..8 {
+                    // Check if this pixel is set
+                    let pixel_set = (byte & (0x80 >> bit_idx)) != 0;
+
+                    if !pixel_set {
+                        continue; // Transparent pixel
+                    }
+
+                    // Calculate X position on screen
+                    // Sprite X position 24 ($18) aligns with left edge of display
+                    // Subtract 24 to convert sprite coordinates to screen coordinates
+                    let pixel_offset = if x_expand {
+                        (byte_idx * 8 + bit_idx) * 2
+                    } else {
+                        byte_idx * 8 + bit_idx
+                    };
+
+                    // Handle X expansion - draw each pixel twice
+                    let pixels_to_draw = if x_expand { 2 } else { 1 };
+
+                    for expand_idx in 0..pixels_to_draw {
+                        let screen_x = sprite_x
+                            .wrapping_sub(24) // Convert to screen coordinates
+                            .wrapping_add(pixel_offset as u16)
+                            .wrapping_add(if x_expand { expand_idx } else { 0 });
+
+                        // Check if pixel is within visible screen area
+                        if screen_x >= SCREEN_WIDTH as u16 {
+                            continue;
+                        }
+
+                        // Draw the pixel
+                        // TODO (T075): Handle sprite-to-background priority
+                        self.framebuffer[display_line][screen_x as usize] = sprite_color;
+                    }
+                }
+            }
+        }
     }
 
     /// Set sprite-sprite collision flags.
@@ -3015,5 +3171,338 @@ mod tests {
         assert_eq!(SPRITE_HEIGHT, 21);
         assert_eq!(SPRITE_WIDTH, 24);
         assert_eq!(SPRITE_COUNT, 8);
+    }
+
+    // =========================================================================
+    // Sprite Rendering Tests (T072)
+    // =========================================================================
+
+    #[test]
+    fn test_render_sprites_scanline_disabled_sprites() {
+        let mut vic = VicII::new();
+
+        // No sprites enabled (register $D015 = 0)
+        vic.registers[0x15] = 0;
+
+        // Create empty sprite data
+        let sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06; // Blue background
+            }
+        }
+
+        // Render sprites at scanline 100 (visible area)
+        vic.render_sprites_scanline(100, &sprite_data);
+
+        // Framebuffer should be unchanged (no sprites to render)
+        assert_eq!(vic.framebuffer[49][0], 0x06);
+        assert_eq!(vic.framebuffer[49][160], 0x06);
+    }
+
+    #[test]
+    fn test_render_sprites_scanline_basic_sprite() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0
+        vic.registers[0x15] = 0x01;
+
+        // Set sprite 0 position to (24+50, 51+10) = screen position (50, 10)
+        // X position 24 is the left edge of the display
+        vic.registers[0x00] = 24 + 50; // X low byte
+        vic.registers[0x01] = 51 + 10; // Y position (sprite appears at Y-1+display_start)
+        vic.registers[0x10] = 0; // X MSB = 0
+
+        // Set sprite 0 color to white (1)
+        vic.registers[0x27] = 0x01;
+
+        // Create sprite data with first pixel set
+        // First byte = 0x80 (bit 7 set = leftmost pixel)
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // First pixel of first line
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06; // Blue background
+            }
+        }
+
+        // Render sprites at scanline 61 (display line 10, matches sprite Y)
+        // scanline 61 = display_start(51) + 10
+        vic.render_sprites_scanline(61, &sprite_data);
+
+        // The sprite should have rendered one pixel at X=50, Y=10
+        assert_eq!(
+            vic.framebuffer[10][50], 0x01,
+            "Sprite pixel should be white at (50, 10)"
+        );
+
+        // Adjacent pixels should still be background
+        assert_eq!(vic.framebuffer[10][49], 0x06, "Left of sprite should be background");
+        assert_eq!(vic.framebuffer[10][51], 0x06, "Right of sprite should be background");
+    }
+
+    #[test]
+    fn test_render_sprites_scanline_full_line() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0
+        vic.registers[0x15] = 0x01;
+
+        // Set sprite 0 position to left edge
+        vic.registers[0x00] = 24; // X = 24 (screen X = 0)
+        vic.registers[0x01] = 52; // Y position (will appear at display line 0)
+        vic.registers[0x10] = 0;
+
+        // Set sprite 0 color to red (2)
+        vic.registers[0x27] = 0x02;
+
+        // Create sprite data with all pixels set for first line
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0xFF; // First 8 pixels
+        sprite_data[0][1] = 0xFF; // Next 8 pixels
+        sprite_data[0][2] = 0xFF; // Last 8 pixels (24 total)
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06;
+            }
+        }
+
+        // Render sprites at scanline 51 (display line 0)
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // First 24 pixels of line 0 should be red
+        for x in 0..24 {
+            assert_eq!(
+                vic.framebuffer[0][x], 0x02,
+                "Sprite pixel at X={} should be red",
+                x
+            );
+        }
+
+        // Pixel 24 should be background
+        assert_eq!(vic.framebuffer[0][24], 0x06);
+    }
+
+    #[test]
+    fn test_render_sprites_priority_order() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0 and 1
+        vic.registers[0x15] = 0x03;
+
+        // Set both sprites to same position
+        vic.registers[0x00] = 50; // Sprite 0 X
+        vic.registers[0x01] = 60; // Sprite 0 Y
+        vic.registers[0x02] = 50; // Sprite 1 X
+        vic.registers[0x03] = 60; // Sprite 1 Y
+        vic.registers[0x10] = 0;
+
+        // Sprite 0 = white (1), Sprite 1 = red (2)
+        vic.registers[0x27] = 0x01;
+        vic.registers[0x28] = 0x02;
+
+        // Both sprites have first pixel set
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80;
+        sprite_data[1][0] = 0x80;
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06;
+            }
+        }
+
+        // Render at the sprite Y position
+        // Y=60 means sprite starts at raster 60, display line = 60 - 51 = 9
+        vic.render_sprites_scanline(59, &sprite_data);
+
+        // Screen X = 50 - 24 = 26
+        // Sprite 0 has higher priority, so it should appear on top (white)
+        assert_eq!(
+            vic.framebuffer[8][26], 0x01,
+            "Sprite 0 should have priority over sprite 1"
+        );
+    }
+
+    #[test]
+    fn test_render_sprites_outside_visible_area() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0
+        vic.registers[0x15] = 0x01;
+        vic.registers[0x00] = 50;
+        vic.registers[0x01] = 60;
+        vic.registers[0x27] = 0x01;
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0xFF;
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06;
+            }
+        }
+
+        // Render at scanline outside visible area (before display start)
+        vic.render_sprites_scanline(10, &sprite_data);
+
+        // Framebuffer should be unchanged
+        for row in vic.framebuffer.iter() {
+            for pixel in row.iter() {
+                assert_eq!(*pixel, 0x06);
+            }
+        }
+
+        // Also test scanline after visible area
+        vic.render_sprites_scanline(300, &sprite_data);
+
+        for row in vic.framebuffer.iter() {
+            for pixel in row.iter() {
+                assert_eq!(*pixel, 0x06);
+            }
+        }
+    }
+
+    #[test]
+    fn test_render_sprites_x_position_9bit() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0
+        vic.registers[0x15] = 0x01;
+
+        // Set sprite 0 X position to 300 (requires MSB)
+        // 300 = 256 + 44
+        vic.registers[0x00] = 44; // Low byte
+        vic.registers[0x10] = 0x01; // MSB for sprite 0
+        vic.registers[0x01] = 52; // Y position
+
+        vic.registers[0x27] = 0x01; // White
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // One pixel
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06;
+            }
+        }
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Screen X = 300 - 24 = 276
+        assert_eq!(vic.framebuffer[0][276], 0x01, "Sprite should render at X=276");
+    }
+
+    #[test]
+    fn test_render_sprites_y_expand() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0 with Y expansion
+        vic.registers[0x15] = 0x01;
+        vic.registers[0x17] = 0x01; // Y expand for sprite 0
+
+        vic.registers[0x00] = 24; // X at left edge
+        vic.registers[0x01] = 52; // Y position
+        vic.registers[0x10] = 0;
+        vic.registers[0x27] = 0x01; // White
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // First line has one pixel
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06;
+            }
+        }
+
+        // With Y expansion, first line of sprite data should appear on two display lines
+        vic.render_sprites_scanline(51, &sprite_data);
+        vic.render_sprites_scanline(52, &sprite_data);
+
+        // Both lines should have the sprite pixel
+        assert_eq!(vic.framebuffer[0][0], 0x01, "First line should have sprite");
+        assert_eq!(vic.framebuffer[1][0], 0x01, "Second line should also have sprite (Y expand)");
+    }
+
+    #[test]
+    fn test_render_sprites_x_expand() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0 with X expansion
+        vic.registers[0x15] = 0x01;
+        vic.registers[0x1D] = 0x01; // X expand for sprite 0
+
+        vic.registers[0x00] = 24; // X at left edge
+        vic.registers[0x01] = 52; // Y position
+        vic.registers[0x10] = 0;
+        vic.registers[0x27] = 0x01; // White
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // One pixel in first position
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06;
+            }
+        }
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // With X expansion, one pixel should become two pixels
+        assert_eq!(vic.framebuffer[0][0], 0x01, "First pixel of expanded sprite");
+        assert_eq!(vic.framebuffer[0][1], 0x01, "Second pixel of expanded sprite");
+        assert_eq!(vic.framebuffer[0][2], 0x06, "Third pixel should be background");
+    }
+
+    #[test]
+    fn test_render_sprites_multiple_sprites() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0, 3, and 7
+        vic.registers[0x15] = 0b10001001;
+
+        // Set different positions
+        vic.registers[0x00] = 24 + 0; // Sprite 0 X
+        vic.registers[0x01] = 52; // Sprite 0 Y
+        vic.registers[0x06] = 24 + 50; // Sprite 3 X
+        vic.registers[0x07] = 52; // Sprite 3 Y
+        vic.registers[0x0E] = 24 + 100; // Sprite 7 X
+        vic.registers[0x0F] = 52; // Sprite 7 Y
+        vic.registers[0x10] = 0;
+
+        // Different colors
+        vic.registers[0x27] = 0x01; // Sprite 0: white
+        vic.registers[0x2A] = 0x02; // Sprite 3: red
+        vic.registers[0x2E] = 0x03; // Sprite 7: cyan
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80;
+        sprite_data[3][0] = 0x80;
+        sprite_data[7][0] = 0x80;
+
+        // Clear framebuffer
+        for row in vic.framebuffer.iter_mut() {
+            for pixel in row.iter_mut() {
+                *pixel = 0x06;
+            }
+        }
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Check each sprite rendered at its position
+        assert_eq!(vic.framebuffer[0][0], 0x01, "Sprite 0 at X=0");
+        assert_eq!(vic.framebuffer[0][50], 0x02, "Sprite 3 at X=50");
+        assert_eq!(vic.framebuffer[0][100], 0x03, "Sprite 7 at X=100");
     }
 }

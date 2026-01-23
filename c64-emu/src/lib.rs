@@ -45,7 +45,10 @@ pub mod system;
 pub mod wasm;
 
 // Re-export commonly used types
-pub use devices::{Cia6526, ColorRam, Port6510, Sid6581, VicII};
+pub use devices::{
+    Cia6526, ColorRam, Port6510, Sid6581, VicII, SPRITE_COUNT, SPRITE_DATA_SIZE, SPRITE_HEIGHT,
+    SPRITE_WIDTH,
+};
 pub use system::{
     keys, map_pc_keycode, C64Memory, C64System, ChannelMode, D64Error, D64Image, Drive1541,
     DriveChannel, DriveStatus, IecBus, IecState, KeyMapping, Keyboard, Region,
