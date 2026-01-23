@@ -170,9 +170,9 @@ class C64App {
             // Check for cached ROMs
             await this.loadCachedRoms();
 
-            // If all ROMs are loaded, show emulator section
+            // If all ROMs are loaded, auto-start the emulator
             if (this.hasAllRoms()) {
-                this.showEmulatorSection();
+                await this.startEmulator();
             }
 
             console.log('C64 Emulator initialized successfully');
