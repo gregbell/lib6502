@@ -214,6 +214,11 @@ impl VicII {
             (true, false, false) => {
                 self.render_standard_bitmap_scanline(display_line, char_rom, screen_ram);
             }
+            // Multicolor bitmap mode (BMM=1, ECM=0, MCM=1)
+            // 160x200 effective resolution, 4 colors per 8x8 cell
+            (true, false, true) => {
+                self.render_multicolor_bitmap_scanline(display_line, char_rom, screen_ram, color_ram);
+            }
             // Other modes not yet implemented - fill with background
             _ => {
                 let bg_color = self.background_color();
@@ -461,6 +466,100 @@ impl VicII {
                 let pixel_set = (pattern & (0x80 >> bit)) != 0;
                 let color = if pixel_set { fg_color } else { bg_color };
                 self.framebuffer[display_line][x_base + bit] = color;
+            }
+        }
+    }
+
+    /// Render one scanline in multicolor bitmap mode (160x200 effective).
+    ///
+    /// In multicolor bitmap mode (BMM=1, MCM=1):
+    /// - The display is a 160x200 effective pixel bitmap (double-wide pixels)
+    /// - Each bit pair in the bitmap corresponds to one double-wide pixel
+    /// - Colors are determined by bit pairs:
+    ///   - 00 = Background color 0 ($D021)
+    ///   - 01 = Upper nibble of screen RAM (bits 4-7)
+    ///   - 10 = Lower nibble of screen RAM (bits 0-3)
+    ///   - 11 = Color RAM (bits 0-3, full 16 colors)
+    /// - Bitmap data is organized the same as standard bitmap mode (8 bytes per cell)
+    ///
+    /// The `bitmap_data` parameter should contain 8000 bytes of bitmap data.
+    /// The `screen_ram` parameter provides the 1000-byte color info for bit pairs 01 and 10.
+    /// The `color_ram` parameter provides the 1000-byte color info for bit pair 11.
+    fn render_multicolor_bitmap_scanline(
+        &mut self,
+        display_line: usize,
+        bitmap_data: &[u8],
+        screen_ram: &[u8],
+        color_ram: &[u8],
+    ) {
+        // Calculate which character row and which line within that row
+        let char_row = display_line / CHAR_HEIGHT;
+        let char_line = display_line % CHAR_HEIGHT;
+
+        // Skip if we're past the character display area
+        if char_row >= CHAR_ROWS {
+            let bg_color = self.background_color();
+            for x in 0..SCREEN_WIDTH {
+                self.framebuffer[display_line][x] = bg_color;
+            }
+            return;
+        }
+
+        let bg_color_0 = self.background_color();
+
+        // Render each of the 40 character columns
+        for char_col in 0..CHAR_COLUMNS {
+            // Get colors from screen RAM and color RAM
+            let screen_offset = char_row * CHAR_COLUMNS + char_col;
+
+            let screen_byte = if screen_offset < screen_ram.len() {
+                screen_ram[screen_offset]
+            } else {
+                0
+            };
+
+            let color_byte = if screen_offset < color_ram.len() {
+                color_ram[screen_offset]
+            } else {
+                0
+            };
+
+            // Colors for each bit pair:
+            // 00 = Background color 0 ($D021)
+            // 01 = Screen RAM upper nibble (bits 4-7)
+            // 10 = Screen RAM lower nibble (bits 0-3)
+            // 11 = Color RAM (bits 0-3)
+            let color_01 = (screen_byte >> 4) & 0x0F;
+            let color_10 = screen_byte & 0x0F;
+            let color_11 = color_byte & 0x0F;
+
+            // Calculate bitmap data offset (same as standard bitmap mode)
+            let bitmap_offset = char_row * 320 + char_col * 8 + char_line;
+            let pattern = if bitmap_offset < bitmap_data.len() {
+                bitmap_data[bitmap_offset]
+            } else {
+                0
+            };
+
+            let x_base = char_col * 8;
+
+            // Process 4 bit pairs (8 pixels displayed as 4 double-wide pixels)
+            for bit_pair in 0..4 {
+                let shift = 6 - (bit_pair * 2);
+                let bits = (pattern >> shift) & 0x03;
+
+                let color = match bits {
+                    0b00 => bg_color_0, // Background 0
+                    0b01 => color_01,   // Screen RAM upper nibble
+                    0b10 => color_10,   // Screen RAM lower nibble
+                    0b11 => color_11,   // Color RAM
+                    _ => unreachable!(),
+                };
+
+                // Each bit pair produces 2 pixels of the same color
+                let px = x_base + bit_pair * 2;
+                self.framebuffer[display_line][px] = color;
+                self.framebuffer[display_line][px + 1] = color;
             }
         }
     }
@@ -1277,6 +1376,390 @@ mod tests {
                 "Pixel {} should be background when display disabled",
                 x
             );
+        }
+    }
+
+    // =========================================================================
+    // Multicolor Bitmap Mode Tests (BMM=1, ECM=0, MCM=1)
+    // =========================================================================
+
+    #[test]
+    fn test_multicolor_bitmap_mode_basic_rendering() {
+        let mut vic = VicII::new();
+
+        // Enable bitmap mode (BMM bit in $D011) and multicolor mode (MCM in $D016)
+        vic.registers[0x11] |= 0x20; // BMM=1
+        vic.registers[0x16] |= 0x10; // MCM=1
+        assert!(vic.bitmap_mode());
+        assert!(vic.multicolor_mode());
+
+        // Set background color 0
+        vic.registers[0x21] = 0x00; // Black
+
+        // Create bitmap data (8000 bytes)
+        // Pattern 0x1B = 0b00011011 tests all four bit pairs
+        let mut bitmap_data = vec![0u8; 8000];
+        bitmap_data[0] = 0x1B; // Cell 0, line 0
+
+        // Screen RAM provides colors for bit pairs 01 (upper nibble) and 10 (lower nibble)
+        // Cell 0: upper nibble = 1 (white), lower nibble = 2 (red)
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 0x12;
+
+        // Color RAM provides color for bit pair 11
+        // Cell 0: color 3 (cyan)
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x03;
+
+        // Render first visible scanline
+        vic.step_scanline(51, &bitmap_data, &screen_ram, &color_ram);
+
+        // Pattern 0x1B = 0b00011011
+        // Bit pair 0 (bits 7-6): 00 -> background 0 (black = 0)
+        // Bit pair 1 (bits 5-4): 01 -> screen RAM upper nibble (white = 1)
+        // Bit pair 2 (bits 3-2): 10 -> screen RAM lower nibble (red = 2)
+        // Bit pair 3 (bits 1-0): 11 -> color RAM (cyan = 3)
+
+        // Each bit pair produces 2 identical pixels
+        assert_eq!(vic.framebuffer[0][0], 0, "Pixel 0 should be background 0 (black)");
+        assert_eq!(vic.framebuffer[0][1], 0, "Pixel 1 should be background 0 (black)");
+        assert_eq!(vic.framebuffer[0][2], 1, "Pixel 2 should be screen upper (white)");
+        assert_eq!(vic.framebuffer[0][3], 1, "Pixel 3 should be screen upper (white)");
+        assert_eq!(vic.framebuffer[0][4], 2, "Pixel 4 should be screen lower (red)");
+        assert_eq!(vic.framebuffer[0][5], 2, "Pixel 5 should be screen lower (red)");
+        assert_eq!(vic.framebuffer[0][6], 3, "Pixel 6 should be color RAM (cyan)");
+        assert_eq!(vic.framebuffer[0][7], 3, "Pixel 7 should be color RAM (cyan)");
+    }
+
+    #[test]
+    fn test_multicolor_bitmap_mode_all_same_color() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor bitmap mode
+        vic.registers[0x11] |= 0x20; // BMM=1
+        vic.registers[0x16] |= 0x10; // MCM=1
+
+        // Set background color 0
+        vic.registers[0x21] = 0x05; // Green
+
+        // Bitmap data: all 00 bit pairs (background color)
+        let mut bitmap_data = vec![0u8; 8000];
+        bitmap_data[0] = 0x00; // All 00 pairs
+
+        let screen_ram = vec![0xFFu8; 1000];
+        let color_ram = vec![0xFFu8; 1000];
+
+        vic.step_scanline(51, &bitmap_data, &screen_ram, &color_ram);
+
+        // All pixels should be background 0 (green = 5)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[0][x], 5, "Pixel {} should be green (bg0)", x);
+        }
+    }
+
+    #[test]
+    fn test_multicolor_bitmap_mode_multiple_cells() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor bitmap mode
+        vic.registers[0x11] |= 0x20;
+        vic.registers[0x16] |= 0x10;
+
+        vic.registers[0x21] = 0x00; // Background 0: black
+
+        // Create bitmap data with different patterns for each cell
+        let mut bitmap_data = vec![0u8; 8000];
+        bitmap_data[0] = 0x00;  // Cell 0: all 00 (background)
+        bitmap_data[8] = 0x55;  // Cell 1: all 01 (screen upper nibble)
+        bitmap_data[16] = 0xAA; // Cell 2: all 10 (screen lower nibble)
+        bitmap_data[24] = 0xFF; // Cell 3: all 11 (color RAM)
+
+        // Screen RAM with different colors for each cell
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 0x00; // Cell 0: doesn't matter, all bg
+        screen_ram[1] = 0x10; // Cell 1: upper=1 (white), lower=0
+        screen_ram[2] = 0x02; // Cell 2: upper=0, lower=2 (red)
+        screen_ram[3] = 0x00; // Cell 3: doesn't matter for 11 pattern
+
+        // Color RAM
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x00;
+        color_ram[1] = 0x00;
+        color_ram[2] = 0x00;
+        color_ram[3] = 0x03; // Cell 3: cyan
+
+        vic.step_scanline(51, &bitmap_data, &screen_ram, &color_ram);
+
+        // Cell 0 (x=0-7): all background (black=0)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[0][x], 0, "Cell 0 pixel {} should be black", x);
+        }
+
+        // Cell 1 (x=8-15): all 01 pattern -> screen upper nibble (white=1)
+        for x in 8..16 {
+            assert_eq!(vic.framebuffer[0][x], 1, "Cell 1 pixel {} should be white", x);
+        }
+
+        // Cell 2 (x=16-23): all 10 pattern -> screen lower nibble (red=2)
+        for x in 16..24 {
+            assert_eq!(vic.framebuffer[0][x], 2, "Cell 2 pixel {} should be red", x);
+        }
+
+        // Cell 3 (x=24-31): all 11 pattern -> color RAM (cyan=3)
+        for x in 24..32 {
+            assert_eq!(vic.framebuffer[0][x], 3, "Cell 3 pixel {} should be cyan", x);
+        }
+    }
+
+    #[test]
+    fn test_multicolor_bitmap_mode_scanline_progression() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor bitmap mode
+        vic.registers[0x11] |= 0x20;
+        vic.registers[0x16] |= 0x10;
+
+        vic.registers[0x21] = 0x00; // Background 0: black
+
+        // Create bitmap data with different patterns for each line within the cell
+        let mut bitmap_data = vec![0u8; 8000];
+        bitmap_data[0] = 0x00; // Line 0: all 00 (bg)
+        bitmap_data[1] = 0x55; // Line 1: all 01
+        bitmap_data[2] = 0xAA; // Line 2: all 10
+        bitmap_data[3] = 0xFF; // Line 3: all 11
+        bitmap_data[4] = 0x1B; // Line 4: 00 01 10 11
+
+        // Screen RAM: upper=5 (green), lower=6 (blue)
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 0x56;
+
+        // Color RAM: color 7 (yellow)
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x07;
+
+        // Render multiple scanlines
+        for scanline_offset in 0..5 {
+            vic.step_scanline(51 + scanline_offset, &bitmap_data, &screen_ram, &color_ram);
+        }
+
+        // Line 0: all background (0)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[0][x], 0, "Line 0, pixel {} should be bg", x);
+        }
+
+        // Line 1: all 01 -> green (5)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[1][x], 5, "Line 1, pixel {} should be green", x);
+        }
+
+        // Line 2: all 10 -> blue (6)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[2][x], 6, "Line 2, pixel {} should be blue", x);
+        }
+
+        // Line 3: all 11 -> yellow (7)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[3][x], 7, "Line 3, pixel {} should be yellow", x);
+        }
+
+        // Line 4: mixed pattern 00 01 10 11
+        assert_eq!(vic.framebuffer[4][0], 0, "Line 4, pixels 0-1 should be bg");
+        assert_eq!(vic.framebuffer[4][1], 0);
+        assert_eq!(vic.framebuffer[4][2], 5, "Line 4, pixels 2-3 should be green");
+        assert_eq!(vic.framebuffer[4][3], 5);
+        assert_eq!(vic.framebuffer[4][4], 6, "Line 4, pixels 4-5 should be blue");
+        assert_eq!(vic.framebuffer[4][5], 6);
+        assert_eq!(vic.framebuffer[4][6], 7, "Line 4, pixels 6-7 should be yellow");
+        assert_eq!(vic.framebuffer[4][7], 7);
+    }
+
+    #[test]
+    fn test_multicolor_bitmap_mode_multiple_rows() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor bitmap mode
+        vic.registers[0x11] |= 0x20;
+        vic.registers[0x16] |= 0x10;
+
+        vic.registers[0x21] = 0x00; // Background 0: black
+
+        // Create bitmap data
+        let mut bitmap_data = vec![0u8; 8000];
+        // Row 0, cell 0, line 0: all 11
+        bitmap_data[0] = 0xFF;
+        // Row 1, cell 0, line 0: all 10
+        bitmap_data[320] = 0xAA;
+
+        // Screen RAM
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 0x12;  // Row 0, Cell 0: upper=1, lower=2
+        screen_ram[40] = 0x34; // Row 1, Cell 0: upper=3, lower=4
+
+        // Color RAM
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x05;  // Row 0, Cell 0: 5
+        color_ram[40] = 0x06; // Row 1, Cell 0: 6
+
+        // Render row 0, line 0
+        vic.step_scanline(51, &bitmap_data, &screen_ram, &color_ram);
+
+        // Row 0 cell 0 should be all color RAM (5)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[0][x], 5, "Row 0 pixel {} should be 5", x);
+        }
+
+        // Render row 1, line 0 (scanline 51 + 8 = 59)
+        vic.step_scanline(59, &bitmap_data, &screen_ram, &color_ram);
+
+        // Row 1 cell 0 should be all screen lower nibble (4)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[8][x], 4, "Row 1 pixel {} should be 4", x);
+        }
+    }
+
+    #[test]
+    fn test_multicolor_bitmap_mode_flag_detection() {
+        let mut vic = VicII::new();
+
+        // Initially neither bitmap nor multicolor mode
+        assert!(!vic.bitmap_mode());
+        assert!(!vic.multicolor_mode());
+
+        // Enable only bitmap mode
+        vic.registers[0x11] |= 0x20;
+        assert!(vic.bitmap_mode());
+        assert!(!vic.multicolor_mode());
+
+        // Enable multicolor mode too
+        vic.registers[0x16] |= 0x10;
+        assert!(vic.bitmap_mode());
+        assert!(vic.multicolor_mode());
+
+        // Disable bitmap mode, keep multicolor (this would be multicolor text mode)
+        vic.registers[0x11] &= !0x20;
+        assert!(!vic.bitmap_mode());
+        assert!(vic.multicolor_mode());
+    }
+
+    #[test]
+    fn test_multicolor_bitmap_mode_disabled_display() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor bitmap mode but disable display (DEN=0)
+        vic.registers[0x11] = 0x20; // BMM=1, DEN=0
+        vic.registers[0x16] |= 0x10; // MCM=1
+
+        let bitmap_data = vec![0xFFu8; 8000]; // All pixels set to 11
+        let screen_ram = vec![0xFFu8; 1000];
+        let color_ram = vec![0x0Fu8; 1000]; // Should be white if displayed
+
+        vic.step_scanline(51, &bitmap_data, &screen_ram, &color_ram);
+
+        // All pixels should be background color (6 = blue, default)
+        for x in 0..SCREEN_WIDTH {
+            assert_eq!(
+                vic.framebuffer[0][x], 6,
+                "Pixel {} should be background when display disabled",
+                x
+            );
+        }
+    }
+
+    #[test]
+    fn test_multicolor_bitmap_mode_full_16_colors_color_ram() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor bitmap mode
+        vic.registers[0x11] |= 0x20;
+        vic.registers[0x16] |= 0x10;
+
+        vic.registers[0x21] = 0x00; // Background 0: black
+
+        // Create bitmap data: all 11 bit pairs
+        let bitmap_data = vec![0xFFu8; 8000];
+
+        // Screen RAM (doesn't matter for 11 pattern)
+        let screen_ram = vec![0u8; 1000];
+
+        // Color RAM with various colors to test full 16-color range
+        let mut color_ram = vec![0u8; 1000];
+        for i in 0..16 {
+            color_ram[i] = i as u8;
+        }
+
+        vic.step_scanline(51, &bitmap_data, &screen_ram, &color_ram);
+
+        // Each cell should display its color RAM value
+        for cell in 0..16 {
+            let x = cell * 8;
+            assert_eq!(
+                vic.framebuffer[0][x],
+                cell as u8,
+                "Cell {} should have color {}",
+                cell,
+                cell
+            );
+        }
+    }
+
+    #[test]
+    fn test_multicolor_bitmap_mode_full_row_coverage() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor bitmap mode
+        vic.registers[0x11] |= 0x20;
+        vic.registers[0x16] |= 0x10;
+
+        vic.registers[0x21] = 0x0E; // Background 0: light blue
+
+        // Create bitmap data with alternating patterns across all 40 cells
+        let mut bitmap_data = vec![0u8; 8000];
+        for cell in 0..40 {
+            // Alternate between all 4 bit pair patterns
+            let pattern = match cell % 4 {
+                0 => 0x00, // 00 00 00 00
+                1 => 0x55, // 01 01 01 01
+                2 => 0xAA, // 10 10 10 10
+                _ => 0xFF, // 11 11 11 11
+            };
+            bitmap_data[cell * 8] = pattern;
+        }
+
+        // Screen RAM with distinct colors
+        let mut screen_ram = vec![0u8; 1000];
+        for cell in 0..40 {
+            screen_ram[cell] = 0x12; // upper=1, lower=2
+        }
+
+        // Color RAM
+        let mut color_ram = vec![0u8; 1000];
+        for cell in 0..40 {
+            color_ram[cell] = 0x03; // cyan
+        }
+
+        vic.step_scanline(51, &bitmap_data, &screen_ram, &color_ram);
+
+        // Verify the pattern across all 40 cells
+        for cell in 0..40 {
+            let x_base = cell * 8;
+            let expected_color = match cell % 4 {
+                0 => 0x0E, // bg0 (light blue)
+                1 => 1,    // screen upper (white)
+                2 => 2,    // screen lower (red)
+                _ => 3,    // color RAM (cyan)
+            };
+
+            // All 8 pixels in the cell should have the same color
+            for pixel in 0..8 {
+                assert_eq!(
+                    vic.framebuffer[0][x_base + pixel],
+                    expected_color,
+                    "Cell {} pixel {} should be color {}",
+                    cell,
+                    pixel,
+                    expected_color
+                );
+            }
         }
     }
 }
