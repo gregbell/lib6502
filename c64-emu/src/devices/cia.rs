@@ -12,6 +12,7 @@
 
 use lib6502::Device;
 use std::any::Any;
+use std::cell::Cell;
 
 /// CIA register count (16 registers, but mirrored across 256 bytes).
 #[allow(dead_code)]
@@ -204,12 +205,14 @@ pub struct Cia6526 {
     pub sdr: u8,
 
     /// Interrupt control register (read: flags, write: mask).
-    interrupt_flags: u8,
+    /// Uses Cell for interior mutability - reading ICR clears flags.
+    interrupt_flags: Cell<u8>,
     /// Interrupt mask.
     interrupt_mask: u8,
 
     /// IRQ/NMI line is active.
-    interrupt_pending: bool,
+    /// Uses Cell for interior mutability - reading ICR clears pending state.
+    interrupt_pending: Cell<bool>,
 
     /// Control register A.
     cra: u8,
@@ -233,9 +236,9 @@ impl Cia6526 {
             timer_b: CiaTimer::new(),
             tod: TodClock::new(),
             sdr: 0,
-            interrupt_flags: 0,
+            interrupt_flags: Cell::new(0),
             interrupt_mask: 0,
-            interrupt_pending: false,
+            interrupt_pending: Cell::new(false),
             cra: 0,
             crb: 0,
             external_a: 0xFF,
@@ -258,7 +261,7 @@ impl Cia6526 {
         // Clock Timer A
         let timer_a_underflow = self.timer_a.clock();
         if timer_a_underflow {
-            self.interrupt_flags |= 0x01; // Timer A interrupt flag
+            self.interrupt_flags.set(self.interrupt_flags.get() | 0x01); // Timer A interrupt flag
             self.check_interrupt();
         }
 
@@ -274,7 +277,7 @@ impl Cia6526 {
         if timer_b_input {
             let timer_b_underflow = self.timer_b.clock();
             if timer_b_underflow {
-                self.interrupt_flags |= 0x02; // Timer B interrupt flag
+                self.interrupt_flags.set(self.interrupt_flags.get() | 0x02); // Timer B interrupt flag
                 self.check_interrupt();
             }
         }
@@ -282,8 +285,8 @@ impl Cia6526 {
 
     /// Check and update interrupt state.
     fn check_interrupt(&mut self) {
-        if self.interrupt_flags & self.interrupt_mask != 0 {
-            self.interrupt_pending = true;
+        if self.interrupt_flags.get() & self.interrupt_mask != 0 {
+            self.interrupt_pending.set(true);
         }
     }
 
@@ -302,9 +305,9 @@ impl Cia6526 {
         self.timer_b = CiaTimer::new();
         self.tod = TodClock::new();
         self.sdr = 0;
-        self.interrupt_flags = 0;
+        self.interrupt_flags.set(0);
         self.interrupt_mask = 0;
-        self.interrupt_pending = false;
+        self.interrupt_pending.set(false);
         self.cra = 0;
         self.crb = 0;
     }
@@ -365,12 +368,12 @@ impl Cia6526 {
 
     /// Get the interrupt flags.
     pub fn interrupt_flags(&self) -> u8 {
-        self.interrupt_flags
+        self.interrupt_flags.get()
     }
 
     /// Set the interrupt flags (for save state restoration).
     pub fn set_interrupt_flags(&mut self, flags: u8) {
-        self.interrupt_flags = flags;
+        self.interrupt_flags.set(flags);
     }
 
     /// Get the interrupt mask.
@@ -385,7 +388,7 @@ impl Cia6526 {
 
     /// Set the interrupt pending flag (for save state restoration).
     pub fn set_interrupt_pending(&mut self, pending: bool) {
-        self.interrupt_pending = pending;
+        self.interrupt_pending.set(pending);
     }
 
     /// Get control register A.
@@ -442,7 +445,7 @@ impl Cia6526 {
         // Serial data register
         regs[0x0C] = self.sdr;
         // Interrupt control (flags with pending bit)
-        regs[0x0D] = self.interrupt_flags | if self.interrupt_pending { 0x80 } else { 0 };
+        regs[0x0D] = self.interrupt_flags.get() | if self.interrupt_pending.get() { 0x80 } else { 0 };
         // Control registers
         regs[0x0E] = self.cra;
         regs[0x0F] = self.crb;
@@ -500,8 +503,15 @@ impl Device for Cia6526 {
             // Serial data register
             0x0C => self.sdr,
             // Interrupt control (read clears flags)
-            // Note: Actual clearing happens in mutable context
-            0x0D => self.interrupt_flags | if self.interrupt_pending { 0x80 } else { 0 },
+            // On real hardware, reading ICR clears the interrupt flags
+            0x0D => {
+                let flags = self.interrupt_flags.get();
+                let pending = self.interrupt_pending.get();
+                // Clear flags and pending state after reading
+                self.interrupt_flags.set(0);
+                self.interrupt_pending.set(false);
+                flags | if pending { 0x80 } else { 0 }
+            }
             // Control register A
             0x0E => self.cra,
             // Control register B
@@ -623,7 +633,7 @@ impl Device for Cia6526 {
     }
 
     fn has_interrupt(&self) -> bool {
-        self.interrupt_pending && self.cia_type == CiaType::Cia1
+        self.interrupt_pending.get() && self.cia_type == CiaType::Cia1
     }
 }
 
@@ -635,7 +645,7 @@ mod tests {
     fn test_new_cia() {
         let cia1 = Cia6526::new_cia1();
         assert!(cia1.is_cia1());
-        assert!(!cia1.interrupt_pending);
+        assert!(!cia1.interrupt_pending.get());
 
         let cia2 = Cia6526::new_cia2();
         assert!(cia2.is_cia2());
@@ -677,7 +687,7 @@ mod tests {
         // Clock one more time - underflow happens when counter is at 0
         cia.clock();
         // Timer should have underflowed and set interrupt flag
-        assert!(cia.interrupt_flags & 0x01 != 0);
+        assert!(cia.interrupt_flags.get() & 0x01 != 0);
     }
 
     #[test]
@@ -697,7 +707,7 @@ mod tests {
         cia.clock();
 
         // Should have interrupt
-        assert!(cia.interrupt_pending);
+        assert!(cia.interrupt_pending.get());
     }
 
     #[test]
