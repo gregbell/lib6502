@@ -5,7 +5,16 @@
 
 use wasm_bindgen::prelude::*;
 
-use crate::system::{C64System, Region};
+use crate::system::{map_pc_keycode, C64System, Region};
+
+/// Screen width in pixels.
+pub const SCREEN_WIDTH: u32 = 320;
+
+/// Screen height in pixels.
+pub const SCREEN_HEIGHT: u32 = 200;
+
+/// Framebuffer size in bytes (320 × 200 indexed color pixels).
+pub const FRAMEBUFFER_SIZE: u32 = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 /// WASM wrapper for the C64 emulator system.
 #[wasm_bindgen]
@@ -156,6 +165,108 @@ impl C64Emulator {
     #[wasm_bindgen]
     pub fn pc(&self) -> u16 {
         self.system.pc()
+    }
+
+    // =========================================================================
+    // Display API (T038-T039)
+    // =========================================================================
+
+    /// Get pointer to VIC-II framebuffer in WASM memory.
+    ///
+    /// Buffer is 320×200 bytes, indexed color (0-15).
+    /// Use this with `new Uint8Array(wasm.memory.buffer, ptr, 64000)` in JavaScript.
+    ///
+    /// # Safety
+    /// The returned pointer is valid as long as the C64Emulator instance exists.
+    /// Do not store the pointer across calls that may reallocate the framebuffer.
+    #[wasm_bindgen]
+    pub fn get_framebuffer_ptr(&mut self) -> *const u8 {
+        self.system.get_framebuffer_ptr()
+    }
+
+    /// Get framebuffer width in pixels.
+    #[wasm_bindgen]
+    pub fn get_framebuffer_width(&self) -> u32 {
+        SCREEN_WIDTH
+    }
+
+    /// Get framebuffer height in pixels.
+    #[wasm_bindgen]
+    pub fn get_framebuffer_height(&self) -> u32 {
+        SCREEN_HEIGHT
+    }
+
+    /// Get framebuffer size in bytes.
+    #[wasm_bindgen]
+    pub fn get_framebuffer_size(&self) -> u32 {
+        FRAMEBUFFER_SIZE
+    }
+
+    /// Get current VIC-II border color (0-15).
+    #[wasm_bindgen]
+    pub fn get_border_color(&mut self) -> u8 {
+        self.system.get_border_color()
+    }
+
+    /// Get current VIC-II raster line.
+    ///
+    /// Returns value 0-311 (PAL) or 0-262 (NTSC).
+    #[wasm_bindgen]
+    pub fn get_current_raster(&mut self) -> u16 {
+        self.system.get_current_raster()
+    }
+
+    // =========================================================================
+    // PC Keyboard Mapping API (T041)
+    // =========================================================================
+
+    /// Signal key press using PC keycode (DOM KeyboardEvent.code).
+    ///
+    /// Automatically maps PC keycodes to C64 matrix positions.
+    /// Supported keycodes: KeyA-KeyZ, Digit0-Digit9, F1-F12, Space, Enter, etc.
+    ///
+    /// # Example keycodes
+    /// - "KeyA" → A key
+    /// - "Digit1" → 1 key
+    /// - "Enter" → RETURN key
+    /// - "Space" → SPACE key
+    /// - "ShiftLeft" → Left SHIFT key
+    #[wasm_bindgen]
+    pub fn key_down_pc(&mut self, keycode: &str) {
+        if let Some((row, col)) = map_pc_keycode(keycode) {
+            self.system.key_down(row, col);
+        }
+    }
+
+    /// Signal key release using PC keycode (DOM KeyboardEvent.code).
+    ///
+    /// See `key_down_pc` for supported keycodes.
+    #[wasm_bindgen]
+    pub fn key_up_pc(&mut self, keycode: &str) {
+        if let Some((row, col)) = map_pc_keycode(keycode) {
+            self.system.key_up(row, col);
+        }
+    }
+
+    // =========================================================================
+    // Special Keys API (T042)
+    // =========================================================================
+
+    /// Trigger RESTORE key (NMI).
+    ///
+    /// Unlike normal keys, RESTORE triggers a non-maskable interrupt.
+    /// On a real C64, this is used to break out of infinite loops or reset.
+    #[wasm_bindgen]
+    pub fn restore_key(&mut self) {
+        self.system.restore_key();
+    }
+
+    /// Release all keys on the keyboard.
+    ///
+    /// Useful when the browser tab loses focus.
+    #[wasm_bindgen]
+    pub fn release_all_keys(&mut self) {
+        self.system.release_all_keys();
     }
 }
 

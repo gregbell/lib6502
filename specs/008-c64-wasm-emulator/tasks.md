@@ -109,11 +109,11 @@
 
 ### WASM Display API
 
-- [ ] T038 [US1] Implement get_framebuffer_ptr() returning pointer to VIC-II buffer in src/wasm/c64_api.rs
-- [ ] T039 [US1] Implement get_border_color() and get_current_raster() in src/wasm/c64_api.rs
-- [ ] T040 [US1] Implement key_down(), key_up() with matrix positions in src/wasm/c64_api.rs
-- [ ] T041 [US1] Implement key_down_pc(), key_up_pc() with PC keycode mapping in src/wasm/c64_api.rs
-- [ ] T042 [US1] Implement restore_key() for NMI trigger in src/wasm/c64_api.rs
+- [x] T038 [US1] Implement get_framebuffer_ptr() returning pointer to VIC-II buffer in c64-emu/src/wasm.rs
+- [x] T039 [US1] Implement get_border_color() and get_current_raster() in c64-emu/src/wasm.rs
+- [x] T040 [US1] Implement key_down(), key_up() with matrix positions in c64-emu/src/wasm.rs
+- [x] T041 [US1] Implement key_down_pc(), key_up_pc() with PC keycode mapping in c64-emu/src/wasm.rs
+- [x] T042 [US1] Implement restore_key() for NMI trigger in c64-emu/src/wasm.rs
 
 ### Web Frontend Display
 
@@ -412,14 +412,14 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 |-------|-------|-----------|-------------|
 | Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
-| Phase 3: US1 | T029-T050 | 9/22 | Boot, keyboard, display |
+| Phase 3: US1 | T029-T050 | 14/22 | Boot, keyboard, display |
 | Phase 4: US2 | T051-T066 | 0/16 | Disk image loading |
 | Phase 5: US3 | T067-T091 | 0/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **36/132** | |
+| **Total** | **132 tasks** | **41/132** | |
 
 ---
 
