@@ -19,6 +19,58 @@ pub const SID_REGISTER_COUNT: usize = 29;
 /// Number of voices in the SID.
 pub const VOICE_COUNT: usize = 3;
 
+/// ADSR attack rate periods (CPU cycles between envelope increments).
+/// These values are the number of clock cycles at ~1MHz for each attack setting (0-15).
+/// Attack rate is linear (envelope counter always increments by 1).
+///
+/// Reference: reSID documentation and SID chip analysis.
+pub const ATTACK_RATE_PERIODS: [u16; 16] = [
+    9,     // 0: 2 ms
+    32,    // 1: 8 ms
+    63,    // 2: 16 ms
+    95,    // 3: 24 ms
+    149,   // 4: 38 ms
+    220,   // 5: 56 ms
+    267,   // 6: 68 ms
+    313,   // 7: 80 ms
+    392,   // 8: 100 ms
+    977,   // 9: 250 ms
+    1954,  // 10: 500 ms
+    3126,  // 11: 800 ms
+    3907,  // 12: 1 s
+    11720, // 13: 3 s
+    19532, // 14: 5 s
+    31251, // 15: 8 s
+];
+
+/// ADSR decay/release rate periods (CPU cycles between envelope decrements).
+/// These values are approximately 3x the attack rates because decay/release times
+/// are specified as longer in the SID documentation.
+///
+/// Note: The actual decrement amount varies based on the exponential counter
+/// (see `exp_counter_periods` for the dividers applied at different envelope levels).
+///
+/// Reference: reSID documentation and SID chip analysis.
+pub const DECAY_RELEASE_RATE_PERIODS: [u16; 16] = [
+    9,     // 0: 6 ms
+    32,    // 1: 24 ms
+    63,    // 2: 48 ms
+    95,    // 3: 72 ms
+    149,   // 4: 114 ms
+    220,   // 5: 168 ms
+    267,   // 6: 204 ms
+    313,   // 7: 240 ms
+    392,   // 8: 300 ms
+    977,   // 9: 750 ms
+    1954,  // 10: 1.5 s
+    3126,  // 11: 2.4 s
+    3907,  // 12: 3 s
+    11720, // 13: 9 s
+    19532, // 14: 15 s
+    31251, // 15: 24 s
+];
+
+
 /// Envelope state machine phases.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvelopeState {
@@ -136,6 +188,71 @@ impl SidVoice {
     #[inline]
     pub fn sync_enabled(&self) -> bool {
         self.control & 0x02 != 0
+    }
+
+    /// Get the attack rate value (0-15) from the AD register.
+    #[inline]
+    pub fn attack_rate(&self) -> u8 {
+        (self.attack_decay >> 4) & 0x0F
+    }
+
+    /// Get the decay rate value (0-15) from the AD register.
+    #[inline]
+    pub fn decay_rate(&self) -> u8 {
+        self.attack_decay & 0x0F
+    }
+
+    /// Get the sustain level (0-15) from the SR register.
+    /// Note: Sustain is a level, not a rate. The actual sustain
+    /// envelope value is (sustain * 17), giving 0-255 range.
+    #[inline]
+    pub fn sustain_level(&self) -> u8 {
+        (self.sustain_release >> 4) & 0x0F
+    }
+
+    /// Get the release rate value (0-15) from the SR register.
+    #[inline]
+    pub fn release_rate(&self) -> u8 {
+        self.sustain_release & 0x0F
+    }
+
+    /// Get the sustain envelope value (0-255).
+    /// Sustain register value 0-15 maps to 0-255 by multiplying by 17.
+    /// This gives: 0->0, 1->17, 2->34, ..., 15->255
+    #[inline]
+    pub fn sustain_value(&self) -> u8 {
+        let sustain = self.sustain_level();
+        // Multiply by 17 to map 0-15 to 0-255
+        // 15 * 17 = 255, so this maps perfectly
+        sustain.saturating_mul(17)
+    }
+
+    /// Get the exponential counter period for the current envelope value.
+    /// This implements the SID's characteristic exponential decay curve
+    /// by slowing down the envelope as it approaches zero.
+    #[inline]
+    pub fn get_exp_period(&self) -> u8 {
+        let env = self.envelope_counter;
+        // Check thresholds from highest to lowest
+        // 255-94: period 1
+        // 93-55: period 2
+        // 54-27: period 4
+        // 26-15: period 8
+        // 14-7: period 16
+        // 6-0: period 30
+        if env >= 94 {
+            1
+        } else if env >= 55 {
+            2
+        } else if env >= 27 {
+            4
+        } else if env >= 15 {
+            8
+        } else if env >= 7 {
+            16
+        } else {
+            30
+        }
     }
 
     /// Get the current MSB of the accumulator (bit 23).
@@ -408,7 +525,9 @@ impl Sid6581 {
         // Clock all voice phase accumulators and handle hard sync
         self.clock_phase_accumulators();
 
-        // TODO: Implement envelope clocking (T081)
+        // Clock envelope generators for all voices
+        self.clock_envelopes();
+
         // TODO: Implement filter processing (T083-T084)
 
         // Audio sample generation
@@ -447,8 +566,7 @@ impl Sid6581 {
             self.voices[2].generate_waveform(ring_mod_msb[2]),
         ];
 
-        // Apply envelope to each voice (currently bypassed - envelope_counter used directly)
-        // TODO: Proper envelope clocking in T081
+        // Apply envelope to each voice
         // Waveform output is 0-0xFFF (12 bits), envelope is 0-255
         // Result is 0 to (4095 * 255) = 1,044,225 before shift
         // After >> 8, result is 0 to 4079
@@ -570,6 +688,102 @@ impl Sid6581 {
                 if source_had_transition {
                     // Reset this voice's accumulator
                     self.voices[voice_idx].accumulator = 0;
+                }
+            }
+        }
+    }
+
+    /// Clock the ADSR envelope generators for all three voices.
+    ///
+    /// The envelope generator produces an 8-bit output (0-255) that modulates
+    /// the voice amplitude. It goes through four states:
+    ///
+    /// 1. **Attack**: Linear ramp from 0 to 255
+    /// 2. **Decay**: Exponential decay from 255 to sustain level
+    /// 3. **Sustain**: Holds at sustain level while gate is on
+    /// 4. **Release**: Exponential decay from current level to 0
+    ///
+    /// The exponential decay is approximated using dividers that slow down
+    /// the decay rate as the envelope approaches zero. This creates the
+    /// characteristic SID envelope shape.
+    fn clock_envelopes(&mut self) {
+        for voice in &mut self.voices {
+            // Increment the rate counter
+            voice.rate_counter = voice.rate_counter.wrapping_add(1);
+
+            // Get the rate period for the current envelope state
+            let rate_period = match voice.envelope_state {
+                EnvelopeState::Attack => ATTACK_RATE_PERIODS[voice.attack_rate() as usize],
+                EnvelopeState::Decay => DECAY_RELEASE_RATE_PERIODS[voice.decay_rate() as usize],
+                EnvelopeState::Sustain => 0, // No rate period needed for sustain
+                EnvelopeState::Release => {
+                    DECAY_RELEASE_RATE_PERIODS[voice.release_rate() as usize]
+                }
+            };
+
+            // Check if it's time to update the envelope
+            if voice.envelope_state == EnvelopeState::Sustain {
+                // In Sustain state, the envelope holds at the sustain level.
+                // Nothing to do - the envelope counter was set when we entered
+                // decay and reached the sustain level.
+                continue;
+            }
+
+            // Check if we've completed a rate period
+            if voice.rate_counter >= rate_period {
+                voice.rate_counter = 0;
+
+                match voice.envelope_state {
+                    EnvelopeState::Attack => {
+                        // Attack phase: linear increment
+                        // Increment envelope counter. If it reaches 255, transition to Decay.
+                        if voice.envelope_counter < 255 {
+                            voice.envelope_counter = voice.envelope_counter.wrapping_add(1);
+                        }
+                        if voice.envelope_counter == 255 {
+                            voice.envelope_state = EnvelopeState::Decay;
+                            voice.exp_counter = 0; // Reset exponential counter for decay
+                        }
+                    }
+                    EnvelopeState::Decay => {
+                        // Decay phase: exponential decrement toward sustain level
+                        let sustain = voice.sustain_value();
+
+                        if voice.envelope_counter > sustain {
+                            // Apply exponential decay: only decrement when exp_counter reaches period
+                            voice.exp_counter = voice.exp_counter.wrapping_add(1);
+                            let exp_period = voice.get_exp_period();
+
+                            if voice.exp_counter >= exp_period {
+                                voice.exp_counter = 0;
+                                voice.envelope_counter = voice.envelope_counter.saturating_sub(1);
+                            }
+                        }
+
+                        // Check if we've reached or passed the sustain level
+                        if voice.envelope_counter <= sustain {
+                            voice.envelope_counter = sustain;
+                            voice.envelope_state = EnvelopeState::Sustain;
+                        }
+                    }
+                    EnvelopeState::Sustain => {
+                        // Already handled above with continue
+                        unreachable!()
+                    }
+                    EnvelopeState::Release => {
+                        // Release phase: exponential decrement toward 0
+                        if voice.envelope_counter > 0 {
+                            // Apply exponential decay
+                            voice.exp_counter = voice.exp_counter.wrapping_add(1);
+                            let exp_period = voice.get_exp_period();
+
+                            if voice.exp_counter >= exp_period {
+                                voice.exp_counter = 0;
+                                voice.envelope_counter = voice.envelope_counter.saturating_sub(1);
+                            }
+                        }
+                        // Envelope stays at 0 until gate is triggered again
+                    }
                 }
             }
         }
@@ -1660,5 +1874,448 @@ mod tests {
         let expected_triangle = ((sid.voices[0].accumulator >> 12) & 0x7FF) as u16 ^ 0x7FF;
 
         assert_eq!(output.unwrap(), expected_triangle);
+    }
+
+    // =====================================================
+    // ADSR Envelope Tests (T081, T082)
+    // =====================================================
+
+    #[test]
+    fn test_adsr_register_accessors() {
+        let mut voice = SidVoice::new();
+
+        // Set AD register to 0xF8 (Attack=15, Decay=8)
+        voice.attack_decay = 0xF8;
+        assert_eq!(voice.attack_rate(), 15);
+        assert_eq!(voice.decay_rate(), 8);
+
+        // Set SR register to 0x93 (Sustain=9, Release=3)
+        voice.sustain_release = 0x93;
+        assert_eq!(voice.sustain_level(), 9);
+        assert_eq!(voice.release_rate(), 3);
+
+        // Test sustain_value conversion (9 * 17 = 153)
+        assert_eq!(voice.sustain_value(), 153);
+
+        // Test boundary values
+        voice.sustain_release = 0xF0; // Sustain=15, Release=0
+        assert_eq!(voice.sustain_value(), 255);
+
+        voice.sustain_release = 0x00; // Sustain=0, Release=0
+        assert_eq!(voice.sustain_value(), 0);
+    }
+
+    #[test]
+    fn test_attack_rate_table_values() {
+        // Verify the attack rate table has expected values
+        assert_eq!(ATTACK_RATE_PERIODS[0], 9); // 2 ms
+        assert_eq!(ATTACK_RATE_PERIODS[15], 31251); // 8 s
+
+        // Verify all values are increasing
+        for i in 1..16 {
+            assert!(
+                ATTACK_RATE_PERIODS[i] >= ATTACK_RATE_PERIODS[i - 1],
+                "Attack rate should increase with index"
+            );
+        }
+    }
+
+    #[test]
+    fn test_decay_release_rate_table_values() {
+        // Verify the decay/release rate table has expected values
+        assert_eq!(DECAY_RELEASE_RATE_PERIODS[0], 9); // 6 ms
+        assert_eq!(DECAY_RELEASE_RATE_PERIODS[15], 31251); // 24 s
+
+        // Verify all values are increasing
+        for i in 1..16 {
+            assert!(
+                DECAY_RELEASE_RATE_PERIODS[i] >= DECAY_RELEASE_RATE_PERIODS[i - 1],
+                "Decay/Release rate should increase with index"
+            );
+        }
+    }
+
+    #[test]
+    fn test_exponential_period_thresholds() {
+        let mut voice = SidVoice::new();
+
+        // Test various envelope levels and their corresponding exp periods
+        voice.envelope_counter = 255;
+        assert_eq!(voice.get_exp_period(), 1);
+
+        voice.envelope_counter = 100;
+        assert_eq!(voice.get_exp_period(), 1);
+
+        voice.envelope_counter = 94;
+        assert_eq!(voice.get_exp_period(), 1);
+
+        voice.envelope_counter = 93;
+        assert_eq!(voice.get_exp_period(), 2);
+
+        voice.envelope_counter = 55;
+        assert_eq!(voice.get_exp_period(), 2);
+
+        voice.envelope_counter = 54;
+        assert_eq!(voice.get_exp_period(), 4);
+
+        voice.envelope_counter = 27;
+        assert_eq!(voice.get_exp_period(), 4);
+
+        voice.envelope_counter = 26;
+        assert_eq!(voice.get_exp_period(), 8);
+
+        voice.envelope_counter = 15;
+        assert_eq!(voice.get_exp_period(), 8);
+
+        voice.envelope_counter = 14;
+        assert_eq!(voice.get_exp_period(), 16);
+
+        voice.envelope_counter = 7;
+        assert_eq!(voice.get_exp_period(), 16);
+
+        voice.envelope_counter = 6;
+        assert_eq!(voice.get_exp_period(), 30);
+
+        voice.envelope_counter = 0;
+        assert_eq!(voice.get_exp_period(), 30);
+    }
+
+    #[test]
+    fn test_gate_on_starts_attack() {
+        let mut sid = Sid6581::new();
+
+        // Initial state should be Release
+        assert_eq!(sid.voices[0].envelope_state, EnvelopeState::Release);
+        assert_eq!(sid.voices[0].envelope_counter, 0);
+
+        // Set gate on (bit 0 of control register)
+        sid.write(0x04, 0x01); // Gate on
+
+        // Should transition to Attack
+        assert_eq!(sid.voices[0].envelope_state, EnvelopeState::Attack);
+    }
+
+    #[test]
+    fn test_gate_off_starts_release() {
+        let mut sid = Sid6581::new();
+
+        // Start with gate on, in attack
+        sid.write(0x04, 0x01);
+        assert_eq!(sid.voices[0].envelope_state, EnvelopeState::Attack);
+
+        // Set some envelope value
+        sid.voices[0].envelope_counter = 128;
+
+        // Gate off
+        sid.write(0x04, 0x00);
+
+        // Should transition to Release
+        assert_eq!(sid.voices[0].envelope_state, EnvelopeState::Release);
+        // Envelope should still have its value
+        assert_eq!(sid.voices[0].envelope_counter, 128);
+    }
+
+    #[test]
+    fn test_attack_phase_increases_envelope() {
+        let mut sid = Sid6581::new();
+
+        // Set fastest attack (0) with AD register
+        sid.write(0x05, 0x00); // Attack=0, Decay=0
+
+        // Start gate
+        sid.write(0x04, 0x01);
+        assert_eq!(sid.voices[0].envelope_state, EnvelopeState::Attack);
+        assert_eq!(sid.voices[0].envelope_counter, 0);
+
+        // Clock enough times to see envelope increase
+        // Attack rate 0 = 9 cycles per increment
+        for _ in 0..20 {
+            sid.clock();
+        }
+
+        // Envelope should have increased
+        assert!(
+            sid.voices[0].envelope_counter > 0,
+            "Envelope should increase during attack"
+        );
+    }
+
+    #[test]
+    fn test_attack_reaches_max_then_decay() {
+        let mut sid = Sid6581::new();
+
+        // Set fastest attack (0), some decay
+        sid.write(0x05, 0x00); // Attack=0, Decay=0
+        sid.write(0x06, 0x80); // Sustain=8 (8*17=136), Release=0
+
+        // Start gate
+        sid.write(0x04, 0x01);
+
+        // Clock until attack completes
+        // With attack rate 0 (9 cycles per increment), need about 9 * 256 = 2304 cycles
+        for _ in 0..2500 {
+            sid.clock();
+        }
+
+        // Should have reached max and transitioned to Decay
+        assert_eq!(
+            sid.voices[0].envelope_state,
+            EnvelopeState::Decay,
+            "Should be in Decay after attack completes"
+        );
+    }
+
+    #[test]
+    fn test_decay_to_sustain() {
+        let mut sid = Sid6581::new();
+
+        // Set fastest attack and decay, specific sustain level
+        sid.write(0x05, 0x00); // Attack=0, Decay=0
+        sid.write(0x06, 0x80); // Sustain=8 (8*17=136), Release=0
+
+        // Start gate
+        sid.write(0x04, 0x01);
+
+        // Manually set to decay state at max envelope to test decay
+        sid.voices[0].envelope_state = EnvelopeState::Decay;
+        sid.voices[0].envelope_counter = 255;
+
+        // Clock until decay completes
+        // This will take a while due to exponential slowdown, but should eventually reach sustain
+        for _ in 0..50000 {
+            sid.clock();
+        }
+
+        // Should have transitioned to Sustain
+        assert_eq!(
+            sid.voices[0].envelope_state,
+            EnvelopeState::Sustain,
+            "Should be in Sustain after decay completes"
+        );
+
+        // Envelope should be at or near sustain level
+        let sustain_level = sid.voices[0].sustain_value();
+        assert_eq!(
+            sid.voices[0].envelope_counter, sustain_level,
+            "Envelope should be at sustain level"
+        );
+    }
+
+    #[test]
+    fn test_sustain_holds_level() {
+        let mut sid = Sid6581::new();
+
+        // Set up sustain level
+        sid.write(0x06, 0xA0); // Sustain=10 (10*17=170), Release=0
+
+        // Gate on first (this sets Attack state)
+        sid.write(0x04, 0x01);
+
+        // Then manually override to sustain state
+        sid.voices[0].envelope_state = EnvelopeState::Sustain;
+        sid.voices[0].envelope_counter = 170;
+
+        // Clock many times
+        for _ in 0..1000 {
+            sid.clock();
+        }
+
+        // Envelope should stay at sustain level
+        assert_eq!(
+            sid.voices[0].envelope_state,
+            EnvelopeState::Sustain,
+            "Should remain in Sustain"
+        );
+        assert_eq!(
+            sid.voices[0].envelope_counter, 170,
+            "Envelope should hold at sustain level"
+        );
+    }
+
+    #[test]
+    fn test_release_from_sustain() {
+        let mut sid = Sid6581::new();
+
+        // Set fast release
+        sid.write(0x05, 0x00); // Attack=0, Decay=0
+        sid.write(0x06, 0xF0); // Sustain=15 (max), Release=0
+
+        // Set up in sustain state
+        sid.voices[0].envelope_state = EnvelopeState::Sustain;
+        sid.voices[0].envelope_counter = 255;
+        sid.voices[0].control = 0x01; // Gate on
+
+        // Gate off to trigger release
+        sid.write(0x04, 0x00);
+
+        assert_eq!(sid.voices[0].envelope_state, EnvelopeState::Release);
+
+        // Clock until release completes
+        for _ in 0..50000 {
+            sid.clock();
+        }
+
+        // Envelope should have decayed to 0
+        assert_eq!(
+            sid.voices[0].envelope_counter, 0,
+            "Envelope should decay to 0 during release"
+        );
+    }
+
+    #[test]
+    fn test_release_exponential_decay() {
+        let mut sid = Sid6581::new();
+
+        // Set fast release for quicker test
+        sid.write(0x06, 0x00); // Sustain=0, Release=0 (fastest)
+
+        // Start in release with high envelope value
+        sid.voices[0].envelope_state = EnvelopeState::Release;
+        sid.voices[0].envelope_counter = 200;
+
+        // Capture envelope values over time
+        let mut values: Vec<u8> = Vec::new();
+        values.push(sid.voices[0].envelope_counter);
+
+        for i in 0..5000 {
+            sid.clock();
+            if i % 100 == 0 {
+                values.push(sid.voices[0].envelope_counter);
+            }
+        }
+
+        // Verify envelope is decreasing (not necessarily monotonically due to sampling)
+        assert!(
+            values.last().unwrap() < values.first().unwrap(),
+            "Envelope should decrease over time during release"
+        );
+    }
+
+    #[test]
+    fn test_voice_3_envelope_readback() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 3 envelope to a specific value
+        sid.voices[2].envelope_counter = 0xAB;
+
+        // Read from ENV3 register ($D41C = offset 0x1C)
+        let readback = sid.read(0x1C);
+
+        assert_eq!(readback, 0xAB, "ENV3 readback should match envelope counter");
+    }
+
+    #[test]
+    fn test_all_three_voices_have_independent_envelopes() {
+        let mut sid = Sid6581::new();
+
+        // Set different ADSR for each voice
+        sid.write(0x05, 0x00); // Voice 1: fastest
+        sid.write(0x0C, 0x88); // Voice 2: medium
+        sid.write(0x13, 0xFF); // Voice 3: slowest
+
+        // Start attack on all voices
+        sid.write(0x04, 0x01); // Voice 1 gate on
+        sid.write(0x0B, 0x01); // Voice 2 gate on
+        sid.write(0x12, 0x01); // Voice 3 gate on
+
+        // Clock for a while
+        for _ in 0..1000 {
+            sid.clock();
+        }
+
+        // Each voice should have different envelope values
+        // Voice 1 should be highest (fastest attack)
+        // Voice 3 should be lowest (slowest attack)
+        let env1 = sid.voices[0].envelope_counter;
+        let _env2 = sid.voices[1].envelope_counter; // Medium attack speed
+        let env3 = sid.voices[2].envelope_counter;
+
+        // At minimum, verify they're progressing independently
+        // Voice 1 with attack=0 should have progressed more than voice 3 with attack=15
+        assert!(
+            env1 >= env3,
+            "Voice 1 (fast attack) should have higher/equal envelope than voice 3 (slow attack)"
+        );
+    }
+
+    #[test]
+    fn test_gate_on_during_release_restarts_attack() {
+        let mut sid = Sid6581::new();
+
+        // Start with gate on, get some envelope
+        sid.write(0x04, 0x01);
+        for _ in 0..100 {
+            sid.clock();
+        }
+
+        // Gate off - start release
+        sid.write(0x04, 0x00);
+        assert_eq!(sid.voices[0].envelope_state, EnvelopeState::Release);
+
+        // Let release progress a bit
+        for _ in 0..50 {
+            sid.clock();
+        }
+
+        // Gate on again - should restart attack
+        sid.write(0x04, 0x01);
+        assert_eq!(
+            sid.voices[0].envelope_state,
+            EnvelopeState::Attack,
+            "Gate on during release should restart attack"
+        );
+    }
+
+    #[test]
+    fn test_zero_sustain_goes_directly_to_zero() {
+        let mut sid = Sid6581::new();
+
+        // Set sustain to 0
+        sid.write(0x05, 0x00); // Attack=0, Decay=0
+        sid.write(0x06, 0x00); // Sustain=0, Release=0
+
+        // Start attack and let it reach max
+        sid.write(0x04, 0x01);
+        sid.voices[0].envelope_state = EnvelopeState::Decay;
+        sid.voices[0].envelope_counter = 255;
+
+        // Clock until decay finishes
+        for _ in 0..100000 {
+            sid.clock();
+            if sid.voices[0].envelope_state == EnvelopeState::Sustain {
+                break;
+            }
+        }
+
+        // Should be in sustain at 0
+        assert_eq!(sid.voices[0].envelope_state, EnvelopeState::Sustain);
+        assert_eq!(
+            sid.voices[0].envelope_counter, 0,
+            "Sustain=0 should result in envelope at 0"
+        );
+    }
+
+    #[test]
+    fn test_max_sustain_holds_at_255() {
+        let mut sid = Sid6581::new();
+
+        // Set sustain to max (15 -> 255)
+        sid.write(0x06, 0xF0); // Sustain=15, Release=0
+
+        // Go directly to decay from max
+        sid.voices[0].envelope_state = EnvelopeState::Decay;
+        sid.voices[0].envelope_counter = 255;
+
+        // Clock - should immediately transition to sustain since we're already at sustain level
+        for _ in 0..10 {
+            sid.clock();
+        }
+
+        assert_eq!(
+            sid.voices[0].envelope_state,
+            EnvelopeState::Sustain,
+            "Should transition to sustain immediately at max"
+        );
+        assert_eq!(sid.voices[0].envelope_counter, 255);
     }
 }
