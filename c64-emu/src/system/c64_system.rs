@@ -455,6 +455,28 @@ impl C64System {
         self.cpu.memory_mut().sid.take_samples()
     }
 
+    /// Get a raw pointer to the VIC-II framebuffer.
+    ///
+    /// This is useful for WASM bindings where JavaScript can directly access
+    /// the framebuffer memory without copying. The framebuffer is a contiguous
+    /// 320×200 array of indexed colors (0-15).
+    ///
+    /// # Safety
+    /// The returned pointer is valid as long as the C64System instance exists.
+    pub fn get_framebuffer_ptr(&mut self) -> *const u8 {
+        self.cpu.memory_mut().vic.framebuffer_ptr()
+    }
+
+    /// Get the current border color (0-15).
+    pub fn get_border_color(&mut self) -> u8 {
+        self.cpu.memory_mut().vic.border_color()
+    }
+
+    /// Get the current VIC-II raster line.
+    pub fn get_current_raster(&mut self) -> u16 {
+        self.cpu.memory_mut().vic.raster()
+    }
+
     /// Set joystick 1 state.
     pub fn set_joystick1(&mut self, state: u8) {
         self.cpu.memory_mut().cia1.set_joystick_port_b(state);

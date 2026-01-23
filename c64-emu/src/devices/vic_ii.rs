@@ -92,6 +92,18 @@ impl VicII {
         &self.framebuffer
     }
 
+    /// Get a raw pointer to the framebuffer data.
+    ///
+    /// This is useful for WASM bindings where JavaScript can directly access
+    /// the framebuffer memory without copying. The framebuffer is a contiguous
+    /// 320×200 array of indexed colors (0-15).
+    ///
+    /// # Safety
+    /// The returned pointer is valid as long as the VicII instance exists.
+    pub fn framebuffer_ptr(&self) -> *const u8 {
+        self.framebuffer.as_ptr() as *const u8
+    }
+
     /// Get the current raster line.
     pub fn raster(&self) -> u16 {
         self.current_raster

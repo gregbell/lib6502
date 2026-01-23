@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C64 Emulator - lib6502</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sixtyfour&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>C64 Emulator</h1>
+    </header>
+
+    <main>
+        <!-- ROM Upload Section (shown on first load before ROMs are cached) -->
+        <section id="rom-upload-section" class="panel rom-panel">
+            <h2>Load ROMs</h2>
+            <p class="rom-instructions">
+                The C64 emulator requires the original Commodore 64 ROM files to run.
+                Please provide the following ROM files:
+            </p>
+            <div class="rom-upload-grid">
+                <div class="rom-upload-item">
+                    <label for="kernal-rom">KERNAL ROM (8KB)</label>
+                    <input type="file" id="kernal-rom" accept=".bin,.rom" data-rom-type="kernal" data-expected-size="8192">
+                    <span class="rom-status" id="kernal-status"></span>
+                </div>
+                <div class="rom-upload-item">
+                    <label for="basic-rom">BASIC ROM (8KB)</label>
+                    <input type="file" id="basic-rom" accept=".bin,.rom" data-rom-type="basic" data-expected-size="8192">
+                    <span class="rom-status" id="basic-status"></span>
+                </div>
+                <div class="rom-upload-item">
+                    <label for="char-rom">Character ROM (4KB)</label>
+                    <input type="file" id="char-rom" accept=".bin,.rom" data-rom-type="charrom" data-expected-size="4096">
+                    <span class="rom-status" id="charrom-status"></span>
+                </div>
+            </div>
+            <button id="start-emulator-btn" class="btn btn-primary" disabled>Start Emulator</button>
+            <p class="rom-note">
+                ROMs will be cached in your browser for future sessions.
+            </p>
+        </section>
+
+        <!-- Emulator Section (shown after ROMs are loaded) -->
+        <section id="emulator-section" class="emulator-container" style="display: none;">
+            <!-- C64 Screen with Border -->
+            <div id="c64-display" class="c64-display">
+                <div id="c64-border" class="c64-border">
+                    <canvas id="c64-screen" width="320" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Control Bar -->
+            <div class="control-bar">
+                <div class="control-group">
+                    <button id="reset-btn" class="btn btn-warning" title="Reset C64">Reset</button>
+                    <button id="hard-reset-btn" class="btn btn-secondary" title="Hard Reset (Power Cycle)">Hard Reset</button>
+                    <button id="pause-btn" class="btn btn-info" title="Pause/Resume">Pause</button>
+                </div>
+
+                <div class="control-group">
+                    <button id="mute-btn" class="btn btn-secondary" title="Mute/Unmute Audio">Mute</button>
+                    <input type="range" id="volume-slider" min="0" max="100" value="50" title="Volume">
+                </div>
+
+                <div class="control-group">
+                    <label for="region-select">Region:</label>
+                    <select id="region-select">
+                        <option value="pal" selected>PAL (50Hz)</option>
+                        <option value="ntsc">NTSC (60Hz)</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="scale-select">Scale:</label>
+                    <select id="scale-select">
+                        <option value="1">1x</option>
+                        <option value="2" selected>2x</option>
+                        <option value="3">3x</option>
+                        <option value="fit">Fit</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- File Loading Section -->
+            <div class="file-section">
+                <div id="drop-zone" class="drop-zone">
+                    <p>Drag & drop .D64 or .PRG files here</p>
+                    <p class="drop-zone-hint">or</p>
+                    <input type="file" id="file-input" accept=".d64,.prg,.p00" style="display: none;">
+                    <button id="file-browse-btn" class="btn btn-secondary">Browse Files</button>
+                </div>
+                <div id="disk-status" class="disk-status">
+                    <span id="disk-indicator" class="disk-indicator"></span>
+                    <span id="disk-name">No disk mounted</span>
+                </div>
+            </div>
+
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <span id="fps-counter">FPS: --</span>
+                <span id="emulator-status">Ready</span>
+            </div>
+
+            <!-- Keyboard Help (collapsible) -->
+            <details class="keyboard-help">
+                <summary>Keyboard Reference</summary>
+                <div class="keyboard-help-content">
+                    <table class="key-map-table">
+                        <thead>
+                            <tr>
+                                <th>PC Key</th>
+                                <th>C64 Key</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Escape</td><td>RUN/STOP</td></tr>
+                            <tr><td>Tab</td><td>CTRL</td></tr>
+                            <tr><td>Backspace</td><td>INST/DEL</td></tr>
+                            <tr><td>Home</td><td>CLR/HOME</td></tr>
+                            <tr><td>PageUp</td><td>RESTORE (NMI)</td></tr>
+                            <tr><td>F1-F8</td><td>F1-F8</td></tr>
+                            <tr><td>Arrow Keys</td><td>Joystick (Port 2)</td></tr>
+                            <tr><td>Right Ctrl</td><td>Fire (Port 2)</td></tr>
+                            <tr><td>Left Alt</td><td>Commodore Key</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        </section>
+    </main>
+
+    <footer>
+        <p>Built with <a href="https://github.com/gregbell/lib6502" target="_blank">lib6502</a> | WebAssembly powered</p>
+    </footer>
+
+    <script type="module" src="c64.js"></script>
+</body>
+</html>
