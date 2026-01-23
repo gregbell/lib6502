@@ -185,7 +185,7 @@
 
 - [x] T071 [US3] Implement sprite data fetching (pointer at Screen+$3F8) in c64-emu/src/devices/vic_ii.rs
 - [x] T072 [US3] Implement sprite rendering (8 sprites, 24x21 pixels) in c64-emu/src/devices/vic_ii.rs
-- [ ] T073 [US3] Implement sprite multicolor mode (12x21 pixels, 4 colors) in src/devices/c64/vic_ii.rs
+- [x] T073 [US3] Implement sprite multicolor mode (12x21 pixels, 4 colors) in c64-emu/src/devices/vic_ii.rs
 - [ ] T074 [US3] Implement sprite X/Y expansion (double size) in src/devices/c64/vic_ii.rs
 - [ ] T075 [US3] Implement sprite priority (sprite-to-sprite, sprite-to-background) in src/devices/c64/vic_ii.rs
 - [ ] T076 [US3] Implement sprite collision detection (registers $1E, $1F) in src/devices/c64/vic_ii.rs
@@ -414,12 +414,12 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
 | Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
 | Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
-| Phase 5: US3 | T067-T091 | 6/25 | Graphics & audio |
+| Phase 5: US3 | T067-T091 | 7/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **71/132** | |
+| **Total** | **132 tasks** | **72/132** | |
 
 ---
 

@@ -5,7 +5,7 @@
 
 use super::iec_bus::IecBus;
 use super::C64Memory;
-use crate::devices::vic_ii::{SPRITE_COUNT, SPRITE_DATA_SIZE};
+use crate::devices::{SPRITE_COUNT, SPRITE_DATA_SIZE};
 use lib6502::{Device, MemoryBus, CPU, OPCODE_TABLE};
 
 /// C64 region (PAL or NTSC) affecting timing.
