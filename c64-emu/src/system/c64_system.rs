@@ -693,6 +693,30 @@ impl C64System {
             .and_then(|img| img.disk_name().ok())
     }
 
+    /// Check if the mounted disk has been modified.
+    pub fn is_disk_modified(&self) -> bool {
+        self.iec_bus.drive().is_disk_modified()
+    }
+
+    /// Get the D64 data for saving/downloading.
+    ///
+    /// Returns the raw D64 disk image data that can be saved to a file.
+    pub fn get_disk_data(&self) -> Option<Vec<u8>> {
+        self.iec_bus.drive().get_disk_data().map(|d| d.to_vec())
+    }
+
+    /// Get the number of free blocks on the mounted disk.
+    pub fn disk_free_blocks(&self) -> Option<u16> {
+        self.iec_bus.drive().free_blocks()
+    }
+
+    /// Clear the modified flag on the mounted disk.
+    ///
+    /// Call this after successfully saving the disk to indicate no unsaved changes.
+    pub fn clear_disk_modified(&mut self) {
+        self.iec_bus.drive_mut().clear_disk_modified();
+    }
+
     /// Inject "RUN" command into the keyboard buffer.
     ///
     /// This simulates typing "RUN" followed by RETURN, which is useful

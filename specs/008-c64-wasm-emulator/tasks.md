@@ -317,8 +317,8 @@
 
 ### Disk Write Support
 
-- [ ] T128 Implement disk write operations (save to D64) in src/c64/disk_1541.rs
-- [ ] T129 Implement modified D64 download in c64-demo/components/file-loader.js
+- [x] T128 Implement disk write operations (save to D64) in c64-emu/src/system/disk_1541.rs
+- [x] T129 Implement modified D64 download in c64-demo/c64.js
 
 ### Final Integration
 
@@ -418,8 +418,8 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 6: US4 | T092-T098 | 7/7 | Joystick controls ✓ COMPLETE |
 | Phase 7: US5 | T099-T111 | 13/13 | Save/load states ✓ COMPLETE |
 | Phase 8: US6 | T112-T118 | 7/7 | Settings ✓ COMPLETE |
-| Phase 9: Polish | T119-T132 | 9/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **127/132** | |
+| Phase 9: Polish | T119-T132 | 11/14 | Edge cases, debug, deploy |
+| **Total** | **132 tasks** | **129/132** | |
 
 ---
 

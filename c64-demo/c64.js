@@ -356,6 +356,17 @@ class C64App {
             });
         }
 
+        // Disk write controls (T128-T129)
+        const saveDiskBtn = document.getElementById('save-disk-btn');
+        if (saveDiskBtn) {
+            saveDiskBtn.addEventListener('click', () => this.saveDiskToFile());
+        }
+
+        const unmountDiskBtn = document.getElementById('unmount-disk-btn');
+        if (unmountDiskBtn) {
+            unmountDiskBtn.addEventListener('click', () => this.unmountDiskWithConfirm());
+        }
+
         // Save state controls (T109-T111)
         this.setupSaveStateHandlers();
 
@@ -1623,6 +1634,91 @@ class C64App {
         }
     }
 
+    // =========================================================================
+    // Disk Write Operations (T128-T129)
+    // =========================================================================
+
+    /**
+     * Save the current disk image to a downloadable file (T129).
+     *
+     * Downloads the D64 disk image with any modifications made during
+     * the session. Useful for saving game progress on disks that support
+     * saving, or for preserving changes made to disk-based programs.
+     */
+    saveDiskToFile() {
+        if (!this.emulator) {
+            this.showError('Emulator not running');
+            return;
+        }
+
+        if (!this.emulator.has_mounted_disk()) {
+            this.showError('No disk mounted');
+            return;
+        }
+
+        try {
+            // Get disk data from emulator
+            const diskData = this.emulator.get_disk_data();
+            if (!diskData) {
+                this.showError('Failed to retrieve disk data');
+                return;
+            }
+
+            // Generate filename from disk name or default
+            const diskName = this.emulator.disk_name() || 'disk';
+            const safeName = diskName.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+            const filename = `${safeName}.d64`;
+
+            // Create blob and download
+            const blob = new Blob([diskData], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            // Clear the modified flag after successful save
+            this.emulator.clear_disk_modified();
+
+            console.log(`Disk saved as ${filename}`);
+            this.updateStatus(`Saved: ${filename}`);
+        } catch (error) {
+            console.error('Failed to save disk:', error);
+            this.showError('Failed to save disk: ' + error.message);
+        }
+    }
+
+    /**
+     * Unmount disk with confirmation if modified (T129).
+     *
+     * Prompts the user to save changes before unmounting if the disk
+     * has been modified during the session.
+     */
+    unmountDiskWithConfirm() {
+        if (!this.emulator || !this.emulator.has_mounted_disk()) {
+            return;
+        }
+
+        // Check if disk has unsaved changes
+        if (this.emulator.is_disk_modified()) {
+            const diskName = this.emulator.disk_name() || 'the disk';
+            const shouldSave = confirm(
+                `${diskName} has unsaved changes.\n\n` +
+                'Do you want to save the disk before unmounting?\n\n' +
+                '(Click OK to save first, or Cancel to unmount without saving)'
+            );
+
+            if (shouldSave) {
+                this.saveDiskToFile();
+            }
+        }
+
+        this.unmountDisk();
+    }
+
     /**
      * Update disk status indicator
      * @param {string} status - 'none', 'mounted', 'reading', 'error'
@@ -1631,6 +1727,8 @@ class C64App {
     setDiskStatus(status, text) {
         const indicator = document.getElementById('disk-indicator');
         const nameEl = document.getElementById('disk-name');
+        const saveDiskBtn = document.getElementById('save-disk-btn');
+        const unmountDiskBtn = document.getElementById('unmount-disk-btn');
 
         if (indicator) {
             // Remove all status classes
@@ -1646,6 +1744,15 @@ class C64App {
 
         if (nameEl) {
             nameEl.textContent = text || 'No disk mounted';
+        }
+
+        // Show/hide disk operation buttons based on mount status
+        const diskMounted = status === 'mounted';
+        if (saveDiskBtn) {
+            saveDiskBtn.style.display = diskMounted ? 'inline-block' : 'none';
+        }
+        if (unmountDiskBtn) {
+            unmountDiskBtn.style.display = diskMounted ? 'inline-block' : 'none';
         }
     }
 

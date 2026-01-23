@@ -462,6 +462,72 @@ impl C64Emulator {
     }
 
     // =========================================================================
+    // Disk Write API (T128-T129)
+    // =========================================================================
+
+    /// Check if the mounted disk has been modified.
+    ///
+    /// Returns `true` if any changes have been made to the disk since mounting
+    /// or since the last call to `clear_disk_modified()`. Use this to prompt
+    /// the user to save changes before unmounting or closing.
+    ///
+    /// # Example (JavaScript)
+    /// ```javascript
+    /// if (emulator.is_disk_modified()) {
+    ///     const save = confirm('Disk has unsaved changes. Save?');
+    ///     if (save) {
+    ///         const data = emulator.get_disk_data();
+    ///         // ... save data ...
+    ///     }
+    /// }
+    /// ```
+    #[wasm_bindgen]
+    pub fn is_disk_modified(&self) -> bool {
+        self.system.is_disk_modified()
+    }
+
+    /// Get the D64 disk image data for downloading/saving.
+    ///
+    /// Returns the complete D64 file data (174,848 bytes) that can be
+    /// saved to a file. Returns `None` if no disk is mounted.
+    ///
+    /// # Example (JavaScript)
+    /// ```javascript
+    /// const data = emulator.get_disk_data();
+    /// if (data) {
+    ///     const blob = new Blob([data], { type: 'application/octet-stream' });
+    ///     const url = URL.createObjectURL(blob);
+    ///     const a = document.createElement('a');
+    ///     a.href = url;
+    ///     a.download = 'mydisk.d64';
+    ///     a.click();
+    /// }
+    /// ```
+    #[wasm_bindgen]
+    pub fn get_disk_data(&self) -> Option<Vec<u8>> {
+        self.system.get_disk_data()
+    }
+
+    /// Get the number of free blocks on the mounted disk.
+    ///
+    /// Returns `None` if no disk is mounted.
+    /// A standard D64 has 664 free blocks when empty.
+    #[wasm_bindgen]
+    pub fn disk_free_blocks(&self) -> Option<u16> {
+        self.system.disk_free_blocks()
+    }
+
+    /// Clear the modified flag on the mounted disk.
+    ///
+    /// Call this after successfully saving the disk to indicate that
+    /// there are no unsaved changes. This prevents `is_disk_modified()`
+    /// from returning `true` until more changes are made.
+    #[wasm_bindgen]
+    pub fn clear_disk_modified(&mut self) {
+        self.system.clear_disk_modified();
+    }
+
+    // =========================================================================
     // Save State API (T106-T108)
     // =========================================================================
 
