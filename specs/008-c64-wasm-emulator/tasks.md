@@ -120,11 +120,11 @@
 - [x] T043 [P] [US1] Create HTML structure with canvas element (320x200) in c64-demo/index.html
 - [x] T044 [P] [US1] Create C64-themed CSS styling (blue background, border) in c64-demo/style.css
 - [x] T045 [US1] Implement WASM module loading and initialization in c64-demo/c64.js
-- [ ] T046 [US1] Implement ROM upload UI and localStorage caching in c64-demo/components/rom-manager.js
-- [ ] T047 [US1] Implement framebuffer-to-canvas rendering with C64 palette in c64-demo/components/screen.js
-- [ ] T048 [US1] Implement requestAnimationFrame render loop (50/60 FPS) in c64-demo/c64.js
-- [ ] T049 [US1] Implement keyboard event handling and mapping in c64-demo/components/keyboard.js
-- [ ] T050 [US1] Implement reset and pause/resume controls in c64-demo/components/controls.js
+- [x] T046 [US1] Implement ROM upload UI and localStorage caching in c64-demo/c64.js (implemented in main app)
+- [x] T047 [US1] Implement framebuffer-to-canvas rendering with C64 palette in c64-demo/c64.js (implemented in main app)
+- [x] T048 [US1] Implement requestAnimationFrame render loop (50/60 FPS) in c64-demo/c64.js
+- [x] T049 [US1] Implement keyboard event handling and mapping in c64-demo/c64.js (implemented in main app)
+- [x] T050 [US1] Implement reset and pause/resume controls in c64-demo/c64.js (implemented in main app)
 
 **Checkpoint**: User Story 1 complete - C64 boots to BASIC, keyboard works, screen displays
 
@@ -138,12 +138,12 @@
 
 ### 1541 Disk Drive
 
-- [ ] T051 [US2] Create Drive1541 struct with D64Image, channels, status in src/c64/disk_1541.rs
-- [ ] T052 [US2] Implement D64 file format parsing (track/sector layout, 683 sectors) in src/c64/disk_1541.rs
-- [ ] T053 [US2] Implement directory reading (track 18, sector 1 chain) in src/c64/disk_1541.rs
-- [ ] T054 [US2] Implement file lookup and sector chain following in src/c64/disk_1541.rs
-- [ ] T055 [US2] Implement channel open/read/close operations in src/c64/disk_1541.rs
-- [ ] T056 [US2] Implement drive status channel (channel 15) in src/c64/disk_1541.rs
+- [x] T051 [US2] Create Drive1541 struct with D64Image, channels, status in c64-emu/src/system/disk_1541.rs
+- [x] T052 [US2] Implement D64 file format parsing (track/sector layout, 683 sectors) in c64-emu/src/system/disk_1541.rs
+- [x] T053 [US2] Implement directory reading (track 18, sector 1 chain) in c64-emu/src/system/disk_1541.rs
+- [x] T054 [US2] Implement file lookup and sector chain following in c64-emu/src/system/disk_1541.rs
+- [x] T055 [US2] Implement channel open/read/close operations in c64-emu/src/system/disk_1541.rs
+- [x] T056 [US2] Implement drive status channel (channel 15) in c64-emu/src/system/disk_1541.rs
 
 ### IEC Protocol
 
@@ -412,14 +412,14 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 |-------|-------|-----------|-------------|
 | Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
-| Phase 3: US1 | T029-T050 | 17/22 | Boot, keyboard, display |
-| Phase 4: US2 | T051-T066 | 0/16 | Disk image loading |
+| Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
+| Phase 4: US2 | T051-T066 | 6/16 | Disk image loading |
 | Phase 5: US3 | T067-T091 | 0/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **44/132** | |
+| **Total** | **132 tasks** | **55/132** | |
 
 ---
 
