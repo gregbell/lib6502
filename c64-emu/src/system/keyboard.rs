@@ -300,7 +300,7 @@ pub fn map_pc_keycode(code: &str) -> Option<KeyMapping> {
         "Comma" => Some(KeyMapping::new(7, 5)),        // ,
         "Slash" => Some(KeyMapping::new(7, 6)),        // /
         "Semicolon" => Some(KeyMapping::new(2, 6)),    // ; (shifted: ])
-        "Quote" => Some(KeyMapping::with_shift(0, 3)), // ' is Shift+7 on C64
+        "Quote" => Some(KeyMapping::with_shift(3, 7)), // " is Shift+2 on C64
         "BracketLeft" => Some(KeyMapping::new(5, 5)),  // : (C64 has : not [)
         "BracketRight" => Some(KeyMapping::new(1, 6)), // * on C64
         "Backslash" => Some(KeyMapping::new(0, 6)),    // £ (Pound sign)
