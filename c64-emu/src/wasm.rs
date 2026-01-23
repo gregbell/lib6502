@@ -398,6 +398,25 @@ impl C64Emulator {
         self.system.mount_d64(data.to_vec()).is_ok()
     }
 
+    /// Mount a D64 disk image with detailed error reporting.
+    ///
+    /// Similar to `mount_d64`, but returns an error message string on failure
+    /// instead of just `false`. Use this when you need to display the specific
+    /// reason for a mount failure to the user.
+    ///
+    /// # Arguments
+    /// * `data` - Complete D64 file contents (174,848 bytes standard, 175,531 with errors)
+    ///
+    /// # Returns
+    /// `None` if mounted successfully, or `Some(error_message)` on failure.
+    #[wasm_bindgen]
+    pub fn mount_d64_with_error(&mut self, data: &[u8]) -> Option<String> {
+        match self.system.mount_d64(data.to_vec()) {
+            Ok(()) => None,
+            Err(e) => Some(e),
+        }
+    }
+
     /// Unmount the current disk image from drive 8.
     #[wasm_bindgen]
     pub fn unmount_d64(&mut self) {

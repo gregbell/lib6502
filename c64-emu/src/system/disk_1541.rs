@@ -160,6 +160,112 @@ impl D64Image {
         // Disk ID is at offset 0xA2-0xA3
         Ok([bam[0xA2], bam[0xA3]])
     }
+
+    /// Validate the D64 image for structural integrity.
+    ///
+    /// Checks:
+    /// - BAM header magic (track 18, sector 0 should have track pointer to itself)
+    /// - Directory chain validity (no infinite loops, valid track/sector pointers)
+    /// - DOS version marker
+    ///
+    /// Returns Ok(()) if the image passes basic validation, or an error describing the issue.
+    pub fn validate(&self) -> Result<(), D64Error> {
+        // Read the BAM (track 18, sector 0)
+        let bam = self.read_bam()?;
+
+        // Check directory track pointer (byte 0 should point to track 18)
+        // BAM sector 0 contains: [next_track, next_sector, dos_version, ...]
+        // For standard D64, next_track should be 18 (pointing to first dir sector)
+        let dir_track = bam[0];
+        let dir_sector = bam[1];
+
+        // Track 0 means this is the last sector - invalid for BAM
+        if dir_track == 0 {
+            return Err(D64Error::CorruptedImage(
+                "BAM has no directory pointer (track=0)".to_string(),
+            ));
+        }
+
+        // Check if directory track pointer is valid
+        if dir_track != DIRECTORY_TRACK {
+            // Some disk images might point to track 18 sector 1 directly
+            // Allow track 18 even if it's different from usual
+            if !(1..=35).contains(&dir_track) {
+                return Err(D64Error::CorruptedImage(format!(
+                    "Invalid directory track pointer in BAM: track {} is out of range",
+                    dir_track
+                )));
+            }
+        }
+
+        // Check first directory sector pointer
+        let max_sectors = SECTORS_PER_TRACK[(dir_track - 1) as usize];
+        if dir_sector >= max_sectors {
+            return Err(D64Error::CorruptedImage(format!(
+                "Invalid directory sector pointer in BAM: sector {} exceeds track {} maximum ({})",
+                dir_sector, dir_track, max_sectors - 1
+            )));
+        }
+
+        // Check DOS version byte (byte 2) - should be 0x41 ('A') for 1541 format
+        let dos_version = bam[2];
+        if dos_version != 0x41 {
+            // This is a warning-level issue, not necessarily corruption
+            // Some custom formats use different values
+            // We'll allow it but could log a warning
+        }
+
+        // Validate directory chain (prevent infinite loops)
+        let mut visited_sectors = std::collections::HashSet::new();
+        let mut current_track = dir_track;
+        let mut current_sector = dir_sector;
+        let mut chain_length = 0;
+        const MAX_CHAIN_LENGTH: usize = 144; // Max possible directory entries / 8 per sector
+
+        while current_track != 0 && chain_length < MAX_CHAIN_LENGTH {
+            // Check for circular reference
+            let sector_id = (current_track as u16) << 8 | current_sector as u16;
+            if visited_sectors.contains(&sector_id) {
+                return Err(D64Error::CorruptedImage(format!(
+                    "Directory chain has circular reference at track {}, sector {}",
+                    current_track, current_sector
+                )));
+            }
+            visited_sectors.insert(sector_id);
+
+            // Validate track/sector range
+            if !(1..=35).contains(&current_track) {
+                return Err(D64Error::CorruptedImage(format!(
+                    "Directory chain has invalid track {} at entry {}",
+                    current_track, chain_length
+                )));
+            }
+
+            let max_sect = SECTORS_PER_TRACK[(current_track - 1) as usize];
+            if current_sector >= max_sect {
+                return Err(D64Error::CorruptedImage(format!(
+                    "Directory chain has invalid sector {} on track {} (max: {})",
+                    current_sector,
+                    current_track,
+                    max_sect - 1
+                )));
+            }
+
+            // Read the sector to get the next link
+            let sector_data = self.read_sector(current_track, current_sector)?;
+            current_track = sector_data[0];
+            current_sector = sector_data[1];
+            chain_length += 1;
+        }
+
+        if chain_length >= MAX_CHAIN_LENGTH && current_track != 0 {
+            return Err(D64Error::CorruptedImage(
+                "Directory chain exceeds maximum expected length".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 /// Convert PETSCII character to ASCII.
@@ -197,6 +303,8 @@ pub enum D64Error {
     DiskFull,
     /// An I/O error occurred.
     IoError(String),
+    /// The D64 image appears to be corrupted.
+    CorruptedImage(String),
 }
 
 impl std::fmt::Display for D64Error {
@@ -217,6 +325,7 @@ impl std::fmt::Display for D64Error {
             D64Error::DirectoryFull => write!(f, "Directory full"),
             D64Error::DiskFull => write!(f, "Disk full"),
             D64Error::IoError(msg) => write!(f, "I/O error: {}", msg),
+            D64Error::CorruptedImage(msg) => write!(f, "Corrupted D64 image: {}", msg),
         }
     }
 }
@@ -432,8 +541,13 @@ impl Drive1541 {
     }
 
     /// Mount a D64 disk image.
+    ///
+    /// Validates the image structure before mounting. Returns an error
+    /// if the image appears corrupted or has an invalid format.
     pub fn mount(&mut self, data: Vec<u8>) -> Result<(), D64Error> {
         let image = D64Image::new(data)?;
+        // Validate the image structure (check BAM, directory chain, etc.)
+        image.validate()?;
         self.mounted_image = Some(image);
         self.status = DriveStatus::ok();
         self.close_all_channels();

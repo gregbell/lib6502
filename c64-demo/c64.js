@@ -137,6 +137,9 @@ class C64App {
         this.scanlines = false;
         this.settingsPanelOpen = false;
         this.listeningForKey = null; // For joystick remapping
+
+        // Tab visibility auto-pause (T121)
+        this.autoPaused = false; // True if we auto-paused due to tab hidden
     }
 
     /**
@@ -308,15 +311,9 @@ class C64App {
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         document.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
-        // Tab visibility for auto-pause
+        // Tab visibility for auto-pause (T121)
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden && this.running && !this.paused) {
-                // Release all keys and joysticks when tab loses focus
-                if (this.emulator) {
-                    this.emulator.release_all_keys();
-                    this.releaseAllJoysticks();
-                }
-            }
+            this.handleVisibilityChange();
         });
 
         // File drag and drop
@@ -436,9 +433,37 @@ class C64App {
             const data = await this.readFileAsArrayBuffer(file);
             const bytes = new Uint8Array(data);
 
-            // Validate size
+            // Validate size with specific error messages
             if (bytes.length !== expectedSize) {
-                throw new Error(`Invalid ${romType.toUpperCase()} ROM size: expected ${expectedSize} bytes, got ${bytes.length}`);
+                const romNames = {
+                    kernal: 'KERNAL ROM',
+                    basic: 'BASIC ROM',
+                    charrom: 'Character ROM'
+                };
+                const romName = romNames[romType] || romType.toUpperCase();
+
+                let errorMsg = `Invalid ${romName} size: expected ${expectedSize} bytes, got ${bytes.length} bytes.`;
+
+                // Provide helpful hints based on size
+                if (bytes.length === 0) {
+                    errorMsg = `The file appears to be empty. Please select a valid ${romName} file.`;
+                } else if (bytes.length > expectedSize * 2) {
+                    errorMsg += '\n\nThe file is much larger than expected. This might be a combined ROM image or wrong file type.';
+                } else if (bytes.length < expectedSize / 2) {
+                    errorMsg += '\n\nThe file is much smaller than expected. It may be incomplete or corrupted.';
+                } else if (romType === 'kernal' && bytes.length === 16384) {
+                    errorMsg += '\n\nThis might be a combined BASIC+KERNAL ROM. Please use separate ROM files.';
+                } else if (romType === 'charrom' && bytes.length === 8192) {
+                    errorMsg += '\n\nThis appears to be a BASIC or KERNAL ROM (8KB). Character ROM should be 4KB.';
+                }
+
+                throw new Error(errorMsg);
+            }
+
+            // Basic content validation (check if ROM contains actual code, not all zeros/FFs)
+            const validationError = this.validateRomContent(bytes, romType);
+            if (validationError) {
+                throw new Error(validationError);
             }
 
             // Store ROM
@@ -464,6 +489,73 @@ class C64App {
                 statusEl.className = 'rom-status error';
             }
         }
+    }
+
+    /**
+     * Validate ROM content for obvious corruption
+     * @param {Uint8Array} bytes - ROM data
+     * @param {string} romType - Type of ROM ('kernal', 'basic', 'charrom')
+     * @returns {string|null} Error message if invalid, null if OK
+     */
+    validateRomContent(bytes, romType) {
+        // Check if ROM is all zeros
+        let allZeros = true;
+        let allOnes = true;
+        let zeroCount = 0;
+        let ffCount = 0;
+
+        for (let i = 0; i < bytes.length; i++) {
+            if (bytes[i] !== 0x00) allZeros = false;
+            if (bytes[i] !== 0xFF) allOnes = false;
+            if (bytes[i] === 0x00) zeroCount++;
+            if (bytes[i] === 0xFF) ffCount++;
+        }
+
+        if (allZeros) {
+            return 'ROM file contains only zeros. This is likely a blank or corrupted file.';
+        }
+        if (allOnes) {
+            return 'ROM file contains only 0xFF bytes. This is likely a blank EPROM dump or corrupted file.';
+        }
+
+        // Check for suspiciously uniform content (more than 95% same value)
+        const threshold = bytes.length * 0.95;
+        if (zeroCount > threshold) {
+            return `ROM file is mostly zeros (${Math.round(zeroCount / bytes.length * 100)}%). This file may be corrupted or incomplete.`;
+        }
+        if (ffCount > threshold) {
+            return `ROM file is mostly 0xFF bytes (${Math.round(ffCount / bytes.length * 100)}%). This file may be corrupted or incomplete.`;
+        }
+
+        // ROM-specific validation
+        if (romType === 'kernal') {
+            // KERNAL ROM should have reset vector at $FFFC-$FFFD (end of ROM)
+            // Offset in 8KB KERNAL: 0x1FFC, 0x1FFD
+            const resetLow = bytes[0x1FFC];
+            const resetHigh = bytes[0x1FFD];
+            const resetVector = (resetHigh << 8) | resetLow;
+
+            // Reset vector should point to $E000-$FFFF range (KERNAL space)
+            if (resetVector < 0xE000 || resetVector > 0xFFFF) {
+                return `KERNAL ROM has invalid reset vector ($${resetVector.toString(16).toUpperCase()}). Expected $E000-$FFFF. This may not be a valid C64 KERNAL ROM.`;
+            }
+        }
+
+        if (romType === 'basic') {
+            // BASIC ROM typically starts with cold start entry point
+            // First two bytes are usually a JMP instruction or pointer
+            // Cold start is at $A000 (offset 0)
+            // Common first bytes in BASIC ROM: 0x94 (for STA), 0x4C (JMP), etc.
+            // Validation is loose here since there are various BASIC versions
+        }
+
+        if (romType === 'charrom') {
+            // Character ROM should have actual bitmap data
+            // The first 8 bytes represent the '@' character in the standard charset
+            // A completely blank charrom would make display unusable
+        }
+
+        return null; // Validation passed
     }
 
     /**
@@ -610,12 +702,19 @@ class C64App {
     }
 
     /**
-     * Start the main emulation loop
+     * Start the main emulation loop (T122)
+     *
+     * Uses requestAnimationFrame with frame time accounting to maintain
+     * accurate 50 Hz (PAL) or 60 Hz (NTSC) emulation speed.
      */
     startMainLoop() {
         const targetFps = this.region === 'pal' ? 50 : 60;
         const frameTime = 1000 / targetFps;
         let lastFrameTime = performance.now();
+
+        // Maximum frames to catch up if we fall behind
+        // This prevents runaway catchup after browser throttling
+        const maxFrameSkip = 3;
 
         const loop = (currentTime) => {
             if (!this.running) {
@@ -625,6 +724,8 @@ class C64App {
             this.animationFrameId = requestAnimationFrame(loop);
 
             if (this.paused) {
+                // Reset timing when paused to prevent catchup on resume
+                lastFrameTime = currentTime;
                 return;
             }
 
@@ -634,17 +735,29 @@ class C64App {
                 return;
             }
 
-            lastFrameTime = currentTime - (elapsed % frameTime);
+            // Calculate how many frames we need to run (with limit)
+            // This handles cases where the browser throttled us
+            let framesToRun = Math.floor(elapsed / frameTime);
+            if (framesToRun > maxFrameSkip) {
+                // Too far behind - skip frames instead of running extra
+                // This prevents audio desync and maintains responsiveness
+                framesToRun = 1;
+                lastFrameTime = currentTime;
+            } else {
+                lastFrameTime += framesToRun * frameTime;
+            }
 
             try {
-                // Execute one frame
-                this.emulator.step_frame();
+                // Execute frames (typically just 1)
+                for (let i = 0; i < framesToRun; i++) {
+                    this.emulator.step_frame();
 
-                // Render the frame
+                    // Process audio each frame to prevent buffer underruns
+                    this.processAudio();
+                }
+
+                // Render only the final frame (no point rendering skipped frames)
                 this.renderFrame();
-
-                // Process audio samples
-                this.processAudio();
 
                 // Update FPS counter
                 this.updateFps(currentTime);
@@ -1184,6 +1297,8 @@ class C64App {
      */
     async togglePause() {
         this.paused = !this.paused;
+        // Clear auto-pause flag since this is a manual toggle
+        this.autoPaused = false;
 
         const pauseBtn = document.getElementById('pause-btn');
         if (pauseBtn) {
@@ -1203,6 +1318,66 @@ class C64App {
         }
 
         console.log(this.paused ? 'Emulation paused' : 'Emulation resumed');
+    }
+
+    /**
+     * Handle browser tab visibility change (T121)
+     * Auto-pauses when tab is hidden, auto-resumes when visible again.
+     */
+    async handleVisibilityChange() {
+        if (document.hidden) {
+            // Tab lost focus - pause if running
+            if (this.running && !this.paused) {
+                // Release all inputs first
+                if (this.emulator) {
+                    this.emulator.release_all_keys();
+                    this.releaseAllJoysticks();
+                }
+
+                // Auto-pause the emulation
+                this.autoPaused = true;
+                this.paused = true;
+
+                if (this.emulator) {
+                    this.emulator.stop();
+                }
+
+                // Suspend audio context to save resources
+                if (this.audioContext && this.audioContext.state === 'running') {
+                    try {
+                        await this.audioContext.suspend();
+                    } catch (e) {
+                        console.warn('Failed to suspend audio context:', e);
+                    }
+                }
+
+                this.updateStatus('Paused (background)');
+                console.log('Emulation auto-paused (tab hidden)');
+            }
+        } else {
+            // Tab regained focus - resume if we auto-paused
+            if (this.autoPaused && this.paused) {
+                this.autoPaused = false;
+                this.paused = false;
+
+                if (this.emulator) {
+                    this.emulator.start();
+                }
+
+                // Resume audio context
+                await this.resumeAudio();
+
+                this.updateStatus('Running');
+
+                // Update pause button text
+                const pauseBtn = document.getElementById('pause-btn');
+                if (pauseBtn) {
+                    pauseBtn.textContent = 'Pause';
+                }
+
+                console.log('Emulation auto-resumed (tab visible)');
+            }
+        }
     }
 
     /**
@@ -1359,9 +1534,17 @@ class C64App {
         this.setDiskStatus('reading', 'Mounting disk...');
 
         try {
-            const success = this.emulator.mount_d64(data);
-            if (!success) {
-                throw new Error('Failed to mount D64 image');
+            // Use the error-reporting mount function for detailed error messages
+            const errorMsg = this.emulator.mount_d64_with_error(data);
+            if (errorMsg) {
+                // Format user-friendly error message
+                let userMessage = errorMsg;
+                if (errorMsg.includes('Corrupted D64')) {
+                    userMessage = `The disk image appears to be corrupted:\n${errorMsg}`;
+                } else if (errorMsg.includes('Invalid D64 size')) {
+                    userMessage = `Invalid disk image size:\n${errorMsg}`;
+                }
+                throw new Error(userMessage);
             }
 
             // Get disk name from the mounted image

@@ -24,7 +24,7 @@
 - [x] T001 Create C64 device module structure ~~in src/devices/c64/mod.rs~~ → c64-emu/src/devices/mod.rs
 - [x] T002 [P] Create C64 system module structure ~~in src/c64/mod.rs~~ → c64-emu/src/system/mod.rs
 - [x] T003 [P] Create C64 WASM API module ~~in src/wasm/c64_api.rs~~ → c64-emu/src/wasm.rs
-- [ ] T004 [P] Create c64-demo directory structure with index.html, style.css, c64.js
+- [x] T004 [P] Create c64-demo directory structure with index.html, style.css, c64.js
 - [x] T005 Add wasm-bindgen and web-sys dependencies to Cargo.toml for WASM target → c64-emu/Cargo.toml
 - [x] T006 Export C64 modules ~~from src/lib.rs~~ → c64-emu/src/lib.rs
 
@@ -302,10 +302,10 @@
 
 ### Edge Case Handling
 
-- [ ] T119 Handle invalid/corrupted .D64 files with error message in src/c64/disk_1541.rs
-- [ ] T120 Handle invalid ROM uploads with specific error messages in src/wasm/c64_api.rs
-- [ ] T121 Implement browser tab focus pause/resume in c64-demo/c64.js
-- [ ] T122 Implement emulation speed throttling for 50/60 FPS target in c64-demo/c64.js
+- [x] T119 Handle invalid/corrupted .D64 files with error message in c64-emu/src/system/disk_1541.rs
+- [x] T120 Handle invalid ROM uploads with specific error messages in c64-demo/c64.js
+- [x] T121 Implement browser tab focus pause/resume in c64-demo/c64.js
+- [x] T122 Implement emulation speed throttling for 50/60 FPS target in c64-demo/c64.js
 
 ### Debug Features
 
@@ -410,16 +410,16 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 
 | Phase | Tasks | Completed | Description |
 |-------|-------|-----------|-------------|
-| Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
-| Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
+| Phase 1: Setup | T001-T006 | 6/6 | Project structure (sub-crate) ✓ COMPLETE |
+| Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure ✓ COMPLETE |
 | Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
 | Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
 | Phase 5: US3 | T067-T091 | 25/25 | Graphics & audio ✓ COMPLETE |
 | Phase 6: US4 | T092-T098 | 7/7 | Joystick controls ✓ COMPLETE |
 | Phase 7: US5 | T099-T111 | 13/13 | Save/load states ✓ COMPLETE |
 | Phase 8: US6 | T112-T118 | 7/7 | Settings ✓ COMPLETE |
-| Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **117/132** | |
+| Phase 9: Polish | T119-T132 | 4/14 | Edge cases, debug, deploy |
+| **Total** | **132 tasks** | **122/132** | |
 
 ---
 
