@@ -1,0 +1,829 @@
+/* C64 Emulator - CSS Styles
+ * Theme: Authentic Commodore 64 aesthetics with modern UI elements
+ * Uses the classic C64 16-color palette
+ */
+
+/* ============================================
+   CSS Custom Properties (C64 Color Palette)
+   ============================================ */
+:root {
+    /* C64 Palette - VICE emulator colors */
+    --c64-black: #000000;
+    --c64-white: #FFFFFF;
+    --c64-red: #68372B;
+    --c64-cyan: #70A4B2;
+    --c64-purple: #6F3D86;
+    --c64-green: #588D43;
+    --c64-blue: #352879;
+    --c64-yellow: #B8C76F;
+    --c64-orange: #6F4F25;
+    --c64-brown: #433900;
+    --c64-light-red: #9A6759;
+    --c64-dark-grey: #444444;
+    --c64-grey: #6C6C6C;
+    --c64-light-green: #9AD284;
+    --c64-light-blue: #6C5EB5;
+    --c64-light-grey: #959595;
+
+    /* Theme Colors - derived from C64 palette */
+    --bg-primary: #0a0a12;
+    --bg-secondary: #12121a;
+    --bg-panel: #16161e;
+    --text-primary: #f0f0f0;
+    --text-secondary: #888888;
+    --accent-primary: var(--c64-light-blue);
+    --accent-success: var(--c64-light-green);
+    --accent-warning: var(--c64-yellow);
+    --accent-error: var(--c64-red);
+    --border: #2a2a3a;
+    --border-light: #3a3a4a;
+
+    /* C64 Screen Colors */
+    --screen-border-color: var(--c64-light-blue);
+    --screen-bg-color: var(--c64-blue);
+}
+
+/* ============================================
+   Reset & Base Styles
+   ============================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+h1, h2, h3 {
+    font-family: 'Sixtyfour', 'JetBrains Mono', monospace;
+    font-weight: 400;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+header {
+    background: var(--bg-secondary);
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+}
+
+header h1 {
+    font-size: 24px;
+    color: var(--accent-primary);
+    text-shadow: 0 0 10px rgba(108, 94, 181, 0.5);
+}
+
+/* ============================================
+   Main Content
+   ============================================ */
+main {
+    flex: 1;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+}
+
+/* ============================================
+   Panel Styles
+   ============================================ */
+.panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+}
+
+.panel h2 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    color: var(--accent-primary);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+}
+
+/* ============================================
+   ROM Upload Section
+   ============================================ */
+.rom-panel {
+    max-width: 600px;
+    width: 100%;
+}
+
+.rom-instructions {
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    font-size: 13px;
+}
+
+.rom-upload-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.rom-upload-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.rom-upload-item label {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.rom-upload-item input[type="file"] {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.rom-upload-item input[type="file"]::file-selector-button {
+    background: rgba(108, 94, 181, 0.15);
+    color: var(--accent-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.rom-upload-item input[type="file"]::file-selector-button:hover {
+    background: rgba(108, 94, 181, 0.25);
+}
+
+.rom-status {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 3px;
+}
+
+.rom-status.success {
+    background: rgba(88, 141, 67, 0.2);
+    color: var(--c64-light-green);
+}
+
+.rom-status.error {
+    background: rgba(104, 55, 43, 0.2);
+    color: var(--c64-light-red);
+}
+
+.rom-note {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-style: italic;
+    margin-top: 12px;
+}
+
+/* ============================================
+   Emulator Container
+   ============================================ */
+.emulator-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 800px;
+}
+
+/* ============================================
+   C64 Display (Screen with Border)
+   ============================================ */
+.c64-display {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.c64-border {
+    background: var(--screen-border-color);
+    padding: 32px 48px;
+    border-radius: 2px;
+    box-shadow:
+        0 0 0 2px var(--bg-primary),
+        0 4px 24px rgba(0, 0, 0, 0.5),
+        inset 0 0 60px rgba(0, 0, 0, 0.3);
+}
+
+#c64-screen {
+    display: block;
+    background: var(--screen-bg-color);
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    /* Default 2x scale */
+    width: 640px;
+    height: 400px;
+}
+
+/* Scale options applied via JavaScript */
+.c64-display.scale-1x #c64-screen {
+    width: 320px;
+    height: 200px;
+}
+
+.c64-display.scale-1x .c64-border {
+    padding: 16px 24px;
+}
+
+.c64-display.scale-2x #c64-screen {
+    width: 640px;
+    height: 400px;
+}
+
+.c64-display.scale-3x #c64-screen {
+    width: 960px;
+    height: 600px;
+}
+
+.c64-display.scale-3x .c64-border {
+    padding: 48px 72px;
+}
+
+.c64-display.scale-fit #c64-screen {
+    width: 100%;
+    max-width: 960px;
+    height: auto;
+    aspect-ratio: 320 / 200;
+}
+
+.c64-display.scale-fit .c64-border {
+    padding: 24px 36px;
+    width: 100%;
+}
+
+/* CRT Scanline Effect (optional) */
+.c64-display.scanlines #c64-screen {
+    position: relative;
+}
+
+.c64-display.scanlines::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.15) 0px,
+        rgba(0, 0, 0, 0.15) 1px,
+        transparent 1px,
+        transparent 2px
+    );
+    pointer-events: none;
+}
+
+/* ============================================
+   Control Bar
+   ============================================ */
+.control-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 16px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    width: 100%;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-group label {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.control-group select {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.control-group select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+/* Volume Slider */
+#volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 80px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+#volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+#volume-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+#volume-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: rgba(108, 94, 181, 0.2);
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: rgba(108, 94, 181, 0.3);
+}
+
+.btn-secondary {
+    background: rgba(136, 136, 136, 0.1);
+    color: var(--text-secondary);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: rgba(136, 136, 136, 0.2);
+    color: var(--text-primary);
+}
+
+.btn-warning {
+    background: rgba(184, 199, 111, 0.15);
+    color: var(--c64-yellow);
+    border-color: var(--c64-yellow);
+}
+
+.btn-warning:hover:not(:disabled) {
+    background: rgba(184, 199, 111, 0.25);
+}
+
+.btn-info {
+    background: rgba(112, 164, 178, 0.15);
+    color: var(--c64-cyan);
+    border-color: var(--c64-cyan);
+}
+
+.btn-info:hover:not(:disabled) {
+    background: rgba(112, 164, 178, 0.25);
+}
+
+.btn-danger {
+    background: rgba(104, 55, 43, 0.2);
+    color: var(--c64-light-red);
+    border-color: var(--c64-light-red);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: rgba(104, 55, 43, 0.3);
+}
+
+/* ============================================
+   File Loading Section
+   ============================================ */
+.file-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 4px;
+    padding: 24px;
+    text-align: center;
+    background: var(--bg-secondary);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+    border-color: var(--accent-primary);
+    background: rgba(108, 94, 181, 0.1);
+}
+
+.drop-zone p {
+    color: var(--text-secondary);
+    margin: 0;
+    font-size: 13px;
+}
+
+.drop-zone-hint {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin: 8px 0 !important;
+    opacity: 0.7;
+}
+
+.disk-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.disk-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--c64-dark-grey);
+    transition: background 0.2s;
+}
+
+.disk-indicator.mounted {
+    background: var(--c64-light-green);
+    box-shadow: 0 0 6px var(--c64-light-green);
+}
+
+.disk-indicator.reading {
+    background: var(--c64-yellow);
+    animation: disk-blink 0.3s infinite;
+}
+
+@keyframes disk-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+#disk-name {
+    color: var(--text-secondary);
+}
+
+/* ============================================
+   Status Bar
+   ============================================ */
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+#fps-counter {
+    font-variant-numeric: tabular-nums;
+}
+
+#emulator-status {
+    color: var(--accent-primary);
+}
+
+#emulator-status.paused {
+    color: var(--c64-yellow);
+}
+
+#emulator-status.error {
+    color: var(--c64-light-red);
+}
+
+/* ============================================
+   Keyboard Help
+   ============================================ */
+.keyboard-help {
+    width: 100%;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.keyboard-help summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 13px;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+.keyboard-help summary:hover {
+    color: var(--text-primary);
+}
+
+.keyboard-help[open] summary {
+    border-bottom: 1px solid var(--border);
+}
+
+.keyboard-help-content {
+    padding: 16px;
+}
+
+.key-map-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.key-map-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+}
+
+.key-map-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.key-map-table tr:last-child td {
+    border-bottom: none;
+}
+
+.key-map-table tr:hover td {
+    background: rgba(108, 94, 181, 0.1);
+}
+
+.key-map-table td:first-child {
+    color: var(--accent-primary);
+    font-weight: 500;
+}
+
+/* ============================================
+   Footer
+   ============================================ */
+footer {
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    padding: 16px 24px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+footer a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+/* ============================================
+   Settings Panel (for future use)
+   ============================================ */
+.settings-panel {
+    position: fixed;
+    top: 0;
+    right: -400px;
+    width: 400px;
+    height: 100vh;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    padding: 24px;
+    transition: right 0.3s ease;
+    z-index: 100;
+    overflow-y: auto;
+}
+
+.settings-panel.open {
+    right: 0;
+}
+
+.settings-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+    z-index: 99;
+}
+
+.settings-overlay.open {
+    opacity: 1;
+    visibility: visible;
+}
+
+.settings-section {
+    margin-bottom: 24px;
+}
+
+.settings-section h3 {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.setting-row label {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* ============================================
+   Error/Success Messages
+   ============================================ */
+.error-message {
+    background: rgba(104, 55, 43, 0.2);
+    border: 1px solid var(--c64-light-red);
+    border-radius: 4px;
+    padding: 12px 16px;
+    color: var(--c64-light-red);
+    font-size: 13px;
+    margin: 12px 0;
+}
+
+.success-message {
+    background: rgba(88, 141, 67, 0.2);
+    border: 1px solid var(--c64-light-green);
+    border-radius: 4px;
+    padding: 12px 16px;
+    color: var(--c64-light-green);
+    font-size: 13px;
+    margin: 12px 0;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ============================================
+   Loading/Spinner
+   ============================================ */
+.loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+@media (max-width: 900px) {
+    .c64-display.scale-3x #c64-screen,
+    .c64-display.scale-2x #c64-screen {
+        width: 100%;
+        max-width: 640px;
+        height: auto;
+        aspect-ratio: 320 / 200;
+    }
+
+    .c64-border {
+        padding: 16px 24px;
+    }
+
+    .control-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-group {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 600px) {
+    header h1 {
+        font-size: 18px;
+    }
+
+    main {
+        padding: 16px;
+    }
+
+    .c64-border {
+        padding: 12px 16px;
+    }
+
+    #c64-screen {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 320 / 200;
+    }
+
+    .rom-panel {
+        padding: 16px;
+    }
+
+    .keyboard-help-content {
+        padding: 12px;
+        overflow-x: auto;
+    }
+
+    .key-map-table {
+        font-size: 11px;
+    }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+@media print {
+    header, footer, .control-bar, .file-section, .keyboard-help {
+        display: none;
+    }
+
+    body {
+        background: white;
+        color: black;
+    }
+
+    .c64-border {
+        box-shadow: none;
+        border: 2px solid black;
+    }
+}
