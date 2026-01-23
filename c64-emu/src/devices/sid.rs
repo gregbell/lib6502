@@ -672,6 +672,11 @@ impl Sid6581 {
         self.audio_enabled = enabled;
     }
 
+    /// Check if audio output is enabled.
+    pub fn audio_enabled(&self) -> bool {
+        self.audio_enabled
+    }
+
     /// Step the SID by one clock cycle.
     ///
     /// This clocks all three voices, updating their phase accumulators and

@@ -76,9 +76,13 @@ class C64App {
         this.fps = 0;
         this.animationFrameId = null;
 
-        // Audio state (for future audio component)
+        // Audio state
         this.audioEnabled = false;
+        this.audioInitialized = false;
         this.volume = 0.5;
+        this.audioContext = null;
+        this.audioWorkletNode = null;
+        this.audioSampleRate = 44100;
     }
 
     /**
@@ -203,7 +207,7 @@ class C64App {
         const volumeSlider = document.getElementById('volume-slider');
         if (volumeSlider) {
             volumeSlider.addEventListener('input', (e) => {
-                this.volume = e.target.value / 100;
+                this.setVolume(e.target.value / 100);
             });
         }
 
@@ -457,6 +461,9 @@ class C64App {
             // Initialize disk status
             this.updateDiskStatus();
 
+            // Initialize audio (user gesture from clicking start button)
+            await this.initAudio();
+
             // Start the main loop
             this.startMainLoop();
 
@@ -501,6 +508,9 @@ class C64App {
                 // Render the frame
                 this.renderFrame();
 
+                // Process audio samples
+                this.processAudio();
+
                 // Update FPS counter
                 this.updateFps(currentTime);
             } catch (error) {
@@ -511,6 +521,152 @@ class C64App {
         };
 
         this.animationFrameId = requestAnimationFrame(loop);
+    }
+
+    // =========================================================================
+    // Audio System (T089-T091)
+    // =========================================================================
+
+    /**
+     * Initialize the audio system.
+     * Must be called from a user gesture (click/keypress) due to browser autoplay policies.
+     */
+    async initAudio() {
+        if (this.audioInitialized) {
+            return true;
+        }
+
+        try {
+            // Create AudioContext
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.audioSampleRate = this.audioContext.sampleRate;
+
+            console.log(`Audio context created at ${this.audioSampleRate} Hz`);
+
+            // Load the AudioWorklet module
+            await this.audioContext.audioWorklet.addModule('components/sid-audio-processor.js');
+
+            // Create the worklet node
+            this.audioWorkletNode = new AudioWorkletNode(this.audioContext, 'sid-audio-processor');
+
+            // Connect to audio output
+            this.audioWorkletNode.connect(this.audioContext.destination);
+
+            // Set initial volume
+            this.audioWorkletNode.port.postMessage({
+                type: 'volume',
+                value: this.volume
+            });
+
+            // Configure emulator sample rate to match audio context
+            if (this.emulator) {
+                this.emulator.set_sample_rate(this.audioSampleRate);
+                this.emulator.set_audio_enabled(true);
+            }
+
+            this.audioInitialized = true;
+            this.audioEnabled = true;
+
+            // Update mute button text
+            const muteBtn = document.getElementById('mute-btn');
+            if (muteBtn) {
+                muteBtn.textContent = 'Mute';
+            }
+
+            console.log('Audio system initialized successfully');
+            return true;
+        } catch (error) {
+            console.error('Failed to initialize audio:', error);
+            this.audioInitialized = false;
+            return false;
+        }
+    }
+
+    /**
+     * Resume audio context if suspended.
+     * Called on user interaction to handle autoplay policy.
+     */
+    async resumeAudio() {
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            try {
+                await this.audioContext.resume();
+                console.log('Audio context resumed');
+            } catch (error) {
+                console.warn('Failed to resume audio context:', error);
+            }
+        }
+    }
+
+    /**
+     * Process audio samples from the emulator.
+     * Should be called each frame to transfer samples to the audio worklet.
+     */
+    processAudio() {
+        if (!this.audioInitialized || !this.audioEnabled || !this.emulator) {
+            return;
+        }
+
+        // Get samples from emulator
+        const samples = this.emulator.get_audio_samples();
+
+        if (samples && samples.length > 0) {
+            // Send samples to audio worklet
+            this.audioWorkletNode.port.postMessage({
+                type: 'samples',
+                samples: samples
+            });
+        }
+    }
+
+    /**
+     * Set audio volume (0.0 to 1.0)
+     */
+    setVolume(volume) {
+        this.volume = Math.max(0, Math.min(1, volume));
+
+        if (this.audioWorkletNode) {
+            this.audioWorkletNode.port.postMessage({
+                type: 'volume',
+                value: this.volume
+            });
+        }
+
+        console.log(`Volume set to ${Math.round(this.volume * 100)}%`);
+    }
+
+    /**
+     * Set audio mute state
+     */
+    setMute(muted) {
+        if (this.audioWorkletNode) {
+            this.audioWorkletNode.port.postMessage({
+                type: 'mute',
+                value: muted
+            });
+        }
+
+        // Also tell emulator to stop generating samples if muted (saves CPU)
+        if (this.emulator) {
+            this.emulator.set_audio_enabled(!muted);
+        }
+    }
+
+    /**
+     * Clean up audio resources
+     */
+    cleanupAudio() {
+        if (this.audioWorkletNode) {
+            this.audioWorkletNode.disconnect();
+            this.audioWorkletNode = null;
+        }
+
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+        }
+
+        this.audioInitialized = false;
+        console.log('Audio system cleaned up');
     }
 
     /**
@@ -644,7 +800,7 @@ class C64App {
     /**
      * Toggle pause state
      */
-    togglePause() {
+    async togglePause() {
         this.paused = !this.paused;
 
         const pauseBtn = document.getElementById('pause-btn');
@@ -658,6 +814,8 @@ class C64App {
                 this.updateStatus('Paused');
             } else {
                 this.emulator.start();
+                // Resume audio context if needed
+                await this.resumeAudio();
                 this.updateStatus('Running');
             }
         }
@@ -668,7 +826,12 @@ class C64App {
     /**
      * Toggle audio mute
      */
-    toggleMute() {
+    async toggleMute() {
+        // Initialize audio on first unmute (requires user gesture)
+        if (!this.audioInitialized && !this.audioEnabled) {
+            await this.initAudio();
+        }
+
         this.audioEnabled = !this.audioEnabled;
 
         const muteBtn = document.getElementById('mute-btn');
@@ -676,7 +839,9 @@ class C64App {
             muteBtn.textContent = this.audioEnabled ? 'Mute' : 'Unmute';
         }
 
-        // Audio will be handled by the audio component
+        // Update audio system
+        this.setMute(!this.audioEnabled);
+
         console.log(this.audioEnabled ? 'Audio enabled' : 'Audio muted');
     }
 
@@ -716,6 +881,10 @@ class C64App {
         }
         if (this.emulator) {
             this.emulator.stop();
+        }
+        // Clear audio buffer on stop
+        if (this.audioWorkletNode) {
+            this.audioWorkletNode.port.postMessage({ type: 'clear' });
         }
         this.updateStatus('Stopped');
         console.log('Emulator stopped');

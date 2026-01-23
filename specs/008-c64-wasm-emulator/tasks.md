@@ -204,17 +204,17 @@
 
 ### WASM Audio API
 
-- [ ] T086 [US3] Implement get_audio_samples() returning Float32Array in src/wasm/c64_api.rs
-- [ ] T087 [US3] Implement set_sample_rate() for resampling configuration in src/wasm/c64_api.rs
-- [ ] T088 [US3] Implement set_audio_enabled() for mute control in src/wasm/c64_api.rs
+- [x] T086 [US3] Implement get_audio_samples() returning Float32Array in c64-emu/src/wasm.rs
+- [x] T087 [US3] Implement set_sample_rate() for resampling configuration in c64-emu/src/wasm.rs
+- [x] T088 [US3] Implement set_audio_enabled() for mute control in c64-emu/src/wasm.rs
 
 ### Web Frontend Audio
 
-- [ ] T089 [US3] Implement AudioWorklet processor for SID playback in c64-demo/components/audio.js
-- [ ] T090 [US3] Implement audio context initialization (user gesture required) in c64-demo/components/audio.js
-- [ ] T091 [US3] Add mute/volume control to UI in c64-demo/components/controls.js
+- [x] T089 [US3] Implement AudioWorklet processor for SID playback in c64-demo/components/sid-audio-processor.js
+- [x] T090 [US3] Implement audio context initialization (user gesture required) in c64-demo/c64.js
+- [x] T091 [US3] Add mute/volume control to UI in c64-demo/c64.js (HTML controls already existed)
 
-**Checkpoint**: User Story 3 complete - All graphics modes work, sprites render, audio plays
+**Checkpoint**: User Story 3 complete - All graphics modes work, sprites render, audio plays ✓ COMPLETE
 
 ---
 
@@ -414,12 +414,12 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
 | Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
 | Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
-| Phase 5: US3 | T067-T091 | 19/25 | Graphics & audio |
+| Phase 5: US3 | T067-T091 | 25/25 | Graphics & audio ✓ COMPLETE |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **84/132** | |
+| **Total** | **132 tasks** | **90/132** | |
 
 ---
 

@@ -116,6 +116,48 @@ impl C64Emulator {
         self.system.get_audio_samples()
     }
 
+    // =========================================================================
+    // Audio API (T086-T088)
+    // =========================================================================
+
+    /// Set audio output sample rate.
+    ///
+    /// Affects internal SID resampling ratio. Common values are 44100 (CD quality)
+    /// or 48000 (professional audio). This should be called before starting
+    /// emulation, typically matching the AudioContext sample rate.
+    ///
+    /// # Arguments
+    /// * `rate` - Sample rate in Hz (typically 44100 or 48000)
+    #[wasm_bindgen]
+    pub fn set_sample_rate(&mut self, rate: u32) {
+        self.system.set_sample_rate(rate);
+    }
+
+    /// Get the current audio sample rate.
+    #[wasm_bindgen]
+    pub fn get_sample_rate(&mut self) -> f32 {
+        self.system.sample_rate()
+    }
+
+    /// Enable or disable audio generation.
+    ///
+    /// Disabling audio saves CPU when audio is muted, as the SID won't
+    /// generate samples. The SID still processes register writes so that
+    /// games continue to function correctly.
+    ///
+    /// # Arguments
+    /// * `enabled` - `true` to enable audio, `false` to disable (mute)
+    #[wasm_bindgen]
+    pub fn set_audio_enabled(&mut self, enabled: bool) {
+        self.system.set_audio_enabled(enabled);
+    }
+
+    /// Check if audio generation is enabled.
+    #[wasm_bindgen]
+    pub fn is_audio_enabled(&mut self) -> bool {
+        self.system.audio_enabled()
+    }
+
     /// Press a key on the C64 keyboard matrix.
     /// row and col are 0-7 corresponding to the C64 keyboard matrix.
     #[wasm_bindgen]

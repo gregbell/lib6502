@@ -671,6 +671,50 @@ impl C64System {
 
         mem.write(0x00C6, bytes.len() as u8);
     }
+
+    // =========================================================================
+    // Audio API (T086-T088)
+    // =========================================================================
+
+    /// Set the audio output sample rate.
+    ///
+    /// This affects the SID's internal resampling to convert from the
+    /// C64 clock rate to the desired output rate. Common values are
+    /// 44100 (CD quality) or 48000 (professional audio).
+    ///
+    /// The clock rate is determined by the current region (PAL/NTSC).
+    ///
+    /// # Arguments
+    /// * `sample_rate` - Output sample rate in Hz (typically 44100 or 48000)
+    pub fn set_sample_rate(&mut self, sample_rate: u32) {
+        let clock_rate = self.region.clock_hz();
+        self.cpu
+            .memory_mut()
+            .sid
+            .set_sample_rate(sample_rate, clock_rate);
+    }
+
+    /// Get the current audio sample rate.
+    pub fn sample_rate(&mut self) -> f32 {
+        self.cpu.memory_mut().sid.sample_rate()
+    }
+
+    /// Enable or disable audio generation.
+    ///
+    /// When disabled, the SID will not generate audio samples, which
+    /// saves CPU cycles when audio is muted. The SID still processes
+    /// register writes so that games continue to function correctly.
+    ///
+    /// # Arguments
+    /// * `enabled` - `true` to enable audio generation, `false` to disable
+    pub fn set_audio_enabled(&mut self, enabled: bool) {
+        self.cpu.memory_mut().sid.set_audio_enabled(enabled);
+    }
+
+    /// Check if audio generation is enabled.
+    pub fn audio_enabled(&mut self) -> bool {
+        self.cpu.memory_mut().sid.audio_enabled()
+    }
 }
 
 /// Convert ASCII character to PETSCII.
