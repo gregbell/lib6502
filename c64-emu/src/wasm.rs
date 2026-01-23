@@ -233,8 +233,8 @@ impl C64Emulator {
     /// - "ShiftLeft" → Left SHIFT key
     #[wasm_bindgen]
     pub fn key_down_pc(&mut self, keycode: &str) {
-        if let Some((row, col)) = map_pc_keycode(keycode) {
-            self.system.key_down(row, col);
+        if let Some(mapping) = map_pc_keycode(keycode) {
+            self.system.key_down(mapping.row, mapping.col);
         }
     }
 
@@ -243,8 +243,8 @@ impl C64Emulator {
     /// See `key_down_pc` for supported keycodes.
     #[wasm_bindgen]
     pub fn key_up_pc(&mut self, keycode: &str) {
-        if let Some((row, col)) = map_pc_keycode(keycode) {
-            self.system.key_up(row, col);
+        if let Some(mapping) = map_pc_keycode(keycode) {
+            self.system.key_up(mapping.row, mapping.col);
         }
     }
 

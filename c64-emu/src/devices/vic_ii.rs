@@ -27,6 +27,26 @@ const CHAR_COLUMNS: usize = 40;
 /// Number of character rows on screen.
 const CHAR_ROWS: usize = 25;
 
+/// Number of hardware sprites.
+pub const SPRITE_COUNT: usize = 8;
+
+/// Height of each sprite in pixels (21 scanlines).
+pub const SPRITE_HEIGHT: usize = 21;
+
+/// Width of each sprite in pixels (24 pixels = 3 bytes).
+#[allow(dead_code)] // Will be used in T072 (sprite rendering)
+pub const SPRITE_WIDTH: usize = 24;
+
+/// Bytes per sprite line (3 bytes = 24 pixels).
+const SPRITE_BYTES_PER_LINE: usize = 3;
+
+/// Total bytes per sprite data block (63 bytes).
+pub const SPRITE_DATA_SIZE: usize = SPRITE_HEIGHT * SPRITE_BYTES_PER_LINE;
+
+/// Offset within screen RAM where sprite pointers are located ($3F8).
+/// This is Screen RAM base + $3F8 in VIC address space.
+const SPRITE_POINTER_OFFSET: u16 = 0x03F8;
+
 /// Height of each character in pixels.
 const CHAR_HEIGHT: usize = 8;
 
@@ -217,7 +237,12 @@ impl VicII {
             // Multicolor bitmap mode (BMM=1, ECM=0, MCM=1)
             // 160x200 effective resolution, 4 colors per 8x8 cell
             (true, false, true) => {
-                self.render_multicolor_bitmap_scanline(display_line, char_rom, screen_ram, color_ram);
+                self.render_multicolor_bitmap_scanline(
+                    display_line,
+                    char_rom,
+                    screen_ram,
+                    color_ram,
+                );
             }
             // ECM (Extended Color Mode) text mode (BMM=0, ECM=1, MCM=0)
             // In this mode, bits 6-7 of the character code select one of 4 background colors
@@ -662,6 +687,268 @@ impl VicII {
     /// Get the X scroll value (0-7).
     pub fn x_scroll(&self) -> u8 {
         self.registers[0x16] & 0x07
+    }
+
+    // =========================================================================
+    // Sprite Registers and Data Access
+    // =========================================================================
+
+    /// Get sprite X position (9-bit value).
+    ///
+    /// The X position uses the low 8 bits from register $D000+sprite*2
+    /// and bit 8 from register $D010 (MSB register).
+    ///
+    /// # Arguments
+    /// * `sprite` - Sprite number (0-7)
+    pub fn sprite_x(&self, sprite: usize) -> u16 {
+        if sprite >= SPRITE_COUNT {
+            return 0;
+        }
+        let low = self.registers[sprite * 2] as u16;
+        let msb_mask = 1 << sprite;
+        let high = if self.registers[0x10] & msb_mask != 0 {
+            0x100
+        } else {
+            0
+        };
+        high | low
+    }
+
+    /// Get sprite Y position (8-bit value).
+    ///
+    /// # Arguments
+    /// * `sprite` - Sprite number (0-7)
+    pub fn sprite_y(&self, sprite: usize) -> u8 {
+        if sprite >= SPRITE_COUNT {
+            return 0;
+        }
+        self.registers[sprite * 2 + 1]
+    }
+
+    /// Check if a sprite is enabled.
+    ///
+    /// # Arguments
+    /// * `sprite` - Sprite number (0-7)
+    pub fn sprite_enabled(&self, sprite: usize) -> bool {
+        if sprite >= SPRITE_COUNT {
+            return false;
+        }
+        self.registers[0x15] & (1 << sprite) != 0
+    }
+
+    /// Get the sprite enable register value (all 8 sprites).
+    pub fn sprite_enable_bits(&self) -> u8 {
+        self.registers[0x15]
+    }
+
+    /// Check if sprite has priority over background (appears behind).
+    ///
+    /// When the priority bit is set, the sprite appears behind background graphics.
+    ///
+    /// # Arguments
+    /// * `sprite` - Sprite number (0-7)
+    pub fn sprite_behind_background(&self, sprite: usize) -> bool {
+        if sprite >= SPRITE_COUNT {
+            return false;
+        }
+        self.registers[0x1B] & (1 << sprite) != 0
+    }
+
+    /// Check if sprite is in multicolor mode.
+    ///
+    /// # Arguments
+    /// * `sprite` - Sprite number (0-7)
+    pub fn sprite_multicolor(&self, sprite: usize) -> bool {
+        if sprite >= SPRITE_COUNT {
+            return false;
+        }
+        self.registers[0x1C] & (1 << sprite) != 0
+    }
+
+    /// Check if sprite has X expansion (double width).
+    ///
+    /// # Arguments
+    /// * `sprite` - Sprite number (0-7)
+    pub fn sprite_x_expand(&self, sprite: usize) -> bool {
+        if sprite >= SPRITE_COUNT {
+            return false;
+        }
+        self.registers[0x1D] & (1 << sprite) != 0
+    }
+
+    /// Check if sprite has Y expansion (double height).
+    ///
+    /// # Arguments
+    /// * `sprite` - Sprite number (0-7)
+    pub fn sprite_y_expand(&self, sprite: usize) -> bool {
+        if sprite >= SPRITE_COUNT {
+            return false;
+        }
+        self.registers[0x17] & (1 << sprite) != 0
+    }
+
+    /// Get sprite color (0-15).
+    ///
+    /// # Arguments
+    /// * `sprite` - Sprite number (0-7)
+    pub fn sprite_color(&self, sprite: usize) -> u8 {
+        if sprite >= SPRITE_COUNT {
+            return 0;
+        }
+        self.registers[0x27 + sprite] & 0x0F
+    }
+
+    /// Get sprite multicolor 0 (shared color for all sprites, register $D025).
+    pub fn sprite_multicolor_0(&self) -> u8 {
+        self.registers[0x25] & 0x0F
+    }
+
+    /// Get sprite multicolor 1 (shared color for all sprites, register $D026).
+    pub fn sprite_multicolor_1(&self) -> u8 {
+        self.registers[0x26] & 0x0F
+    }
+
+    /// Calculate the address offset within screen RAM where sprite pointers are stored.
+    ///
+    /// Sprite pointers are located at Screen RAM base + $3F8.
+    /// Each of the 8 sprites has a 1-byte pointer at $3F8+sprite_number.
+    ///
+    /// # Returns
+    /// The offset (0x3F8) to add to screen RAM base address.
+    pub fn sprite_pointer_offset() -> u16 {
+        SPRITE_POINTER_OFFSET
+    }
+
+    /// Get the sprite data pointer value for a sprite.
+    ///
+    /// This reads from screen RAM at offset $3F8+sprite.
+    /// The pointer value * 64 = address of sprite data within VIC bank.
+    ///
+    /// # Arguments
+    /// * `screen_ram` - 1KB screen RAM data
+    /// * `sprite` - Sprite number (0-7)
+    ///
+    /// # Returns
+    /// The pointer value (0-255), which when multiplied by 64 gives the
+    /// sprite data address within the current VIC bank.
+    pub fn get_sprite_pointer(&self, screen_ram: &[u8], sprite: usize) -> u8 {
+        if sprite >= SPRITE_COUNT {
+            return 0;
+        }
+        let offset = (SPRITE_POINTER_OFFSET as usize) + sprite;
+        if offset < screen_ram.len() {
+            screen_ram[offset]
+        } else {
+            0
+        }
+    }
+
+    /// Calculate the sprite data address within VIC bank.
+    ///
+    /// The pointer value from screen RAM is multiplied by 64 to get
+    /// the actual address of the 63-byte sprite data block.
+    ///
+    /// # Arguments
+    /// * `pointer` - The sprite pointer value (0-255) from screen RAM
+    ///
+    /// # Returns
+    /// The address offset within the VIC bank (0-16320).
+    pub fn sprite_data_address(pointer: u8) -> u16 {
+        (pointer as u16) * 64
+    }
+
+    /// Fetch sprite data from VIC memory.
+    ///
+    /// This fetches the 63 bytes of sprite data for a single sprite.
+    /// The sprite data is organized as 21 lines of 3 bytes each
+    /// (24 pixels per line in hires mode, 12 double-wide pixels in multicolor).
+    ///
+    /// # Arguments
+    /// * `vic_memory` - Closure that reads a byte from VIC address space
+    /// * `pointer` - Sprite data pointer value (from screen RAM + $3F8)
+    ///
+    /// # Returns
+    /// Array of 63 bytes containing the sprite pattern data.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let pointer = vic.get_sprite_pointer(&screen_ram, 0);
+    /// let sprite_data = VicII::fetch_sprite_data(|addr| memory.vic_read(addr), pointer);
+    /// ```
+    pub fn fetch_sprite_data<F>(vic_memory: F, pointer: u8) -> [u8; SPRITE_DATA_SIZE]
+    where
+        F: Fn(u16) -> u8,
+    {
+        let base_addr = Self::sprite_data_address(pointer);
+        let mut data = [0u8; SPRITE_DATA_SIZE];
+
+        for (i, byte) in data.iter_mut().enumerate() {
+            *byte = vic_memory(base_addr + i as u16);
+        }
+
+        data
+    }
+
+    /// Fetch all enabled sprites' data.
+    ///
+    /// This is a convenience method that fetches sprite data for all 8 sprites.
+    /// For disabled sprites, the data array will contain zeros.
+    ///
+    /// # Arguments
+    /// * `vic_memory` - Closure that reads a byte from VIC address space
+    /// * `screen_ram` - 1KB screen RAM data (for reading sprite pointers)
+    ///
+    /// # Returns
+    /// Array of 8 sprite data blocks (63 bytes each).
+    pub fn fetch_all_sprite_data<F>(
+        &self,
+        vic_memory: F,
+        screen_ram: &[u8],
+    ) -> [[u8; SPRITE_DATA_SIZE]; SPRITE_COUNT]
+    where
+        F: Fn(u16) -> u8,
+    {
+        let mut all_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        let enabled = self.sprite_enable_bits();
+
+        for (sprite, sprite_data) in all_data.iter_mut().enumerate() {
+            if enabled & (1 << sprite) != 0 {
+                let pointer = self.get_sprite_pointer(screen_ram, sprite);
+                *sprite_data = Self::fetch_sprite_data(&vic_memory, pointer);
+            }
+        }
+
+        all_data
+    }
+
+    /// Set sprite-sprite collision flags.
+    ///
+    /// Called during sprite rendering to record collisions.
+    /// Flags are OR'd with existing flags (cleared on read by CPU).
+    pub fn set_sprite_collision_ss(&mut self, flags: u8) {
+        self.sprite_collision_ss |= flags;
+    }
+
+    /// Set sprite-background collision flags.
+    ///
+    /// Called during sprite rendering to record collisions.
+    /// Flags are OR'd with existing flags (cleared on read by CPU).
+    pub fn set_sprite_collision_sb(&mut self, flags: u8) {
+        self.sprite_collision_sb |= flags;
+    }
+
+    /// Clear sprite-sprite collision register.
+    ///
+    /// Called by memory handler after CPU reads register $D01E.
+    pub fn clear_sprite_collision_ss(&mut self) {
+        self.sprite_collision_ss = 0;
+    }
+
+    /// Clear sprite-background collision register.
+    ///
+    /// Called by memory handler after CPU reads register $D01F.
+    pub fn clear_sprite_collision_sb(&mut self) {
+        self.sprite_collision_sb = 0;
     }
 
     /// Check and potentially trigger raster interrupt.
@@ -1230,8 +1517,14 @@ mod tests {
         // Bit 6=0: background (black = 0)
         // Bit 5=1: foreground
         // etc.
-        assert_eq!(vic.framebuffer[0][0], 1, "Pixel 0 should be foreground (white)");
-        assert_eq!(vic.framebuffer[0][1], 0, "Pixel 1 should be background (black)");
+        assert_eq!(
+            vic.framebuffer[0][0], 1,
+            "Pixel 0 should be foreground (white)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][1], 0,
+            "Pixel 1 should be background (black)"
+        );
         assert_eq!(vic.framebuffer[0][2], 1, "Pixel 2 should be foreground");
         assert_eq!(vic.framebuffer[0][3], 0, "Pixel 3 should be background");
         assert_eq!(vic.framebuffer[0][4], 1, "Pixel 4 should be foreground");
@@ -1315,28 +1608,52 @@ mod tests {
 
         // Check line 0: all white (0xFF -> all foreground)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[0][x], 1, "Line 0, pixel {} should be white", x);
+            assert_eq!(
+                vic.framebuffer[0][x], 1,
+                "Line 0, pixel {} should be white",
+                x
+            );
         }
 
         // Check line 1: all black (0x00 -> all background)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[1][x], 0, "Line 1, pixel {} should be black", x);
+            assert_eq!(
+                vic.framebuffer[1][x], 0,
+                "Line 1, pixel {} should be black",
+                x
+            );
         }
 
         // Check line 2: left half white (0xF0)
         for x in 0..4 {
-            assert_eq!(vic.framebuffer[2][x], 1, "Line 2, pixel {} should be white", x);
+            assert_eq!(
+                vic.framebuffer[2][x], 1,
+                "Line 2, pixel {} should be white",
+                x
+            );
         }
         for x in 4..8 {
-            assert_eq!(vic.framebuffer[2][x], 0, "Line 2, pixel {} should be black", x);
+            assert_eq!(
+                vic.framebuffer[2][x], 0,
+                "Line 2, pixel {} should be black",
+                x
+            );
         }
 
         // Check line 3: right half white (0x0F)
         for x in 0..4 {
-            assert_eq!(vic.framebuffer[3][x], 0, "Line 3, pixel {} should be black", x);
+            assert_eq!(
+                vic.framebuffer[3][x], 0,
+                "Line 3, pixel {} should be black",
+                x
+            );
         }
         for x in 4..8 {
-            assert_eq!(vic.framebuffer[3][x], 1, "Line 3, pixel {} should be white", x);
+            assert_eq!(
+                vic.framebuffer[3][x], 1,
+                "Line 3, pixel {} should be white",
+                x
+            );
         }
     }
 
@@ -1359,7 +1676,7 @@ mod tests {
 
         // Screen RAM with different colors
         let mut screen_ram = vec![0u8; 1000];
-        screen_ram[0] = 0x12;  // Row 0, Cell 0: fg=1, bg=2
+        screen_ram[0] = 0x12; // Row 0, Cell 0: fg=1, bg=2
         screen_ram[40] = 0x34; // Row 1, Cell 0: fg=3, bg=4
 
         let color_ram = vec![0u8; 1000];
@@ -1377,8 +1694,14 @@ mod tests {
 
         // Row 1 cell 0 should be alternating (pattern 0xAA with fg=3, bg=4)
         // 10101010: pixel 0=fg(3), pixel 1=bg(4), etc.
-        assert_eq!(vic.framebuffer[8][0], 3, "Row 1 pixel 0 should be foreground");
-        assert_eq!(vic.framebuffer[8][1], 4, "Row 1 pixel 1 should be background");
+        assert_eq!(
+            vic.framebuffer[8][0], 3,
+            "Row 1 pixel 0 should be foreground"
+        );
+        assert_eq!(
+            vic.framebuffer[8][1], 4,
+            "Row 1 pixel 1 should be background"
+        );
     }
 
     #[test]
@@ -1392,19 +1715,19 @@ mod tests {
         let mut bitmap_data = vec![0u8; 8000];
 
         // Set up cells 0, 10, 20, 30, 39 with different patterns
-        bitmap_data[0] = 0xFF;      // Cell 0: all on
-        bitmap_data[80] = 0x00;     // Cell 10: all off
-        bitmap_data[160] = 0xF0;    // Cell 20: left half
-        bitmap_data[240] = 0x0F;    // Cell 30: right half
-        bitmap_data[312] = 0xAA;    // Cell 39: alternating
+        bitmap_data[0] = 0xFF; // Cell 0: all on
+        bitmap_data[80] = 0x00; // Cell 10: all off
+        bitmap_data[160] = 0xF0; // Cell 20: left half
+        bitmap_data[240] = 0x0F; // Cell 30: right half
+        bitmap_data[312] = 0xAA; // Cell 39: alternating
 
         // Screen RAM with distinct colors for each cell
         let mut screen_ram = vec![0u8; 1000];
-        screen_ram[0] = 0x10;   // Cell 0: white/black
-        screen_ram[10] = 0x23;  // Cell 10: red/cyan
-        screen_ram[20] = 0x45;  // Cell 20: purple/green
-        screen_ram[30] = 0x67;  // Cell 30: blue/yellow
-        screen_ram[39] = 0x89;  // Cell 39: orange/brown
+        screen_ram[0] = 0x10; // Cell 0: white/black
+        screen_ram[10] = 0x23; // Cell 10: red/cyan
+        screen_ram[20] = 0x45; // Cell 20: purple/green
+        screen_ram[30] = 0x67; // Cell 30: blue/yellow
+        screen_ram[39] = 0x89; // Cell 39: orange/brown
 
         let color_ram = vec![0u8; 1000];
 
@@ -1414,19 +1737,40 @@ mod tests {
         assert_eq!(vic.framebuffer[0][0], 1, "Cell 0 pixel should be white");
 
         // Cell 10 (x=80-87): all background (cyan=3)
-        assert_eq!(vic.framebuffer[0][80], 3, "Cell 10 pixel should be cyan (bg)");
+        assert_eq!(
+            vic.framebuffer[0][80], 3,
+            "Cell 10 pixel should be cyan (bg)"
+        );
 
         // Cell 20 (x=160-167): left half foreground (purple=4), right half background (green=5)
-        assert_eq!(vic.framebuffer[0][160], 4, "Cell 20 left pixel should be purple");
-        assert_eq!(vic.framebuffer[0][164], 5, "Cell 20 right pixel should be green");
+        assert_eq!(
+            vic.framebuffer[0][160], 4,
+            "Cell 20 left pixel should be purple"
+        );
+        assert_eq!(
+            vic.framebuffer[0][164], 5,
+            "Cell 20 right pixel should be green"
+        );
 
         // Cell 30 (x=240-247): left half background (yellow=7), right half foreground (blue=6)
-        assert_eq!(vic.framebuffer[0][240], 7, "Cell 30 left pixel should be yellow (bg)");
-        assert_eq!(vic.framebuffer[0][244], 6, "Cell 30 right pixel should be blue (fg)");
+        assert_eq!(
+            vic.framebuffer[0][240], 7,
+            "Cell 30 left pixel should be yellow (bg)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][244], 6,
+            "Cell 30 right pixel should be blue (fg)"
+        );
 
         // Cell 39 (x=312-319): alternating orange(8)/brown(9)
-        assert_eq!(vic.framebuffer[0][312], 8, "Cell 39 pixel 0 should be orange (fg)");
-        assert_eq!(vic.framebuffer[0][313], 9, "Cell 39 pixel 1 should be brown (bg)");
+        assert_eq!(
+            vic.framebuffer[0][312], 8,
+            "Cell 39 pixel 0 should be orange (fg)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][313], 9,
+            "Cell 39 pixel 1 should be brown (bg)"
+        );
     }
 
     #[test]
@@ -1511,14 +1855,38 @@ mod tests {
         // Bit pair 3 (bits 1-0): 11 -> color RAM (cyan = 3)
 
         // Each bit pair produces 2 identical pixels
-        assert_eq!(vic.framebuffer[0][0], 0, "Pixel 0 should be background 0 (black)");
-        assert_eq!(vic.framebuffer[0][1], 0, "Pixel 1 should be background 0 (black)");
-        assert_eq!(vic.framebuffer[0][2], 1, "Pixel 2 should be screen upper (white)");
-        assert_eq!(vic.framebuffer[0][3], 1, "Pixel 3 should be screen upper (white)");
-        assert_eq!(vic.framebuffer[0][4], 2, "Pixel 4 should be screen lower (red)");
-        assert_eq!(vic.framebuffer[0][5], 2, "Pixel 5 should be screen lower (red)");
-        assert_eq!(vic.framebuffer[0][6], 3, "Pixel 6 should be color RAM (cyan)");
-        assert_eq!(vic.framebuffer[0][7], 3, "Pixel 7 should be color RAM (cyan)");
+        assert_eq!(
+            vic.framebuffer[0][0], 0,
+            "Pixel 0 should be background 0 (black)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][1], 0,
+            "Pixel 1 should be background 0 (black)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][2], 1,
+            "Pixel 2 should be screen upper (white)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][3], 1,
+            "Pixel 3 should be screen upper (white)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][4], 2,
+            "Pixel 4 should be screen lower (red)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][5], 2,
+            "Pixel 5 should be screen lower (red)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][6], 3,
+            "Pixel 6 should be color RAM (cyan)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][7], 3,
+            "Pixel 7 should be color RAM (cyan)"
+        );
     }
 
     #[test]
@@ -1543,7 +1911,11 @@ mod tests {
 
         // All pixels should be background 0 (green = 5)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[0][x], 5, "Pixel {} should be green (bg0)", x);
+            assert_eq!(
+                vic.framebuffer[0][x], 5,
+                "Pixel {} should be green (bg0)",
+                x
+            );
         }
     }
 
@@ -1559,8 +1931,8 @@ mod tests {
 
         // Create bitmap data with different patterns for each cell
         let mut bitmap_data = vec![0u8; 8000];
-        bitmap_data[0] = 0x00;  // Cell 0: all 00 (background)
-        bitmap_data[8] = 0x55;  // Cell 1: all 01 (screen upper nibble)
+        bitmap_data[0] = 0x00; // Cell 0: all 00 (background)
+        bitmap_data[8] = 0x55; // Cell 1: all 01 (screen upper nibble)
         bitmap_data[16] = 0xAA; // Cell 2: all 10 (screen lower nibble)
         bitmap_data[24] = 0xFF; // Cell 3: all 11 (color RAM)
 
@@ -1582,12 +1954,20 @@ mod tests {
 
         // Cell 0 (x=0-7): all background (black=0)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[0][x], 0, "Cell 0 pixel {} should be black", x);
+            assert_eq!(
+                vic.framebuffer[0][x], 0,
+                "Cell 0 pixel {} should be black",
+                x
+            );
         }
 
         // Cell 1 (x=8-15): all 01 pattern -> screen upper nibble (white=1)
         for x in 8..16 {
-            assert_eq!(vic.framebuffer[0][x], 1, "Cell 1 pixel {} should be white", x);
+            assert_eq!(
+                vic.framebuffer[0][x], 1,
+                "Cell 1 pixel {} should be white",
+                x
+            );
         }
 
         // Cell 2 (x=16-23): all 10 pattern -> screen lower nibble (red=2)
@@ -1597,7 +1977,11 @@ mod tests {
 
         // Cell 3 (x=24-31): all 11 pattern -> color RAM (cyan=3)
         for x in 24..32 {
-            assert_eq!(vic.framebuffer[0][x], 3, "Cell 3 pixel {} should be cyan", x);
+            assert_eq!(
+                vic.framebuffer[0][x], 3,
+                "Cell 3 pixel {} should be cyan",
+                x
+            );
         }
     }
 
@@ -1639,27 +2023,48 @@ mod tests {
 
         // Line 1: all 01 -> green (5)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[1][x], 5, "Line 1, pixel {} should be green", x);
+            assert_eq!(
+                vic.framebuffer[1][x], 5,
+                "Line 1, pixel {} should be green",
+                x
+            );
         }
 
         // Line 2: all 10 -> blue (6)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[2][x], 6, "Line 2, pixel {} should be blue", x);
+            assert_eq!(
+                vic.framebuffer[2][x], 6,
+                "Line 2, pixel {} should be blue",
+                x
+            );
         }
 
         // Line 3: all 11 -> yellow (7)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[3][x], 7, "Line 3, pixel {} should be yellow", x);
+            assert_eq!(
+                vic.framebuffer[3][x], 7,
+                "Line 3, pixel {} should be yellow",
+                x
+            );
         }
 
         // Line 4: mixed pattern 00 01 10 11
         assert_eq!(vic.framebuffer[4][0], 0, "Line 4, pixels 0-1 should be bg");
         assert_eq!(vic.framebuffer[4][1], 0);
-        assert_eq!(vic.framebuffer[4][2], 5, "Line 4, pixels 2-3 should be green");
+        assert_eq!(
+            vic.framebuffer[4][2], 5,
+            "Line 4, pixels 2-3 should be green"
+        );
         assert_eq!(vic.framebuffer[4][3], 5);
-        assert_eq!(vic.framebuffer[4][4], 6, "Line 4, pixels 4-5 should be blue");
+        assert_eq!(
+            vic.framebuffer[4][4], 6,
+            "Line 4, pixels 4-5 should be blue"
+        );
         assert_eq!(vic.framebuffer[4][5], 6);
-        assert_eq!(vic.framebuffer[4][6], 7, "Line 4, pixels 6-7 should be yellow");
+        assert_eq!(
+            vic.framebuffer[4][6], 7,
+            "Line 4, pixels 6-7 should be yellow"
+        );
         assert_eq!(vic.framebuffer[4][7], 7);
     }
 
@@ -1682,12 +2087,12 @@ mod tests {
 
         // Screen RAM
         let mut screen_ram = vec![0u8; 1000];
-        screen_ram[0] = 0x12;  // Row 0, Cell 0: upper=1, lower=2
+        screen_ram[0] = 0x12; // Row 0, Cell 0: upper=1, lower=2
         screen_ram[40] = 0x34; // Row 1, Cell 0: upper=3, lower=4
 
         // Color RAM
         let mut color_ram = vec![0u8; 1000];
-        color_ram[0] = 0x05;  // Row 0, Cell 0: 5
+        color_ram[0] = 0x05; // Row 0, Cell 0: 5
         color_ram[40] = 0x06; // Row 1, Cell 0: 6
 
         // Render row 0, line 0
@@ -1783,11 +2188,9 @@ mod tests {
         for cell in 0..16 {
             let x = cell * 8;
             assert_eq!(
-                vic.framebuffer[0][x],
-                cell as u8,
+                vic.framebuffer[0][x], cell as u8,
                 "Cell {} should have color {}",
-                cell,
-                cell
+                cell, cell
             );
         }
     }
@@ -1885,11 +2288,11 @@ mod tests {
         let mut screen_ram = vec![0u8; 1000];
         // Character index 1 with background 0 (bits 6-7 = 00)
         screen_ram[0] = 0x01; // 00_000001 -> bg0, char 1
-        // Character index 1 with background 1 (bits 6-7 = 01)
+                              // Character index 1 with background 1 (bits 6-7 = 01)
         screen_ram[1] = 0x41; // 01_000001 -> bg1, char 1
-        // Character index 1 with background 2 (bits 6-7 = 10)
+                              // Character index 1 with background 2 (bits 6-7 = 10)
         screen_ram[2] = 0x81; // 10_000001 -> bg2, char 1
-        // Character index 1 with background 3 (bits 6-7 = 11)
+                              // Character index 1 with background 3 (bits 6-7 = 11)
         screen_ram[3] = 0xC1; // 11_000001 -> bg3, char 1
 
         // Color RAM: foreground color 5 (green) for all characters
@@ -1956,7 +2359,8 @@ mod tests {
         // Cell 1: background 1 (white = 1)
         for pixel in 0..8 {
             assert_eq!(
-                vic.framebuffer[0][8 + pixel], 1,
+                vic.framebuffer[0][8 + pixel],
+                1,
                 "Cell 1 pixel {} should be bg1 (white)",
                 pixel
             );
@@ -1965,7 +2369,8 @@ mod tests {
         // Cell 2: background 2 (red = 2)
         for pixel in 0..8 {
             assert_eq!(
-                vic.framebuffer[0][16 + pixel], 2,
+                vic.framebuffer[0][16 + pixel],
+                2,
                 "Cell 2 pixel {} should be bg2 (red)",
                 pixel
             );
@@ -1974,7 +2379,8 @@ mod tests {
         // Cell 3: background 3 (cyan = 3)
         for pixel in 0..8 {
             assert_eq!(
-                vic.framebuffer[0][24 + pixel], 3,
+                vic.framebuffer[0][24 + pixel],
+                3,
                 "Cell 3 pixel {} should be bg3 (cyan)",
                 pixel
             );
@@ -2022,7 +2428,8 @@ mod tests {
         // All cells should show foreground (green = 5) because char 0 has all pixels on
         for cell in 0..4 {
             assert_eq!(
-                vic.framebuffer[0][cell * 8], 5,
+                vic.framebuffer[0][cell * 8],
+                5,
                 "Cell {} should use char 0 pattern (foreground)",
                 cell
             );
@@ -2108,20 +2515,44 @@ mod tests {
         // etc.
 
         // Cell 0: foreground=white(1), background=blue(6)
-        assert_eq!(vic.framebuffer[0][0], 1, "Cell 0 pixel 0 should be white (fg)");
-        assert_eq!(vic.framebuffer[0][1], 6, "Cell 0 pixel 1 should be blue (bg0)");
+        assert_eq!(
+            vic.framebuffer[0][0], 1,
+            "Cell 0 pixel 0 should be white (fg)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][1], 6,
+            "Cell 0 pixel 1 should be blue (bg0)"
+        );
 
         // Cell 1: foreground=white(1), background=yellow(7)
-        assert_eq!(vic.framebuffer[0][8], 1, "Cell 1 pixel 0 should be white (fg)");
-        assert_eq!(vic.framebuffer[0][9], 7, "Cell 1 pixel 1 should be yellow (bg1)");
+        assert_eq!(
+            vic.framebuffer[0][8], 1,
+            "Cell 1 pixel 0 should be white (fg)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][9], 7,
+            "Cell 1 pixel 1 should be yellow (bg1)"
+        );
 
         // Cell 2: foreground=white(1), background=orange(8)
-        assert_eq!(vic.framebuffer[0][16], 1, "Cell 2 pixel 0 should be white (fg)");
-        assert_eq!(vic.framebuffer[0][17], 8, "Cell 2 pixel 1 should be orange (bg2)");
+        assert_eq!(
+            vic.framebuffer[0][16], 1,
+            "Cell 2 pixel 0 should be white (fg)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][17], 8,
+            "Cell 2 pixel 1 should be orange (bg2)"
+        );
 
         // Cell 3: foreground=white(1), background=brown(9)
-        assert_eq!(vic.framebuffer[0][24], 1, "Cell 3 pixel 0 should be white (fg)");
-        assert_eq!(vic.framebuffer[0][25], 9, "Cell 3 pixel 1 should be brown (bg3)");
+        assert_eq!(
+            vic.framebuffer[0][24], 1,
+            "Cell 3 pixel 0 should be white (fg)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][25], 9,
+            "Cell 3 pixel 1 should be brown (bg3)"
+        );
     }
 
     #[test]
@@ -2156,28 +2587,52 @@ mod tests {
 
         // Line 0: all foreground (white)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[0][x], 1, "Line 0, pixel {} should be white", x);
+            assert_eq!(
+                vic.framebuffer[0][x], 1,
+                "Line 0, pixel {} should be white",
+                x
+            );
         }
 
         // Line 1: all background (black)
         for x in 0..8 {
-            assert_eq!(vic.framebuffer[1][x], 0, "Line 1, pixel {} should be black", x);
+            assert_eq!(
+                vic.framebuffer[1][x], 0,
+                "Line 1, pixel {} should be black",
+                x
+            );
         }
 
         // Line 2: left half foreground, right half background
         for x in 0..4 {
-            assert_eq!(vic.framebuffer[2][x], 1, "Line 2, pixel {} should be white", x);
+            assert_eq!(
+                vic.framebuffer[2][x], 1,
+                "Line 2, pixel {} should be white",
+                x
+            );
         }
         for x in 4..8 {
-            assert_eq!(vic.framebuffer[2][x], 0, "Line 2, pixel {} should be black", x);
+            assert_eq!(
+                vic.framebuffer[2][x], 0,
+                "Line 2, pixel {} should be black",
+                x
+            );
         }
 
         // Line 3: left half background, right half foreground
         for x in 0..4 {
-            assert_eq!(vic.framebuffer[3][x], 0, "Line 3, pixel {} should be black", x);
+            assert_eq!(
+                vic.framebuffer[3][x], 0,
+                "Line 3, pixel {} should be black",
+                x
+            );
         }
         for x in 4..8 {
-            assert_eq!(vic.framebuffer[3][x], 1, "Line 3, pixel {} should be white", x);
+            assert_eq!(
+                vic.framebuffer[3][x], 1,
+                "Line 3, pixel {} should be white",
+                x
+            );
         }
     }
 
@@ -2253,14 +2708,312 @@ mod tests {
             for pixel in 0..8 {
                 let x = cell * 8 + pixel;
                 assert_eq!(
-                    vic.framebuffer[0][x],
-                    expected_bg,
+                    vic.framebuffer[0][x], expected_bg,
                     "Cell {} pixel {} should be bg{}",
-                    cell,
-                    pixel,
-                    expected_bg
+                    cell, pixel, expected_bg
                 );
             }
         }
+    }
+
+    // =========================================================================
+    // Sprite Data Fetching Tests (T071)
+    // =========================================================================
+
+    #[test]
+    fn test_sprite_pointer_offset() {
+        // Sprite pointers are at Screen RAM + $3F8
+        assert_eq!(VicII::sprite_pointer_offset(), 0x03F8);
+    }
+
+    #[test]
+    fn test_sprite_data_address_calculation() {
+        // Sprite data address = pointer * 64
+        assert_eq!(VicII::sprite_data_address(0), 0);
+        assert_eq!(VicII::sprite_data_address(1), 64);
+        assert_eq!(VicII::sprite_data_address(13), 13 * 64);
+        assert_eq!(VicII::sprite_data_address(255), 255 * 64);
+    }
+
+    #[test]
+    fn test_get_sprite_pointer() {
+        let vic = VicII::new();
+
+        // Create screen RAM with sprite pointers at $3F8
+        let mut screen_ram = vec![0u8; 1024]; // 1KB
+
+        // Set sprite pointers (at offset $3F8 = 1016)
+        screen_ram[0x3F8] = 13; // Sprite 0 pointer
+        screen_ram[0x3F9] = 14; // Sprite 1 pointer
+        screen_ram[0x3FA] = 15; // Sprite 2 pointer
+        screen_ram[0x3FB] = 0; // Sprite 3 pointer
+        screen_ram[0x3FC] = 128; // Sprite 4 pointer
+        screen_ram[0x3FD] = 200; // Sprite 5 pointer
+        screen_ram[0x3FE] = 255; // Sprite 6 pointer
+        screen_ram[0x3FF] = 100; // Sprite 7 pointer
+
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 0), 13);
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 1), 14);
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 2), 15);
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 3), 0);
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 4), 128);
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 5), 200);
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 6), 255);
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 7), 100);
+
+        // Invalid sprite number should return 0
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 8), 0);
+        assert_eq!(vic.get_sprite_pointer(&screen_ram, 255), 0);
+    }
+
+    #[test]
+    fn test_fetch_sprite_data() {
+        // Create test VIC memory (16KB)
+        let mut vic_mem = vec![0u8; 16384];
+
+        // Put test pattern at sprite data address (pointer 13 = address 832)
+        let sprite_addr = 13 * 64;
+        for i in 0..SPRITE_DATA_SIZE {
+            vic_mem[sprite_addr + i] = i as u8;
+        }
+
+        // Fetch sprite data using closure
+        let data = VicII::fetch_sprite_data(|addr| vic_mem[addr as usize], 13);
+
+        // Verify all 63 bytes were fetched correctly
+        for i in 0..SPRITE_DATA_SIZE {
+            assert_eq!(data[i], i as u8, "Byte {} mismatch", i);
+        }
+    }
+
+    #[test]
+    fn test_sprite_position_registers() {
+        let mut vic = VicII::new();
+
+        // Set sprite 0 position to (256, 100) - X uses MSB bit
+        vic.registers[0x00] = 0x00; // X low byte (0)
+        vic.registers[0x01] = 100; // Y
+        vic.registers[0x10] = 0x01; // MSB for sprite 0 set
+
+        assert_eq!(vic.sprite_x(0), 256);
+        assert_eq!(vic.sprite_y(0), 100);
+
+        // Set sprite 1 position to (50, 200)
+        vic.registers[0x02] = 50; // X low byte
+        vic.registers[0x03] = 200; // Y
+                                   // MSB bit 1 is clear (from above)
+
+        assert_eq!(vic.sprite_x(1), 50);
+        assert_eq!(vic.sprite_y(1), 200);
+
+        // Set sprite 7 position to (320, 255) - max values
+        vic.registers[0x0E] = 0x40; // 320 & 0xFF = 64
+        vic.registers[0x0F] = 255; // Y
+        vic.registers[0x10] |= 0x80; // MSB for sprite 7
+
+        assert_eq!(vic.sprite_x(7), 0x140); // 256 + 64 = 320
+        assert_eq!(vic.sprite_y(7), 255);
+    }
+
+    #[test]
+    fn test_sprite_enable_register() {
+        let mut vic = VicII::new();
+
+        // No sprites enabled initially
+        vic.registers[0x15] = 0;
+        for i in 0..8 {
+            assert!(!vic.sprite_enabled(i), "Sprite {} should be disabled", i);
+        }
+
+        // Enable sprites 0, 3, 7
+        vic.registers[0x15] = 0b10001001;
+        assert!(vic.sprite_enabled(0));
+        assert!(!vic.sprite_enabled(1));
+        assert!(!vic.sprite_enabled(2));
+        assert!(vic.sprite_enabled(3));
+        assert!(!vic.sprite_enabled(4));
+        assert!(!vic.sprite_enabled(5));
+        assert!(!vic.sprite_enabled(6));
+        assert!(vic.sprite_enabled(7));
+
+        assert_eq!(vic.sprite_enable_bits(), 0b10001001);
+    }
+
+    #[test]
+    fn test_sprite_priority_register() {
+        let mut vic = VicII::new();
+
+        // All sprites in front of background by default
+        vic.registers[0x1B] = 0;
+        for i in 0..8 {
+            assert!(
+                !vic.sprite_behind_background(i),
+                "Sprite {} should be in front",
+                i
+            );
+        }
+
+        // Set sprites 2 and 5 behind background
+        vic.registers[0x1B] = 0b00100100;
+        assert!(!vic.sprite_behind_background(0));
+        assert!(!vic.sprite_behind_background(1));
+        assert!(vic.sprite_behind_background(2));
+        assert!(!vic.sprite_behind_background(3));
+        assert!(!vic.sprite_behind_background(4));
+        assert!(vic.sprite_behind_background(5));
+        assert!(!vic.sprite_behind_background(6));
+        assert!(!vic.sprite_behind_background(7));
+    }
+
+    #[test]
+    fn test_sprite_multicolor_register() {
+        let mut vic = VicII::new();
+
+        vic.registers[0x1C] = 0b11110000; // Sprites 4-7 multicolor
+
+        assert!(!vic.sprite_multicolor(0));
+        assert!(!vic.sprite_multicolor(1));
+        assert!(!vic.sprite_multicolor(2));
+        assert!(!vic.sprite_multicolor(3));
+        assert!(vic.sprite_multicolor(4));
+        assert!(vic.sprite_multicolor(5));
+        assert!(vic.sprite_multicolor(6));
+        assert!(vic.sprite_multicolor(7));
+    }
+
+    #[test]
+    fn test_sprite_expansion_registers() {
+        let mut vic = VicII::new();
+
+        // X expansion register
+        vic.registers[0x1D] = 0b01010101; // Sprites 0, 2, 4, 6 expanded X
+        assert!(vic.sprite_x_expand(0));
+        assert!(!vic.sprite_x_expand(1));
+        assert!(vic.sprite_x_expand(2));
+        assert!(!vic.sprite_x_expand(3));
+
+        // Y expansion register
+        vic.registers[0x17] = 0b10101010; // Sprites 1, 3, 5, 7 expanded Y
+        assert!(!vic.sprite_y_expand(0));
+        assert!(vic.sprite_y_expand(1));
+        assert!(!vic.sprite_y_expand(2));
+        assert!(vic.sprite_y_expand(3));
+    }
+
+    #[test]
+    fn test_sprite_colors() {
+        let mut vic = VicII::new();
+
+        // Set individual sprite colors
+        vic.registers[0x27] = 0x01; // Sprite 0: white
+        vic.registers[0x28] = 0x02; // Sprite 1: red
+        vic.registers[0x29] = 0x03; // Sprite 2: cyan
+        vic.registers[0x2A] = 0x04; // Sprite 3: purple
+        vic.registers[0x2B] = 0x05; // Sprite 4: green
+        vic.registers[0x2C] = 0x06; // Sprite 5: blue
+        vic.registers[0x2D] = 0x07; // Sprite 6: yellow
+        vic.registers[0x2E] = 0x08; // Sprite 7: orange
+
+        assert_eq!(vic.sprite_color(0), 0x01);
+        assert_eq!(vic.sprite_color(1), 0x02);
+        assert_eq!(vic.sprite_color(2), 0x03);
+        assert_eq!(vic.sprite_color(3), 0x04);
+        assert_eq!(vic.sprite_color(4), 0x05);
+        assert_eq!(vic.sprite_color(5), 0x06);
+        assert_eq!(vic.sprite_color(6), 0x07);
+        assert_eq!(vic.sprite_color(7), 0x08);
+
+        // Test multicolor shared colors
+        vic.registers[0x25] = 0x09; // Multicolor 0
+        vic.registers[0x26] = 0x0A; // Multicolor 1
+
+        assert_eq!(vic.sprite_multicolor_0(), 0x09);
+        assert_eq!(vic.sprite_multicolor_1(), 0x0A);
+    }
+
+    #[test]
+    fn test_sprite_collision_registers() {
+        let mut vic = VicII::new();
+
+        // Set collision flags
+        vic.set_sprite_collision_ss(0x03); // Sprites 0 and 1 collided
+        assert_eq!(vic.sprite_collision_ss, 0x03);
+
+        // OR with more collisions
+        vic.set_sprite_collision_ss(0x0C); // Sprites 2 and 3 collided
+        assert_eq!(vic.sprite_collision_ss, 0x0F);
+
+        vic.set_sprite_collision_sb(0x55);
+        assert_eq!(vic.sprite_collision_sb, 0x55);
+
+        // Clear collision registers
+        vic.clear_sprite_collision_ss();
+        vic.clear_sprite_collision_sb();
+
+        assert_eq!(vic.sprite_collision_ss, 0);
+        assert_eq!(vic.sprite_collision_sb, 0);
+    }
+
+    #[test]
+    fn test_fetch_all_sprite_data() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0 and 2 only
+        vic.registers[0x15] = 0b00000101;
+
+        // Create VIC memory with test patterns
+        let mut vic_mem = vec![0u8; 16384];
+
+        // Sprite 0 data at pointer 10 = address 640
+        let addr0 = 10 * 64;
+        for i in 0..SPRITE_DATA_SIZE {
+            vic_mem[addr0 + i] = 0xAA; // Pattern for sprite 0
+        }
+
+        // Sprite 2 data at pointer 20 = address 1280
+        let addr2 = 20 * 64;
+        for i in 0..SPRITE_DATA_SIZE {
+            vic_mem[addr2 + i] = 0x55; // Pattern for sprite 2
+        }
+
+        // Create screen RAM with pointers
+        let mut screen_ram = vec![0u8; 1024];
+        screen_ram[0x3F8] = 10; // Sprite 0 pointer
+        screen_ram[0x3F9] = 11; // Sprite 1 pointer (disabled)
+        screen_ram[0x3FA] = 20; // Sprite 2 pointer
+
+        // Fetch all sprite data
+        let all_data = vic.fetch_all_sprite_data(|addr| vic_mem[addr as usize], &screen_ram);
+
+        // Check sprite 0 data
+        for i in 0..SPRITE_DATA_SIZE {
+            assert_eq!(all_data[0][i], 0xAA, "Sprite 0 byte {} mismatch", i);
+        }
+
+        // Sprite 1 should be zeros (disabled)
+        for i in 0..SPRITE_DATA_SIZE {
+            assert_eq!(all_data[1][i], 0, "Sprite 1 should be zeros (disabled)");
+        }
+
+        // Check sprite 2 data
+        for i in 0..SPRITE_DATA_SIZE {
+            assert_eq!(all_data[2][i], 0x55, "Sprite 2 byte {} mismatch", i);
+        }
+
+        // Sprites 3-7 should be zeros (disabled)
+        for sprite in 3..8 {
+            for i in 0..SPRITE_DATA_SIZE {
+                assert_eq!(all_data[sprite][i], 0, "Sprite {} should be zeros", sprite);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sprite_data_size_constant() {
+        // Verify constant matches spec: 21 lines × 3 bytes = 63 bytes
+        assert_eq!(SPRITE_DATA_SIZE, 63);
+        assert_eq!(SPRITE_HEIGHT, 21);
+        assert_eq!(SPRITE_WIDTH, 24);
+        assert_eq!(SPRITE_COUNT, 8);
     }
 }
