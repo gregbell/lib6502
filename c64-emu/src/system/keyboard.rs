@@ -218,116 +218,116 @@ impl KeyMapping {
 /// - Punctuation: Period, Comma, Slash, Semicolon, Quote, etc.
 /// - Navigation: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home
 pub fn map_pc_keycode(code: &str) -> Option<KeyMapping> {
-    // The matrix is stored as matrix[row][col]. KeyMapping::new takes (row, col).
-    // The C64 keyboard matrix positions are documented as (col, row) in the chart above,
-    // so we must pass them to new() in (row, col) order.
+    // NOTE: The C64 KERNAL uses col*8+row indexing for the keyboard decode table.
+    // Our matrix is stored as matrix[row][col], but the KERNAL expects the scan
+    // to produce (col, row) pairs. So we swap the arguments here: new(col, row).
     match code {
-        // Letters - from matrix: A is col=2,row=1 so new(row=1, col=2)
-        "KeyA" => Some(KeyMapping::new(1, 2)),
-        "KeyB" => Some(KeyMapping::new(3, 4)),
-        "KeyC" => Some(KeyMapping::new(2, 4)),
+        // Letters (direct mapping) - arguments are (col, row) for KERNAL compatibility
+        "KeyA" => Some(KeyMapping::new(2, 1)),
+        "KeyB" => Some(KeyMapping::new(4, 3)),
+        "KeyC" => Some(KeyMapping::new(4, 2)),
         "KeyD" => Some(KeyMapping::new(2, 2)),
-        "KeyE" => Some(KeyMapping::new(1, 6)),
-        "KeyF" => Some(KeyMapping::new(2, 5)),
-        "KeyG" => Some(KeyMapping::new(3, 2)),
-        "KeyH" => Some(KeyMapping::new(3, 5)),
-        "KeyI" => Some(KeyMapping::new(4, 1)),
-        "KeyJ" => Some(KeyMapping::new(4, 2)),
-        "KeyK" => Some(KeyMapping::new(4, 5)),
-        "KeyL" => Some(KeyMapping::new(5, 2)),
+        "KeyE" => Some(KeyMapping::new(6, 1)),
+        "KeyF" => Some(KeyMapping::new(5, 2)),
+        "KeyG" => Some(KeyMapping::new(2, 3)),
+        "KeyH" => Some(KeyMapping::new(5, 3)),
+        "KeyI" => Some(KeyMapping::new(1, 4)),
+        "KeyJ" => Some(KeyMapping::new(2, 4)),
+        "KeyK" => Some(KeyMapping::new(5, 4)),
+        "KeyL" => Some(KeyMapping::new(2, 5)),
         "KeyM" => Some(KeyMapping::new(4, 4)),
-        "KeyN" => Some(KeyMapping::new(4, 7)),
-        "KeyO" => Some(KeyMapping::new(4, 6)),
-        "KeyP" => Some(KeyMapping::new(5, 1)),
-        "KeyQ" => Some(KeyMapping::new(7, 6)),
-        "KeyR" => Some(KeyMapping::new(2, 1)),
-        "KeyS" => Some(KeyMapping::new(1, 5)),
-        "KeyT" => Some(KeyMapping::new(2, 6)),
-        "KeyU" => Some(KeyMapping::new(3, 6)),
-        "KeyV" => Some(KeyMapping::new(3, 7)),
+        "KeyN" => Some(KeyMapping::new(7, 4)),
+        "KeyO" => Some(KeyMapping::new(6, 4)),
+        "KeyP" => Some(KeyMapping::new(1, 5)),
+        "KeyQ" => Some(KeyMapping::new(6, 7)),
+        "KeyR" => Some(KeyMapping::new(1, 2)),
+        "KeyS" => Some(KeyMapping::new(5, 1)),
+        "KeyT" => Some(KeyMapping::new(6, 2)),
+        "KeyU" => Some(KeyMapping::new(6, 3)),
+        "KeyV" => Some(KeyMapping::new(7, 3)),
         "KeyW" => Some(KeyMapping::new(1, 1)),
-        "KeyX" => Some(KeyMapping::new(2, 7)),
-        "KeyY" => Some(KeyMapping::new(3, 1)),
-        "KeyZ" => Some(KeyMapping::new(1, 4)),
+        "KeyX" => Some(KeyMapping::new(7, 2)),
+        "KeyY" => Some(KeyMapping::new(1, 3)),
+        "KeyZ" => Some(KeyMapping::new(4, 1)),
 
-        // Digits (top row) - from matrix chart
-        "Digit1" => Some(KeyMapping::new(7, 0)),
-        "Digit2" => Some(KeyMapping::new(7, 3)),
-        "Digit3" => Some(KeyMapping::new(1, 0)),
-        "Digit4" => Some(KeyMapping::new(1, 3)),
-        "Digit5" => Some(KeyMapping::new(2, 0)),
-        "Digit6" => Some(KeyMapping::new(2, 3)),
-        "Digit7" => Some(KeyMapping::new(3, 0)),
+        // Digits (top row) - arguments are (col, row)
+        "Digit1" => Some(KeyMapping::new(0, 7)),
+        "Digit2" => Some(KeyMapping::new(3, 7)),
+        "Digit3" => Some(KeyMapping::new(0, 1)),
+        "Digit4" => Some(KeyMapping::new(3, 1)),
+        "Digit5" => Some(KeyMapping::new(0, 2)),
+        "Digit6" => Some(KeyMapping::new(3, 2)),
+        "Digit7" => Some(KeyMapping::new(0, 3)),
         "Digit8" => Some(KeyMapping::new(3, 3)),
-        "Digit9" => Some(KeyMapping::new(4, 0)),
-        "Digit0" => Some(KeyMapping::new(4, 3)),
+        "Digit9" => Some(KeyMapping::new(0, 4)),
+        "Digit0" => Some(KeyMapping::new(3, 4)),
 
-        // Function keys - from matrix chart
+        // Function keys - arguments are (col, row)
         // C64 has F1, F3, F5, F7 - F2/F4/F6/F8 are Shift versions
-        "F1" => Some(KeyMapping::new(0, 4)),
-        "F2" => Some(KeyMapping::with_shift(0, 4)), // Shift+F1
-        "F3" => Some(KeyMapping::new(0, 5)),
-        "F4" => Some(KeyMapping::with_shift(0, 5)), // Shift+F3
-        "F5" => Some(KeyMapping::new(0, 6)),
-        "F6" => Some(KeyMapping::with_shift(0, 6)), // Shift+F5
-        "F7" => Some(KeyMapping::new(0, 3)),
-        "F8" => Some(KeyMapping::with_shift(0, 3)), // Shift+F7
+        "F1" => Some(KeyMapping::new(4, 0)),
+        "F2" => Some(KeyMapping::with_shift(4, 0)), // Shift+F1
+        "F3" => Some(KeyMapping::new(5, 0)),
+        "F4" => Some(KeyMapping::with_shift(5, 0)), // Shift+F3
+        "F5" => Some(KeyMapping::new(6, 0)),
+        "F6" => Some(KeyMapping::with_shift(6, 0)), // Shift+F5
+        "F7" => Some(KeyMapping::new(3, 0)),
+        "F8" => Some(KeyMapping::with_shift(3, 0)), // Shift+F7
 
-        // Modifiers - from matrix chart
-        "ShiftLeft" => Some(KeyMapping::new(1, 7)),   // LSHFT at col=7,row=1
-        "ShiftRight" => Some(KeyMapping::new(6, 4)),  // RSHFT at col=4,row=6
-        "ControlLeft" | "ControlRight" => Some(KeyMapping::new(7, 2)), // CTRL at col=2,row=7
+        // Modifiers - arguments are (col, row)
+        "ShiftLeft" => Some(KeyMapping::new(7, 1)),
+        "ShiftRight" => Some(KeyMapping::new(4, 6)),
+        "ControlLeft" | "ControlRight" => Some(KeyMapping::new(2, 7)), // CTRL
         "AltLeft" | "AltRight" | "MetaLeft" | "MetaRight" => {
-            Some(KeyMapping::new(7, 5)) // C= at col=5,row=7
+            Some(KeyMapping::new(5, 7)) // Commodore key
         }
 
-        // Common keys - from matrix chart
-        "Space" => Some(KeyMapping::new(7, 4)),            // SPC at col=4,row=7
-        "Enter" | "NumpadEnter" => Some(KeyMapping::new(0, 1)), // RET at col=1,row=0
-        "Backspace" => Some(KeyMapping::new(0, 0)),        // DEL at col=0,row=0
-        "Escape" => Some(KeyMapping::new(7, 7)),           // STOP at col=7,row=7
-        "Tab" => Some(KeyMapping::new(7, 2)),              // Map to CTRL
+        // Common keys - arguments are (col, row)
+        "Space" => Some(KeyMapping::new(4, 7)),
+        "Enter" | "NumpadEnter" => Some(KeyMapping::new(1, 0)), // RETURN
+        "Backspace" => Some(KeyMapping::new(0, 0)),             // DEL/INST
+        "Escape" => Some(KeyMapping::new(7, 7)),                // RUN/STOP
+        "Tab" => Some(KeyMapping::new(2, 7)),                   // Map to CTRL
 
-        // Navigation - from matrix chart
-        "ArrowUp" => Some(KeyMapping::with_shift(0, 7)),   // Shift + CRSR DOWN (col=7,row=0)
-        "ArrowDown" => Some(KeyMapping::new(0, 7)),        // CRSR DOWN at col=7,row=0
-        "ArrowLeft" => Some(KeyMapping::with_shift(0, 2)), // Shift + CRSR RIGHT (col=2,row=0)
-        "ArrowRight" => Some(KeyMapping::new(0, 2)),       // CRSR RIGHT at col=2,row=0
-        "Home" => Some(KeyMapping::new(6, 3)),             // HOME at col=3,row=6
+        // Navigation - arguments are (col, row)
+        "ArrowUp" => Some(KeyMapping::with_shift(7, 0)), // Shift + CRSR DOWN
+        "ArrowDown" => Some(KeyMapping::new(7, 0)),      // CRSR DOWN
+        "ArrowLeft" => Some(KeyMapping::with_shift(2, 0)), // Shift + CRSR RIGHT
+        "ArrowRight" => Some(KeyMapping::new(2, 0)),     // CRSR RIGHT
+        "Home" => Some(KeyMapping::new(3, 6)),           // CLR/HOME
 
-        // Punctuation - from matrix chart
-        "Period" => Some(KeyMapping::new(5, 4)),       // . at col=4,row=5
-        "Comma" => Some(KeyMapping::new(5, 7)),        // , at col=7,row=5
-        "Slash" => Some(KeyMapping::new(6, 7)),        // / at col=7,row=6
-        "Semicolon" => Some(KeyMapping::new(6, 2)),    // ; at col=2,row=6
-        "Quote" => Some(KeyMapping::with_shift(7, 3)), // " is Shift+2 (col=3,row=7)
-        "BracketLeft" => Some(KeyMapping::new(5, 5)),  // : at col=5,row=5
-        "BracketRight" => Some(KeyMapping::new(6, 1)), // * at col=1,row=6
-        "Backslash" => Some(KeyMapping::new(6, 0)),    // £ at col=0,row=6
-        "Backquote" => Some(KeyMapping::new(7, 1)),    // ← at col=1,row=7
-        "Minus" => Some(KeyMapping::new(5, 3)),        // - at col=3,row=5
-        "Equal" => Some(KeyMapping::new(6, 5)),        // = at col=5,row=6
+        // Punctuation - arguments are (col, row)
+        "Period" => Some(KeyMapping::new(4, 5)),       // .
+        "Comma" => Some(KeyMapping::new(7, 5)),        // ,
+        "Slash" => Some(KeyMapping::new(7, 6)),        // /
+        "Semicolon" => Some(KeyMapping::new(2, 6)),    // ; (shifted: ])
+        "Quote" => Some(KeyMapping::with_shift(0, 3)), // ' is Shift+7 on C64
+        "BracketLeft" => Some(KeyMapping::new(5, 5)),  // : (C64 has : not [)
+        "BracketRight" => Some(KeyMapping::new(1, 6)), // * on C64
+        "Backslash" => Some(KeyMapping::new(0, 6)),    // £ (Pound sign)
+        "Backquote" => Some(KeyMapping::new(1, 7)),    // ← (left arrow)
+        "Minus" => Some(KeyMapping::new(3, 5)),        // - on C64
+        "Equal" => Some(KeyMapping::new(5, 6)),        // = on C64
 
-        // Numpad (map to their regular digit/operator equivalents)
-        "Numpad0" => Some(KeyMapping::new(4, 3)),
-        "Numpad1" => Some(KeyMapping::new(7, 0)),
-        "Numpad2" => Some(KeyMapping::new(7, 3)),
-        "Numpad3" => Some(KeyMapping::new(1, 0)),
-        "Numpad4" => Some(KeyMapping::new(1, 3)),
-        "Numpad5" => Some(KeyMapping::new(2, 0)),
-        "Numpad6" => Some(KeyMapping::new(2, 3)),
-        "Numpad7" => Some(KeyMapping::new(3, 0)),
+        // Numpad (map to their regular digit/operator equivalents) - arguments are (col, row)
+        "Numpad0" => Some(KeyMapping::new(3, 4)),
+        "Numpad1" => Some(KeyMapping::new(0, 7)),
+        "Numpad2" => Some(KeyMapping::new(3, 7)),
+        "Numpad3" => Some(KeyMapping::new(0, 1)),
+        "Numpad4" => Some(KeyMapping::new(3, 1)),
+        "Numpad5" => Some(KeyMapping::new(0, 2)),
+        "Numpad6" => Some(KeyMapping::new(3, 2)),
+        "Numpad7" => Some(KeyMapping::new(0, 3)),
         "Numpad8" => Some(KeyMapping::new(3, 3)),
-        "Numpad9" => Some(KeyMapping::new(4, 0)),
-        "NumpadAdd" => Some(KeyMapping::new(5, 0)),    // + at col=0,row=5
-        "NumpadSubtract" => Some(KeyMapping::new(5, 3)), // - at col=3,row=5
-        "NumpadMultiply" => Some(KeyMapping::new(6, 1)), // * at col=1,row=6
-        "NumpadDivide" => Some(KeyMapping::new(6, 7)),   // / at col=7,row=6
-        "NumpadDecimal" => Some(KeyMapping::new(5, 4)),  // . at col=4,row=5
+        "Numpad9" => Some(KeyMapping::new(0, 4)),
+        "NumpadAdd" => Some(KeyMapping::new(0, 5)), // +
+        "NumpadSubtract" => Some(KeyMapping::new(3, 5)), // -
+        "NumpadMultiply" => Some(KeyMapping::new(1, 6)), // *
+        "NumpadDivide" => Some(KeyMapping::new(7, 6)), // /
+        "NumpadDecimal" => Some(KeyMapping::new(4, 5)), // .
 
-        // Insert/Delete
+        // Insert/Delete - arguments are (col, row)
         "Insert" => Some(KeyMapping::with_shift(0, 0)), // Shift+DEL = INST
-        "Delete" => Some(KeyMapping::new(0, 0)),        // DEL at col=0,row=0
+        "Delete" => Some(KeyMapping::new(0, 0)),        // DEL
 
         // Special characters that require shift
         // These are handled by the requires_shift flag for proper emulation
@@ -339,90 +339,90 @@ pub fn map_pc_keycode(code: &str) -> Option<KeyMapping> {
 
 /// C64 keyboard matrix positions for common keys.
 ///
-/// Each constant is a tuple (row, col) representing the position
-/// in the 8×8 keyboard matrix. This matches the KeyMapping struct's
-/// (row, col) field order.
+/// Each constant is a tuple (col, row) representing the position
+/// in the 8×8 keyboard matrix. This matches the KERNAL's decode table
+/// indexing: index = col * 8 + row.
 #[allow(dead_code)]
 pub mod keys {
-    // Row 0 keys (from matrix chart)
-    pub const DEL: (u8, u8) = (0, 0);       // col=0, row=0
-    pub const RETURN: (u8, u8) = (0, 1);    // col=1, row=0
-    pub const CRSR_RIGHT: (u8, u8) = (0, 2); // col=2, row=0
-    pub const F7: (u8, u8) = (0, 3);        // col=3, row=0
-    pub const F1: (u8, u8) = (0, 4);        // col=4, row=0
-    pub const F3: (u8, u8) = (0, 5);        // col=5, row=0
-    pub const F5: (u8, u8) = (0, 6);        // col=6, row=0
-    pub const CRSR_DOWN: (u8, u8) = (0, 7); // col=7, row=0
+    // Column 0 keys
+    pub const DEL: (u8, u8) = (0, 0);
+    pub const DIGIT_3: (u8, u8) = (0, 1);
+    pub const DIGIT_5: (u8, u8) = (0, 2);
+    pub const DIGIT_7: (u8, u8) = (0, 3);
+    pub const DIGIT_9: (u8, u8) = (0, 4);
+    pub const PLUS: (u8, u8) = (0, 5);
+    pub const POUND: (u8, u8) = (0, 6);
+    pub const DIGIT_1: (u8, u8) = (0, 7);
 
-    // Row 1 keys
-    pub const DIGIT_3: (u8, u8) = (1, 0);   // col=0, row=1
-    pub const W: (u8, u8) = (1, 1);         // col=1, row=1
-    pub const A: (u8, u8) = (1, 2);         // col=2, row=1
-    pub const DIGIT_4: (u8, u8) = (1, 3);   // col=3, row=1
-    pub const Z: (u8, u8) = (1, 4);         // col=4, row=1
-    pub const S: (u8, u8) = (1, 5);         // col=5, row=1
-    pub const E: (u8, u8) = (1, 6);         // col=6, row=1
-    pub const LEFT_SHIFT: (u8, u8) = (1, 7); // col=7, row=1
+    // Column 1 keys
+    pub const RETURN: (u8, u8) = (1, 0);
+    pub const W: (u8, u8) = (1, 1);
+    pub const R: (u8, u8) = (1, 2);
+    pub const Y: (u8, u8) = (1, 3);
+    pub const I: (u8, u8) = (1, 4);
+    pub const P: (u8, u8) = (1, 5);
+    pub const ASTERISK: (u8, u8) = (1, 6);
+    pub const LEFT_ARROW: (u8, u8) = (1, 7);
 
-    // Row 2 keys
-    pub const DIGIT_5: (u8, u8) = (2, 0);   // col=0, row=2
-    pub const R: (u8, u8) = (2, 1);         // col=1, row=2
-    pub const D: (u8, u8) = (2, 2);         // col=2, row=2
-    pub const DIGIT_6: (u8, u8) = (2, 3);   // col=3, row=2
-    pub const C: (u8, u8) = (2, 4);         // col=4, row=2
-    pub const F: (u8, u8) = (2, 5);         // col=5, row=2
-    pub const T: (u8, u8) = (2, 6);         // col=6, row=2
-    pub const X: (u8, u8) = (2, 7);         // col=7, row=2
+    // Column 2 keys
+    pub const CRSR_RIGHT: (u8, u8) = (2, 0);
+    pub const A: (u8, u8) = (2, 1);
+    pub const D: (u8, u8) = (2, 2);
+    pub const G: (u8, u8) = (2, 3);
+    pub const J: (u8, u8) = (2, 4);
+    pub const L: (u8, u8) = (2, 5);
+    pub const SEMICOLON: (u8, u8) = (2, 6);
+    pub const CTRL: (u8, u8) = (2, 7);
 
-    // Row 3 keys
-    pub const DIGIT_7: (u8, u8) = (3, 0);   // col=0, row=3
-    pub const Y: (u8, u8) = (3, 1);         // col=1, row=3
-    pub const G: (u8, u8) = (3, 2);         // col=2, row=3
-    pub const DIGIT_8: (u8, u8) = (3, 3);   // col=3, row=3
-    pub const B: (u8, u8) = (3, 4);         // col=4, row=3
-    pub const H: (u8, u8) = (3, 5);         // col=5, row=3
-    pub const U: (u8, u8) = (3, 6);         // col=6, row=3
-    pub const V: (u8, u8) = (3, 7);         // col=7, row=3
+    // Column 3 keys
+    pub const F7: (u8, u8) = (3, 0);
+    pub const DIGIT_4: (u8, u8) = (3, 1);
+    pub const DIGIT_6: (u8, u8) = (3, 2);
+    pub const DIGIT_8: (u8, u8) = (3, 3);
+    pub const DIGIT_0: (u8, u8) = (3, 4);
+    pub const MINUS: (u8, u8) = (3, 5);
+    pub const HOME: (u8, u8) = (3, 6);
+    pub const DIGIT_2: (u8, u8) = (3, 7);
 
-    // Row 4 keys
-    pub const DIGIT_9: (u8, u8) = (4, 0);   // col=0, row=4
-    pub const I: (u8, u8) = (4, 1);         // col=1, row=4
-    pub const J: (u8, u8) = (4, 2);         // col=2, row=4
-    pub const DIGIT_0: (u8, u8) = (4, 3);   // col=3, row=4
-    pub const M: (u8, u8) = (4, 4);         // col=4, row=4
-    pub const K: (u8, u8) = (4, 5);         // col=5, row=4
-    pub const O: (u8, u8) = (4, 6);         // col=6, row=4
-    pub const N: (u8, u8) = (4, 7);         // col=7, row=4
+    // Column 4 keys
+    pub const F1: (u8, u8) = (4, 0);
+    pub const Z: (u8, u8) = (4, 1);
+    pub const C: (u8, u8) = (4, 2);
+    pub const B: (u8, u8) = (4, 3);
+    pub const M: (u8, u8) = (4, 4);
+    pub const PERIOD: (u8, u8) = (4, 5);
+    pub const RIGHT_SHIFT: (u8, u8) = (4, 6);
+    pub const SPACE: (u8, u8) = (4, 7);
 
-    // Row 5 keys
-    pub const PLUS: (u8, u8) = (5, 0);      // col=0, row=5
-    pub const P: (u8, u8) = (5, 1);         // col=1, row=5
-    pub const L: (u8, u8) = (5, 2);         // col=2, row=5
-    pub const MINUS: (u8, u8) = (5, 3);     // col=3, row=5
-    pub const PERIOD: (u8, u8) = (5, 4);    // col=4, row=5
-    pub const COLON: (u8, u8) = (5, 5);     // col=5, row=5
-    pub const AT: (u8, u8) = (5, 6);        // col=6, row=5
-    pub const COMMA: (u8, u8) = (5, 7);     // col=7, row=5
+    // Column 5 keys
+    pub const F3: (u8, u8) = (5, 0);
+    pub const S: (u8, u8) = (5, 1);
+    pub const F: (u8, u8) = (5, 2);
+    pub const H: (u8, u8) = (5, 3);
+    pub const K: (u8, u8) = (5, 4);
+    pub const COLON: (u8, u8) = (5, 5);
+    pub const EQUALS: (u8, u8) = (5, 6);
+    pub const COMMODORE: (u8, u8) = (5, 7);
 
-    // Row 6 keys
-    pub const POUND: (u8, u8) = (6, 0);     // col=0, row=6
-    pub const ASTERISK: (u8, u8) = (6, 1);  // col=1, row=6
-    pub const SEMICOLON: (u8, u8) = (6, 2); // col=2, row=6
-    pub const HOME: (u8, u8) = (6, 3);      // col=3, row=6
-    pub const RIGHT_SHIFT: (u8, u8) = (6, 4); // col=4, row=6
-    pub const EQUALS: (u8, u8) = (6, 5);    // col=5, row=6
-    pub const UP_ARROW: (u8, u8) = (6, 6);  // col=6, row=6
-    pub const SLASH: (u8, u8) = (6, 7);     // col=7, row=6
+    // Column 6 keys
+    pub const F5: (u8, u8) = (6, 0);
+    pub const E: (u8, u8) = (6, 1);
+    pub const T: (u8, u8) = (6, 2);
+    pub const U: (u8, u8) = (6, 3);
+    pub const O: (u8, u8) = (6, 4);
+    pub const AT: (u8, u8) = (6, 5);
+    pub const UP_ARROW: (u8, u8) = (6, 6);
+    pub const Q: (u8, u8) = (6, 7);
 
-    // Row 7 keys
-    pub const DIGIT_1: (u8, u8) = (7, 0);   // col=0, row=7
-    pub const LEFT_ARROW: (u8, u8) = (7, 1); // col=1, row=7
-    pub const CTRL: (u8, u8) = (7, 2);      // col=2, row=7
-    pub const DIGIT_2: (u8, u8) = (7, 3);   // col=3, row=7
-    pub const SPACE: (u8, u8) = (7, 4);     // col=4, row=7
-    pub const COMMODORE: (u8, u8) = (7, 5); // col=5, row=7
-    pub const Q: (u8, u8) = (7, 6);         // col=6, row=7
-    pub const RUN_STOP: (u8, u8) = (7, 7);  // col=7, row=7
+    // Column 7 keys
+    pub const CRSR_DOWN: (u8, u8) = (7, 0);
+    pub const LEFT_SHIFT: (u8, u8) = (7, 1);
+    pub const X: (u8, u8) = (7, 2);
+    pub const V: (u8, u8) = (7, 3);
+    pub const N: (u8, u8) = (7, 4);
+    pub const COMMA: (u8, u8) = (7, 5);
+    pub const SLASH: (u8, u8) = (7, 6);
+    pub const RUN_STOP: (u8, u8) = (7, 7);
 }
 
 #[cfg(test)]
@@ -546,12 +546,12 @@ mod tests {
 
     #[test]
     fn test_key_constants() {
-        // Verify a few key positions match the C64 matrix (row, col) convention
-        assert_eq!(keys::A, (1, 2));         // A at col=2, row=1
-        assert_eq!(keys::RETURN, (0, 1));    // RETURN at col=1, row=0
-        assert_eq!(keys::SPACE, (7, 4));     // SPACE at col=4, row=7
-        assert_eq!(keys::LEFT_SHIFT, (1, 7)); // LSHIFT at col=7, row=1
-        assert_eq!(keys::RIGHT_SHIFT, (6, 4)); // RSHIFT at col=4, row=6
+        // Verify a few key positions match the C64 matrix (col, row) convention
+        assert_eq!(keys::A, (2, 1));
+        assert_eq!(keys::RETURN, (1, 0));
+        assert_eq!(keys::SPACE, (4, 7));
+        assert_eq!(keys::LEFT_SHIFT, (7, 1));
+        assert_eq!(keys::RIGHT_SHIFT, (4, 6));
     }
 
     #[test]
