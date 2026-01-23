@@ -171,8 +171,8 @@ impl<M: MemoryBus> CPU<M> {
             flag_z: false,
             flag_c: false,
             cycles: 0,
-            irq_pending: false, // No interrupts pending on reset
-            nmi_pending: false, // No NMI pending on reset
+            irq_pending: false,    // No interrupts pending on reset
+            nmi_pending: false,    // No NMI pending on reset
             nmi_prev_state: false, // NMI line inactive on reset
             memory,
         }
@@ -879,6 +879,13 @@ impl<M: MemoryBus> CPU<M> {
         self.nmi_pending
     }
 
+    /// Returns whether IRQ is pending (for save state).
+    ///
+    /// This returns the cached state of the IRQ line from the last instruction.
+    pub fn irq_active(&self) -> bool {
+        self.irq_pending
+    }
+
     /// Triggers an NMI (Non-Maskable Interrupt) on the CPU.
     ///
     /// This method sets the NMI pending flag, which will cause the CPU to
@@ -988,6 +995,31 @@ impl<M: MemoryBus> CPU<M> {
     /// Sets the stack pointer value.
     pub fn set_sp(&mut self, value: u8) {
         self.sp = value;
+    }
+
+    /// Sets the cycle counter value (for save state restoration).
+    pub fn set_cycles(&mut self, value: u64) {
+        self.cycles = value;
+    }
+
+    /// Sets the IRQ pending flag (for save state restoration).
+    pub fn set_irq_pending(&mut self, value: bool) {
+        self.irq_pending = value;
+    }
+
+    /// Sets the NMI pending flag (for save state restoration).
+    pub fn set_nmi_pending(&mut self, value: bool) {
+        self.nmi_pending = value;
+    }
+
+    /// Gets the previous NMI line state (for save state).
+    pub fn nmi_prev_state(&self) -> bool {
+        self.nmi_prev_state
+    }
+
+    /// Sets the previous NMI line state (for save state restoration).
+    pub fn set_nmi_prev_state(&mut self, value: bool) {
+        self.nmi_prev_state = value;
     }
 
     /// Returns a mutable reference to the memory bus.
@@ -1394,7 +1426,7 @@ mod tests {
         // Set NMI vector to 0xABCD
         mem.write(0xFFFA, 0xCD); // Low byte
         mem.write(0xFFFB, 0xAB); // High byte
-        // Set IRQ vector to 0x1234 (to verify NMI uses different vector)
+                                 // Set IRQ vector to 0x1234 (to verify NMI uses different vector)
         mem.write(0xFFFE, 0x34);
         mem.write(0xFFFF, 0x12);
         // Put NOP at reset address

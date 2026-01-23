@@ -16,8 +16,8 @@ mod port_6510;
 mod sid;
 mod vic_ii;
 
-pub use cia::Cia6526;
+pub use cia::{Cia6526, CiaPort, CiaTimer, CiaType, TodClock};
 pub use color_ram::ColorRam;
 pub use port_6510::Port6510;
-pub use sid::Sid6581;
+pub use sid::{EnvelopeState, FilterMode, Sid6581, SidFilter, SidVoice};
 pub use vic_ii::{VicII, SPRITE_COUNT, SPRITE_DATA_SIZE, SPRITE_HEIGHT, SPRITE_WIDTH};

@@ -775,6 +775,50 @@ impl C64System {
     pub fn audio_enabled(&mut self) -> bool {
         self.cpu.memory_mut().sid.audio_enabled()
     }
+
+    // =========================================================================
+    // Save State Support (T099-T108)
+    // =========================================================================
+
+    /// Get the current scanline.
+    pub fn current_scanline(&self) -> u16 {
+        self.current_scanline
+    }
+
+    /// Get the current cycle within the scanline.
+    pub fn cycle_in_scanline(&self) -> u16 {
+        self.cycle_in_scanline
+    }
+
+    /// Set scanline state for save state restoration.
+    pub fn set_scanline_state(&mut self, scanline: u16, cycle: u16) {
+        self.current_scanline = scanline;
+        self.cycle_in_scanline = cycle;
+    }
+
+    /// Set frame count for save state restoration.
+    pub fn set_frame_count(&mut self, count: u64) {
+        self.frame_count = count;
+    }
+
+    /// Capture joystick state for saving.
+    ///
+    /// Returns (port1_state, port2_state, swapped).
+    pub fn capture_joystick_state(&self) -> (u8, u8, bool) {
+        (
+            self.joystick_ports.physical_port1().get(),
+            self.joystick_ports.physical_port2().get(),
+            self.joystick_ports.is_swapped(),
+        )
+    }
+
+    /// Restore joystick state from a save state.
+    pub fn restore_joystick_state(&mut self, port1: u8, port2: u8, swapped: bool) {
+        self.joystick_ports.set_swapped(swapped);
+        self.joystick_ports.physical_port1_mut().set(port1);
+        self.joystick_ports.physical_port2_mut().set(port2);
+        self.sync_joystick_to_cia();
+    }
 }
 
 /// Convert ASCII character to PETSCII.

@@ -465,6 +465,74 @@ impl C64Emulator {
     pub fn inject_keys(&mut self, text: &str) {
         self.system.inject_keys(text);
     }
+
+    // =========================================================================
+    // Save State API (T106-T108)
+    // =========================================================================
+
+    /// Save the complete emulator state to a byte array.
+    ///
+    /// Returns a binary blob that can be stored in localStorage or downloaded
+    /// as a file. The format is self-contained with version information for
+    /// future compatibility.
+    ///
+    /// # Example (JavaScript)
+    /// ```javascript
+    /// const state = emulator.save_state();
+    /// localStorage.setItem('saveSlot1', btoa(String.fromCharCode(...state)));
+    /// ```
+    #[wasm_bindgen]
+    pub fn save_state(&mut self) -> Vec<u8> {
+        use crate::system::SaveState;
+        let state = SaveState::capture(&mut self.system);
+        state.serialize()
+    }
+
+    /// Load emulator state from a previously saved byte array.
+    ///
+    /// Returns `true` if the state was loaded successfully, `false` on error.
+    /// Errors can occur if:
+    /// - The data is too short or corrupted
+    /// - The version is incompatible
+    /// - The format is invalid
+    ///
+    /// # Arguments
+    /// * `data` - Previously saved state from `save_state()`
+    ///
+    /// # Example (JavaScript)
+    /// ```javascript
+    /// const base64 = localStorage.getItem('saveSlot1');
+    /// const state = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+    /// if (!emulator.load_state(state)) {
+    ///     console.error('Failed to load state');
+    /// }
+    /// ```
+    #[wasm_bindgen]
+    pub fn load_state(&mut self, data: &[u8]) -> bool {
+        use crate::system::SaveState;
+        match SaveState::deserialize(data) {
+            Ok(state) => state.restore(&mut self.system).is_ok(),
+            Err(_) => false,
+        }
+    }
+
+    /// Get the approximate size of a save state in bytes.
+    ///
+    /// Useful for UI display showing how much space states consume.
+    /// The actual size may vary slightly.
+    #[wasm_bindgen]
+    pub fn get_state_size(&self) -> usize {
+        use crate::system::SaveState;
+        SaveState::estimated_size()
+    }
+
+    /// Get the current save state format version.
+    ///
+    /// Useful for displaying compatibility information in the UI.
+    #[wasm_bindgen]
+    pub fn get_state_version(&self) -> u32 {
+        crate::system::SAVESTATE_VERSION
+    }
 }
 
 impl Default for C64Emulator {

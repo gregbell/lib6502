@@ -336,6 +336,83 @@ impl Cia6526 {
         // Joystick overrides bits 0-4 of external input
         self.external_b = (self.external_b & 0xE0) | (!state & 0x1F);
     }
+
+    // =========================================================================
+    // Save State Accessors
+    // =========================================================================
+
+    /// Get TOD latch tenths (for save state).
+    pub fn tod_latch_tenths(&self) -> u8 {
+        self.tod.latch_tenths
+    }
+
+    /// Get TOD latch seconds (for save state).
+    pub fn tod_latch_seconds(&self) -> u8 {
+        self.tod.latch_seconds
+    }
+
+    /// Get TOD latch minutes (for save state).
+    pub fn tod_latch_minutes(&self) -> u8 {
+        self.tod.latch_minutes
+    }
+
+    /// Set TOD latch values (for save state restoration).
+    pub fn set_tod_latch(&mut self, tenths: u8, seconds: u8, minutes: u8) {
+        self.tod.latch_tenths = tenths;
+        self.tod.latch_seconds = seconds;
+        self.tod.latch_minutes = minutes;
+    }
+
+    /// Get the interrupt flags.
+    pub fn interrupt_flags(&self) -> u8 {
+        self.interrupt_flags
+    }
+
+    /// Set the interrupt flags (for save state restoration).
+    pub fn set_interrupt_flags(&mut self, flags: u8) {
+        self.interrupt_flags = flags;
+    }
+
+    /// Get the interrupt mask.
+    pub fn interrupt_mask(&self) -> u8 {
+        self.interrupt_mask
+    }
+
+    /// Set the interrupt mask (for save state restoration).
+    pub fn set_interrupt_mask(&mut self, mask: u8) {
+        self.interrupt_mask = mask;
+    }
+
+    /// Set the interrupt pending flag (for save state restoration).
+    pub fn set_interrupt_pending(&mut self, pending: bool) {
+        self.interrupt_pending = pending;
+    }
+
+    /// Get control register A.
+    pub fn cra(&self) -> u8 {
+        self.cra
+    }
+
+    /// Set control register A (for save state restoration).
+    pub fn set_cra(&mut self, cra: u8) {
+        self.cra = cra;
+        // Update timer A state based on CRA
+        self.timer_a.running = cra & 0x01 != 0;
+        self.timer_a.one_shot = cra & 0x08 != 0;
+    }
+
+    /// Get control register B.
+    pub fn crb(&self) -> u8 {
+        self.crb
+    }
+
+    /// Set control register B (for save state restoration).
+    pub fn set_crb(&mut self, crb: u8) {
+        self.crb = crb;
+        // Update timer B state based on CRB
+        self.timer_b.running = crb & 0x01 != 0;
+        self.timer_b.one_shot = crb & 0x08 != 0;
+    }
 }
 
 impl Device for Cia6526 {

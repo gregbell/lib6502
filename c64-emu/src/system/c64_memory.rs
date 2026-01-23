@@ -161,6 +161,16 @@ impl C64Memory {
         &mut *self.ram
     }
 
+    /// Read directly from RAM (ignoring bank switching).
+    pub fn read_ram(&self, addr: u16) -> u8 {
+        self.ram[addr as usize]
+    }
+
+    /// Write directly to RAM (ignoring bank switching).
+    pub fn write_ram(&mut self, addr: u16, value: u8) {
+        self.ram[addr as usize] = value;
+    }
+
     /// Get the character ROM data (for VIC-II rendering).
     pub fn char_rom(&self) -> &[u8] {
         &*self.char_rom

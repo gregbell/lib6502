@@ -1003,9 +1003,19 @@ impl Sid6581 {
         self.volume
     }
 
+    /// Set the master volume (0-15) for save state restoration.
+    pub fn set_volume(&mut self, volume: u8) {
+        self.volume = volume & 0x0F;
+    }
+
     /// Get reference to a voice.
     pub fn voice(&self, index: usize) -> Option<&SidVoice> {
         self.voices.get(index)
+    }
+
+    /// Get mutable reference to a voice for save state restoration.
+    pub fn voice_mut(&mut self, index: usize) -> &mut SidVoice {
+        &mut self.voices[index]
     }
 
     /// Get reference to the filter.
@@ -1016,6 +1026,16 @@ impl Sid6581 {
     /// Get mutable reference to the filter (for testing).
     pub fn filter_mut(&mut self) -> &mut SidFilter {
         &mut self.filter
+    }
+
+    /// Get the sample accumulator (for save state).
+    pub fn sample_accumulator(&self) -> f32 {
+        self.sample_accumulator
+    }
+
+    /// Set the sample accumulator (for save state restoration).
+    pub fn set_sample_accumulator(&mut self, value: f32) {
+        self.sample_accumulator = value;
     }
 }
 

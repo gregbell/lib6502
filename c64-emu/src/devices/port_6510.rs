@@ -116,6 +116,18 @@ impl Port6510 {
     pub fn data(&self) -> u8 {
         self.data
     }
+
+    /// Set the DDR register (for save state restoration).
+    #[inline]
+    pub fn set_ddr(&mut self, ddr: u8) {
+        self.ddr = ddr;
+    }
+
+    /// Set the data register (for save state restoration).
+    #[inline]
+    pub fn set_data(&mut self, data: u8) {
+        self.data = data;
+    }
 }
 
 impl Default for Port6510 {

@@ -134,6 +134,57 @@ impl VicII {
         self.current_raster
     }
 
+    /// Set the current raster line (for save state restoration).
+    pub fn set_raster(&mut self, raster: u16) {
+        self.current_raster = raster;
+    }
+
+    /// Get sprite-sprite collision flags.
+    pub fn collision_ss(&self) -> u8 {
+        self.sprite_collision_ss
+    }
+
+    /// Set sprite-sprite collision flags (for save state restoration).
+    pub fn set_collision_ss(&mut self, flags: u8) {
+        self.sprite_collision_ss = flags;
+    }
+
+    /// Get sprite-background collision flags.
+    pub fn collision_sb(&self) -> u8 {
+        self.sprite_collision_sb
+    }
+
+    /// Set sprite-background collision flags (for save state restoration).
+    pub fn set_collision_sb(&mut self, flags: u8) {
+        self.sprite_collision_sb = flags;
+    }
+
+    /// Check if VIC-II has a pending IRQ.
+    pub fn irq_pending(&self) -> bool {
+        self.irq_pending
+    }
+
+    /// Set the IRQ pending flag (for save state restoration).
+    pub fn set_irq_pending(&mut self, pending: bool) {
+        self.irq_pending = pending;
+    }
+
+    /// Read a VIC-II register directly (for save state).
+    pub fn read_register(&self, offset: u16) -> u8 {
+        if (offset as usize) < VIC_REGISTER_COUNT {
+            self.registers[offset as usize]
+        } else {
+            0xFF
+        }
+    }
+
+    /// Write a VIC-II register directly (for save state restoration).
+    pub fn write_register(&mut self, offset: u16, value: u8) {
+        if (offset as usize) < VIC_REGISTER_COUNT {
+            self.registers[offset as usize] = value;
+        }
+    }
+
     /// Get the border color (0-15).
     pub fn border_color(&self) -> u8 {
         self.registers[0x20] & 0x0F

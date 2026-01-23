@@ -252,19 +252,19 @@
 
 ### State Serialization
 
-- [ ] T099 [US5] Create SaveState struct with version, CPU, RAM, chip states in src/c64/mod.rs
-- [ ] T100 [US5] Implement CPU state serialization (a, x, y, sp, pc, flags, cycles) in src/c64/mod.rs
-- [ ] T101 [US5] Implement VIC-II state serialization (registers, raster, collision flags) in src/devices/c64/vic_ii.rs
-- [ ] T102 [US5] Implement SID state serialization (registers, voice states) in src/devices/c64/sid.rs
-- [ ] T103 [US5] Implement CIA state serialization (ports, timers, TOD) in src/devices/c64/cia.rs
-- [ ] T104 [US5] Implement full state serialization (RAM, all chips, color RAM) in src/c64/mod.rs
-- [ ] T105 [US5] Implement state deserialization with version validation in src/c64/mod.rs
+- [x] T099 [US5] Create SaveState struct with version, CPU, RAM, chip states in c64-emu/src/system/savestate.rs
+- [x] T100 [US5] Implement CPU state serialization (a, x, y, sp, pc, flags, cycles) in c64-emu/src/system/savestate.rs
+- [x] T101 [US5] Implement VIC-II state serialization (registers, raster, collision flags) in c64-emu/src/system/savestate.rs
+- [x] T102 [US5] Implement SID state serialization (registers, voice states) in c64-emu/src/system/savestate.rs
+- [x] T103 [US5] Implement CIA state serialization (ports, timers, TOD) in c64-emu/src/system/savestate.rs
+- [x] T104 [US5] Implement full state serialization (RAM, all chips, color RAM) in c64-emu/src/system/savestate.rs
+- [x] T105 [US5] Implement state deserialization with version validation in c64-emu/src/system/savestate.rs
 
 ### WASM State API
 
-- [ ] T106 [US5] Implement save_state() returning Uint8Array in src/wasm/c64_api.rs
-- [ ] T107 [US5] Implement load_state() with error handling in src/wasm/c64_api.rs
-- [ ] T108 [US5] Implement get_state_size() for UI display in src/wasm/c64_api.rs
+- [x] T106 [US5] Implement save_state() returning Uint8Array in c64-emu/src/wasm.rs
+- [x] T107 [US5] Implement load_state() with error handling in c64-emu/src/wasm.rs
+- [x] T108 [US5] Implement get_state_size() for UI display in c64-emu/src/wasm.rs
 
 ### Web Frontend State
 
@@ -416,10 +416,10 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
 | Phase 5: US3 | T067-T091 | 25/25 | Graphics & audio ✓ COMPLETE |
 | Phase 6: US4 | T092-T098 | 7/7 | Joystick controls ✓ COMPLETE |
-| Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
+| Phase 7: US5 | T099-T111 | 10/13 | Save/load states (Rust complete, web UI pending) |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **97/132** | |
+| **Total** | **132 tasks** | **107/132** | |
 
 ---
 
