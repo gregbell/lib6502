@@ -160,9 +160,9 @@
 
 ### Web Frontend File Loading
 
-- [ ] T064 [US2] Implement drag-and-drop zone for .D64 and .PRG files in c64-demo/components/file-loader.js
-- [ ] T065 [US2] Implement file picker UI for loading files in c64-demo/components/file-loader.js
-- [ ] T066 [US2] Add disk status indicator to UI in c64-demo/index.html
+- [x] T064 [US2] Implement drag-and-drop zone for .D64 and .PRG files in c64-demo/c64.js
+- [x] T065 [US2] Implement file picker UI for loading files in c64-demo/c64.js
+- [x] T066 [US2] Add disk status indicator to UI in c64-demo/c64.js (HTML/CSS already existed)
 
 **Checkpoint**: User Story 2 complete - Disk images mount, programs load and run
 
@@ -413,13 +413,13 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
 | Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
-| Phase 4: US2 | T051-T066 | 13/16 | Disk image loading |
+| Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
 | Phase 5: US3 | T067-T091 | 0/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **62/132** | |
+| **Total** | **132 tasks** | **65/132** | |
 
 ---
 

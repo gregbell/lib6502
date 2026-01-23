@@ -519,6 +519,11 @@ main {
     animation: disk-blink 0.3s infinite;
 }
 
+.disk-indicator.error {
+    background: var(--c64-light-red);
+    box-shadow: 0 0 6px var(--c64-light-red);
+}
+
 @keyframes disk-blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }

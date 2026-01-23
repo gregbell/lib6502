@@ -237,41 +237,42 @@ class C64App {
             }
         });
 
-        // File drag and drop (placeholder for future file-loader component)
+        // File drag and drop
         const dropZone = document.getElementById('drop-zone');
         if (dropZone) {
-            dropZone.addEventListener('click', () => {
-                document.getElementById('file-input').click();
-            });
-
             dropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 dropZone.classList.add('drag-over');
             });
 
-            dropZone.addEventListener('dragleave', () => {
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 dropZone.classList.remove('drag-over');
             });
 
             dropZone.addEventListener('drop', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 dropZone.classList.remove('drag-over');
-                // File handling will be in file-loader component
-                console.log('File dropped:', e.dataTransfer.files);
+                this.handleFileDrop(e.dataTransfer.files);
             });
         }
 
         const fileInput = document.getElementById('file-input');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
-                // File handling will be in file-loader component
-                console.log('File selected:', e.target.files);
+                this.handleFileDrop(e.target.files);
+                // Reset input so the same file can be loaded again
+                e.target.value = '';
             });
         }
 
         const fileBrowseBtn = document.getElementById('file-browse-btn');
         if (fileBrowseBtn) {
-            fileBrowseBtn.addEventListener('click', () => {
+            fileBrowseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 document.getElementById('file-input').click();
             });
         }
@@ -452,6 +453,9 @@ class C64App {
 
             // Update status
             this.updateStatus('Running');
+
+            // Initialize disk status
+            this.updateDiskStatus();
 
             // Start the main loop
             this.startMainLoop();
@@ -765,6 +769,193 @@ class C64App {
             bytes[i] = binary.charCodeAt(i);
         }
         return bytes;
+    }
+
+    // =========================================================================
+    // File Loading (T064-T066)
+    // =========================================================================
+
+    /**
+     * Handle dropped or selected files
+     * @param {FileList} files - The files to process
+     */
+    async handleFileDrop(files) {
+        if (!files || files.length === 0) {
+            return;
+        }
+
+        // Process only the first file
+        const file = files[0];
+        const extension = file.name.toLowerCase().split('.').pop();
+
+        try {
+            const data = await this.readFileAsArrayBuffer(file);
+            const bytes = new Uint8Array(data);
+
+            switch (extension) {
+                case 'd64':
+                    await this.loadD64File(file.name, bytes);
+                    break;
+                case 'prg':
+                case 'p00':
+                    await this.loadPRGFile(file.name, bytes);
+                    break;
+                default:
+                    this.showError(`Unsupported file type: .${extension}\nSupported: .D64, .PRG, .P00`);
+                    return;
+            }
+        } catch (error) {
+            console.error('Failed to load file:', error);
+            this.showError(`Failed to load file: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load a D64 disk image
+     * @param {string} filename - Name of the file
+     * @param {Uint8Array} data - Raw file data
+     */
+    async loadD64File(filename, data) {
+        if (!this.emulator) {
+            this.showError('Please start the emulator first');
+            return;
+        }
+
+        // Standard D64 sizes: 174848 (35 tracks) or 175531 (35 tracks + error info)
+        // Extended D64: 196608 (40 tracks) or 197376 (40 tracks + error info)
+        const validSizes = [174848, 175531, 196608, 197376];
+        if (!validSizes.includes(data.length)) {
+            this.showError(`Invalid D64 file size: ${data.length} bytes.\nExpected: 174848 or 175531 bytes (35 tracks)\nor 196608 or 197376 bytes (40 tracks)`);
+            return;
+        }
+
+        // Show loading indicator
+        this.setDiskStatus('reading', 'Mounting disk...');
+
+        try {
+            const success = this.emulator.mount_d64(data);
+            if (!success) {
+                throw new Error('Failed to mount D64 image');
+            }
+
+            // Get disk name from the mounted image
+            const diskName = this.emulator.disk_name() || filename;
+            this.setDiskStatus('mounted', diskName);
+
+            console.log(`D64 mounted: ${diskName}`);
+        } catch (error) {
+            this.setDiskStatus('error', 'Mount failed');
+            throw error;
+        }
+    }
+
+    /**
+     * Load a PRG file directly into memory
+     * @param {string} filename - Name of the file
+     * @param {Uint8Array} data - Raw file data
+     */
+    async loadPRGFile(filename, data) {
+        if (!this.emulator) {
+            this.showError('Please start the emulator first');
+            return;
+        }
+
+        // Handle P00 files (PC64 format) - strip the 26-byte header
+        let prgData = data;
+        if (filename.toLowerCase().endsWith('.p00') && data.length > 26) {
+            // P00 header is 26 bytes: "C64File" + original name + 0x00 padding
+            const header = String.fromCharCode(...data.slice(0, 7));
+            if (header === 'C64File') {
+                prgData = data.slice(26);
+                console.log(`P00 header stripped from ${filename}`);
+            }
+        }
+
+        // PRG must have at least 2 bytes for load address
+        if (prgData.length < 3) {
+            this.showError(`Invalid PRG file: too small (${prgData.length} bytes)`);
+            return;
+        }
+
+        // Show loading indicator
+        this.setDiskStatus('reading', `Loading ${filename}...`);
+
+        try {
+            const loadAddress = this.emulator.load_prg(prgData);
+            if (loadAddress === null || loadAddress === undefined) {
+                throw new Error('Failed to load PRG file');
+            }
+
+            console.log(`PRG loaded at $${loadAddress.toString(16).toUpperCase().padStart(4, '0')}: ${filename}`);
+
+            // Update disk status
+            this.setDiskStatus('mounted', `${filename} @ $${loadAddress.toString(16).toUpperCase()}`);
+
+            // Auto-run BASIC programs (load address $0801)
+            if (loadAddress === 0x0801) {
+                // Inject RUN command
+                this.emulator.inject_basic_run();
+                console.log('Auto-running BASIC program');
+            }
+        } catch (error) {
+            this.setDiskStatus('error', 'Load failed');
+            throw error;
+        }
+    }
+
+    /**
+     * Unmount the current disk
+     */
+    unmountDisk() {
+        if (this.emulator && this.emulator.has_mounted_disk()) {
+            this.emulator.unmount_d64();
+            this.setDiskStatus('none', 'No disk mounted');
+            console.log('Disk unmounted');
+        }
+    }
+
+    /**
+     * Update disk status indicator
+     * @param {string} status - 'none', 'mounted', 'reading', 'error'
+     * @param {string} text - Status text to display
+     */
+    setDiskStatus(status, text) {
+        const indicator = document.getElementById('disk-indicator');
+        const nameEl = document.getElementById('disk-name');
+
+        if (indicator) {
+            // Remove all status classes
+            indicator.classList.remove('mounted', 'reading', 'error');
+
+            // Add the appropriate class
+            if (status === 'mounted') {
+                indicator.classList.add('mounted');
+            } else if (status === 'reading') {
+                indicator.classList.add('reading');
+            }
+        }
+
+        if (nameEl) {
+            nameEl.textContent = text || 'No disk mounted';
+        }
+    }
+
+    /**
+     * Check current disk status and update UI
+     * Called periodically or after disk operations
+     */
+    updateDiskStatus() {
+        if (!this.emulator) {
+            this.setDiskStatus('none', 'No disk mounted');
+            return;
+        }
+
+        if (this.emulator.has_mounted_disk()) {
+            const diskName = this.emulator.disk_name() || 'Disk mounted';
+            this.setDiskStatus('mounted', diskName);
+        } else {
+            this.setDiskStatus('none', 'No disk mounted');
+        }
     }
 }
 
