@@ -545,7 +545,10 @@ impl C64System {
     /// # Returns
     /// `Ok(())` if mounted successfully, `Err` with error message otherwise.
     pub fn mount_d64(&mut self, data: Vec<u8>) -> Result<(), String> {
-        self.iec_bus.drive_mut().mount(data).map_err(|e| e.to_string())
+        self.iec_bus
+            .drive_mut()
+            .mount(data)
+            .map_err(|e| e.to_string())
     }
 
     /// Unmount the current disk image.
@@ -560,7 +563,10 @@ impl C64System {
 
     /// Get the disk name (if a disk is mounted).
     pub fn disk_name(&self) -> Option<String> {
-        self.iec_bus.drive().image().and_then(|img| img.disk_name().ok())
+        self.iec_bus
+            .drive()
+            .image()
+            .and_then(|img| img.disk_name().ok())
     }
 
     /// Inject "RUN" command into the keyboard buffer.
@@ -589,9 +595,10 @@ impl C64System {
     /// Characters are converted from ASCII to PETSCII.
     pub fn inject_keys(&mut self, text: &str) {
         let mem = self.cpu.memory_mut();
-        let bytes: Vec<u8> = text.bytes()
-            .take(10)  // Max 10 characters in buffer
-            .map(|b| ascii_to_petscii(b))
+        let bytes: Vec<u8> = text
+            .bytes()
+            .take(10) // Max 10 characters in buffer
+            .map(ascii_to_petscii)
             .collect();
 
         for (i, &byte) in bytes.iter().enumerate() {
@@ -699,7 +706,7 @@ mod tests {
         assert_eq!(c64.peek(0x0278), 0x55); // U
         assert_eq!(c64.peek(0x0279), 0x4E); // N
         assert_eq!(c64.peek(0x027A), 0x0D); // CR
-        assert_eq!(c64.peek(0x00C6), 4);    // Buffer length
+        assert_eq!(c64.peek(0x00C6), 4); // Buffer length
     }
 
     #[test]

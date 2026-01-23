@@ -119,6 +119,21 @@ impl VicII {
         self.registers[0x21] & 0x0F
     }
 
+    /// Get the background color 1 (0-15) - used in multicolor modes.
+    pub fn background_color_1(&self) -> u8 {
+        self.registers[0x22] & 0x0F
+    }
+
+    /// Get the background color 2 (0-15) - used in multicolor modes.
+    pub fn background_color_2(&self) -> u8 {
+        self.registers[0x23] & 0x0F
+    }
+
+    /// Get the background color 3 (0-15) - used in ECM mode.
+    pub fn background_color_3(&self) -> u8 {
+        self.registers[0x24] & 0x0F
+    }
+
     /// Check if display is enabled (DEN bit).
     pub fn display_enabled(&self) -> bool {
         self.registers[0x11] & 0x10 != 0
@@ -181,19 +196,27 @@ impl VicII {
         let is_multicolor = self.multicolor_mode();
         let is_ecm = self.extended_color_mode();
 
-        // For now, only implement standard text mode (BMM=0, ECM=0, MCM=0)
-        // Other modes will be implemented in T067-T070
-        if is_bitmap_mode || is_ecm || is_multicolor {
-            // Fill with background for unsupported modes (placeholder)
-            let bg_color = self.background_color();
-            for x in 0..SCREEN_WIDTH {
-                self.framebuffer[display_line][x] = bg_color;
+        // Select rendering mode based on control bits
+        // Note: Illegal mode combinations (BMM+ECM or all three) produce garbled output
+        // We'll handle the common legal modes here
+        match (is_bitmap_mode, is_ecm, is_multicolor) {
+            // Standard text mode (BMM=0, ECM=0, MCM=0)
+            (false, false, false) => {
+                self.render_standard_text_scanline(display_line, char_rom, screen_ram, color_ram);
             }
-            return;
+            // Multicolor text mode (BMM=0, ECM=0, MCM=1)
+            // In this mode, characters with color RAM bit 3 set use multicolor rendering
+            (false, false, true) => {
+                self.render_multicolor_text_scanline(display_line, char_rom, screen_ram, color_ram);
+            }
+            // Other modes not yet implemented - fill with background
+            _ => {
+                let bg_color = self.background_color();
+                for x in 0..SCREEN_WIDTH {
+                    self.framebuffer[display_line][x] = bg_color;
+                }
+            }
         }
-
-        // Standard text mode rendering
-        self.render_standard_text_scanline(display_line, char_rom, screen_ram, color_ram);
     }
 
     /// Render one scanline in standard text mode (40x25 characters).
@@ -260,6 +283,105 @@ impl VicII {
                 let pixel_set = (pattern & (0x80 >> bit)) != 0;
                 let color = if pixel_set { fg_color } else { bg_color };
                 self.framebuffer[display_line][x_base + bit] = color;
+            }
+        }
+    }
+
+    /// Render one scanline in multicolor text mode (40x25 characters).
+    ///
+    /// In multicolor text mode (MCM=1):
+    /// - Characters with color RAM bit 3 CLEAR use standard hires rendering
+    /// - Characters with color RAM bit 3 SET use multicolor rendering:
+    ///   - Bit pairs determine pixel color (2 pixels at a time)
+    ///   - 00 = Background color 0 ($D021)
+    ///   - 01 = Background color 1 ($D022)
+    ///   - 10 = Background color 2 ($D023)
+    ///   - 11 = Foreground color (color RAM bits 0-2, only 8 colors available)
+    fn render_multicolor_text_scanline(
+        &mut self,
+        display_line: usize,
+        char_rom: &[u8],
+        screen_ram: &[u8],
+        color_ram: &[u8],
+    ) {
+        // Calculate which character row and which line within that character
+        let char_row = display_line / CHAR_HEIGHT;
+        let char_line = display_line % CHAR_HEIGHT;
+
+        // Skip if we're past the character display area
+        if char_row >= CHAR_ROWS {
+            let bg_color = self.background_color();
+            for x in 0..SCREEN_WIDTH {
+                self.framebuffer[display_line][x] = bg_color;
+            }
+            return;
+        }
+
+        let bg_color_0 = self.background_color();
+        let bg_color_1 = self.background_color_1();
+        let bg_color_2 = self.background_color_2();
+
+        // Render each of the 40 character columns
+        for char_col in 0..CHAR_COLUMNS {
+            // Get the character code from screen RAM
+            let screen_offset = char_row * CHAR_COLUMNS + char_col;
+            let char_code = if screen_offset < screen_ram.len() {
+                screen_ram[screen_offset]
+            } else {
+                0
+            };
+
+            // Get the color from color RAM
+            let color_byte = if screen_offset < color_ram.len() {
+                color_ram[screen_offset]
+            } else {
+                0
+            };
+
+            // Check if this character uses multicolor mode (bit 3 set)
+            let use_multicolor = (color_byte & 0x08) != 0;
+
+            // Get the character pattern byte for this line
+            let char_offset = (char_code as usize) * 8 + char_line;
+            let pattern = if char_offset < char_rom.len() {
+                char_rom[char_offset]
+            } else {
+                0
+            };
+
+            let x_base = char_col * 8;
+
+            if use_multicolor {
+                // Multicolor mode: 2 pixels per bit pair, only 8 colors for foreground
+                let fg_color = color_byte & 0x07; // Only bits 0-2 (8 colors)
+
+                // Process 4 bit pairs (8 pixels displayed as 4 double-wide pixels)
+                for bit_pair in 0..4 {
+                    let shift = 6 - (bit_pair * 2);
+                    let bits = (pattern >> shift) & 0x03;
+
+                    let color = match bits {
+                        0b00 => bg_color_0, // Background 0
+                        0b01 => bg_color_1, // Background 1
+                        0b10 => bg_color_2, // Background 2
+                        0b11 => fg_color,   // Foreground (only 8 colors)
+                        _ => unreachable!(),
+                    };
+
+                    // Each bit pair produces 2 pixels of the same color
+                    let px = x_base + bit_pair * 2;
+                    self.framebuffer[display_line][px] = color;
+                    self.framebuffer[display_line][px + 1] = color;
+                }
+            } else {
+                // Standard hires mode for this character (bit 3 clear)
+                let fg_color = color_byte & 0x0F; // Full 16 colors
+
+                for bit in 0..8 {
+                    let pixel_set = (pattern & (0x80 >> bit)) != 0;
+                    let color = if pixel_set { fg_color } else { bg_color_0 };
+                    self.framebuffer[display_line][x_base + bit] = color;
+                }
             }
         }
     }
@@ -612,6 +734,197 @@ mod tests {
         assert_eq!(
             vic.framebuffer[0][0], 0xFF,
             "Border scanline should not modify framebuffer"
+        );
+    }
+
+    #[test]
+    fn test_multicolor_text_mode_bit_pairs() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor mode (MCM bit in $D016)
+        vic.registers[0x16] |= 0x10;
+        assert!(vic.multicolor_mode());
+
+        // Set up background colors
+        vic.registers[0x21] = 0x00; // Background 0: black
+        vic.registers[0x22] = 0x01; // Background 1: white
+        vic.registers[0x23] = 0x02; // Background 2: red
+
+        // Create character ROM with test pattern
+        // Pattern 0b00_01_10_11 = 0x1B tests all four bit pairs
+        let mut char_rom = vec![0u8; 2048];
+        for i in 0..8 {
+            char_rom[8 + i] = 0x1B; // Character 1 with pattern 00 01 10 11
+        }
+
+        // Screen RAM: character 1 at position 0
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 1;
+
+        // Color RAM: bit 3 SET enables multicolor, bits 0-2 = foreground color (3 = cyan)
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x0B; // bit 3 set + color 3
+
+        // Render first visible scanline
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Pattern 0x1B = 0b00011011
+        // Bit pair 0 (bits 7-6): 00 -> background 0 (black = 0)
+        // Bit pair 1 (bits 5-4): 01 -> background 1 (white = 1)
+        // Bit pair 2 (bits 3-2): 10 -> background 2 (red = 2)
+        // Bit pair 3 (bits 1-0): 11 -> foreground (cyan = 3, from color RAM bits 0-2)
+
+        // Each bit pair produces 2 identical pixels
+        assert_eq!(vic.framebuffer[0][0], 0, "Pixel 0 should be background 0");
+        assert_eq!(vic.framebuffer[0][1], 0, "Pixel 1 should be background 0");
+        assert_eq!(vic.framebuffer[0][2], 1, "Pixel 2 should be background 1");
+        assert_eq!(vic.framebuffer[0][3], 1, "Pixel 3 should be background 1");
+        assert_eq!(vic.framebuffer[0][4], 2, "Pixel 4 should be background 2");
+        assert_eq!(vic.framebuffer[0][5], 2, "Pixel 5 should be background 2");
+        assert_eq!(vic.framebuffer[0][6], 3, "Pixel 6 should be foreground");
+        assert_eq!(vic.framebuffer[0][7], 3, "Pixel 7 should be foreground");
+    }
+
+    #[test]
+    fn test_multicolor_text_mode_hires_character() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor mode globally
+        vic.registers[0x16] |= 0x10;
+
+        // Set up background colors
+        vic.registers[0x21] = 0x00; // Background 0: black
+
+        // Create character ROM
+        let mut char_rom = vec![0u8; 2048];
+        // Character 1: alternating pattern 0xAA (10101010)
+        for i in 0..8 {
+            char_rom[8 + i] = 0xAA;
+        }
+
+        // Screen RAM: character 1 at position 0
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 1;
+
+        // Color RAM: bit 3 CLEAR means use hires mode for this character
+        // Color = 5 (green), no multicolor bit
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x05; // bit 3 clear, full 16 colors available
+
+        // Render first visible scanline
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // In hires mode, pattern 0xAA = 10101010 means alternating pixels
+        // Bit 7=1: foreground (green = 5)
+        // Bit 6=0: background (black = 0)
+        // etc.
+        assert_eq!(
+            vic.framebuffer[0][0], 5,
+            "Pixel 0 should be foreground (hires)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][1], 0,
+            "Pixel 1 should be background (hires)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][2], 5,
+            "Pixel 2 should be foreground (hires)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][3], 0,
+            "Pixel 3 should be background (hires)"
+        );
+    }
+
+    #[test]
+    fn test_multicolor_text_mode_mixed_characters() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor mode globally
+        vic.registers[0x16] |= 0x10;
+
+        // Set up background colors
+        vic.registers[0x21] = 0x00; // Background 0: black
+        vic.registers[0x22] = 0x01; // Background 1: white
+        vic.registers[0x23] = 0x02; // Background 2: red
+
+        // Create character ROM
+        let mut char_rom = vec![0u8; 2048];
+        // Character 1: all bits set (0xFF)
+        for i in 0..8 {
+            char_rom[8 + i] = 0xFF;
+        }
+        // Character 2: all bits set (0xFF)
+        for i in 0..8 {
+            char_rom[16 + i] = 0xFF;
+        }
+
+        // Screen RAM: char 1 at position 0 (multicolor), char 2 at position 1 (hires)
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 1;
+        screen_ram[1] = 2;
+
+        // Color RAM:
+        // Char 0: multicolor (bit 3 set), foreground = 3
+        // Char 1: hires (bit 3 clear), foreground = 7
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x0B; // bit 3 set + color 3
+        color_ram[1] = 0x07; // bit 3 clear + color 7
+
+        // Render first visible scanline
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // First character (multicolor, pattern 0xFF = 11_11_11_11)
+        // All bit pairs are 11, so all pixels should be foreground color 3
+        for x in 0..8 {
+            assert_eq!(
+                vic.framebuffer[0][x], 3,
+                "Char 0 pixel {} should be multicolor foreground",
+                x
+            );
+        }
+
+        // Second character (hires, pattern 0xFF = all bits set)
+        // All pixels should be foreground color 7
+        for x in 8..16 {
+            assert_eq!(
+                vic.framebuffer[0][x], 7,
+                "Char 1 pixel {} should be hires foreground",
+                x
+            );
+        }
+    }
+
+    #[test]
+    fn test_multicolor_text_mode_only_8_colors() {
+        let mut vic = VicII::new();
+
+        // Enable multicolor mode
+        vic.registers[0x16] |= 0x10;
+
+        // Create character ROM with foreground pattern (11 bit pairs)
+        let mut char_rom = vec![0u8; 2048];
+        for i in 0..8 {
+            char_rom[8 + i] = 0xFF; // All 11 bit pairs
+        }
+
+        // Screen RAM
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 1;
+
+        // Color RAM: multicolor with color 15 in bits 0-3
+        // But in multicolor mode, only bits 0-2 are used (8 colors max)
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x0F; // bit 3 set (multicolor), bits 0-2 = 7
+
+        // Render first visible scanline
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Foreground should be 7 (bits 0-2 of 0x0F), not 15
+        // (bit 3 is the multicolor enable flag, not part of color)
+        assert_eq!(
+            vic.framebuffer[0][0], 7,
+            "Multicolor foreground should use only bits 0-2"
         );
     }
 }
