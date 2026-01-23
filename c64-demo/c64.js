@@ -40,6 +40,10 @@ const ROM_STORAGE_KEYS = {
     charrom: 'c64_rom_charrom',
 };
 
+// LocalStorage keys for save state slots
+const SAVE_SLOT_PREFIX = 'c64_savestate_slot_';
+const SAVE_SLOT_COUNT = 4;
+
 /**
  * Main C64 Emulator Application
  */
@@ -307,6 +311,60 @@ class C64App {
                 document.getElementById('file-input').click();
             });
         }
+
+        // Save state controls (T109-T111)
+        this.setupSaveStateHandlers();
+    }
+
+    /**
+     * Set up save state event handlers (T109-T111)
+     */
+    setupSaveStateHandlers() {
+        // Save state to file (T109)
+        const saveStateBtn = document.getElementById('save-state-btn');
+        if (saveStateBtn) {
+            saveStateBtn.addEventListener('click', () => this.saveStateToFile());
+        }
+
+        // Load state from file (T110)
+        const loadStateBtn = document.getElementById('load-state-btn');
+        if (loadStateBtn) {
+            loadStateBtn.addEventListener('click', () => {
+                document.getElementById('load-state-file').click();
+            });
+        }
+
+        const loadStateFile = document.getElementById('load-state-file');
+        if (loadStateFile) {
+            loadStateFile.addEventListener('change', (e) => {
+                this.loadStateFromFile(e.target.files[0]);
+                e.target.value = ''; // Reset so same file can be loaded again
+            });
+        }
+
+        // Quick save slots (T111)
+        document.querySelectorAll('.slot-save-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const slot = parseInt(e.target.dataset.slot, 10);
+                this.saveToSlot(slot);
+            });
+        });
+
+        document.querySelectorAll('.slot-load-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const slot = parseInt(e.target.dataset.slot, 10);
+                this.loadFromSlot(slot);
+            });
+        });
+
+        // Clear all slots
+        const clearSlotsBtn = document.getElementById('clear-slots-btn');
+        if (clearSlotsBtn) {
+            clearSlotsBtn.addEventListener('click', () => this.clearAllSlots());
+        }
+
+        // Initialize slot UI state
+        this.updateSaveSlotUI();
     }
 
     /**
@@ -1445,6 +1503,262 @@ class C64App {
             this.setDiskStatus('none', 'No disk mounted');
         }
     }
+
+    // =========================================================================
+    // Save State System (T109-T111)
+    // =========================================================================
+
+    /**
+     * Save emulator state to a downloadable file (T109)
+     */
+    saveStateToFile() {
+        if (!this.emulator) {
+            this.showError('Emulator not running');
+            return;
+        }
+
+        try {
+            // Get state from emulator
+            const stateData = this.emulator.save_state();
+
+            // Create blob and download
+            const blob = new Blob([stateData], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+
+            // Generate filename with timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const filename = `c64-state-${timestamp}.c64state`;
+
+            // Create download link
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Clean up URL
+            URL.revokeObjectURL(url);
+
+            console.log(`Save state downloaded: ${filename} (${stateData.length} bytes)`);
+        } catch (error) {
+            console.error('Failed to save state:', error);
+            this.showError(`Failed to save state: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load emulator state from a file (T110)
+     * @param {File} file - The state file to load
+     */
+    async loadStateFromFile(file) {
+        if (!file) {
+            return;
+        }
+
+        if (!this.emulator) {
+            this.showError('Please start the emulator first');
+            return;
+        }
+
+        try {
+            const data = await this.readFileAsArrayBuffer(file);
+            const stateData = new Uint8Array(data);
+
+            const success = this.emulator.load_state(stateData);
+            if (!success) {
+                throw new Error('Invalid or incompatible save state file');
+            }
+
+            console.log(`Save state loaded: ${file.name} (${stateData.length} bytes)`);
+
+            // Resume emulation if paused
+            if (this.paused) {
+                this.togglePause();
+            }
+        } catch (error) {
+            console.error('Failed to load state:', error);
+            this.showError(`Failed to load state: ${error.message}`);
+        }
+    }
+
+    /**
+     * Save emulator state to a localStorage slot (T111)
+     * @param {number} slot - Slot number (1-4)
+     */
+    saveToSlot(slot) {
+        if (!this.emulator) {
+            this.showError('Emulator not running');
+            return;
+        }
+
+        if (slot < 1 || slot > SAVE_SLOT_COUNT) {
+            this.showError(`Invalid slot number: ${slot}`);
+            return;
+        }
+
+        try {
+            // Get state from emulator
+            const stateData = this.emulator.save_state();
+
+            // Convert to base64 for localStorage
+            const base64 = this.arrayBufferToBase64(stateData);
+
+            // Save with metadata
+            const saveData = {
+                timestamp: Date.now(),
+                version: this.emulator.get_state_version(),
+                size: stateData.length,
+                diskName: this.emulator.disk_name() || null,
+                state: base64
+            };
+
+            localStorage.setItem(`${SAVE_SLOT_PREFIX}${slot}`, JSON.stringify(saveData));
+
+            console.log(`State saved to slot ${slot} (${stateData.length} bytes)`);
+
+            // Update UI
+            this.updateSaveSlotUI();
+        } catch (error) {
+            console.error(`Failed to save to slot ${slot}:`, error);
+            this.showError(`Failed to save to slot ${slot}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load emulator state from a localStorage slot (T111)
+     * @param {number} slot - Slot number (1-4)
+     */
+    loadFromSlot(slot) {
+        if (!this.emulator) {
+            this.showError('Please start the emulator first');
+            return;
+        }
+
+        if (slot < 1 || slot > SAVE_SLOT_COUNT) {
+            this.showError(`Invalid slot number: ${slot}`);
+            return;
+        }
+
+        try {
+            const savedJson = localStorage.getItem(`${SAVE_SLOT_PREFIX}${slot}`);
+            if (!savedJson) {
+                this.showError(`No save state in slot ${slot}`);
+                return;
+            }
+
+            const saveData = JSON.parse(savedJson);
+            const stateData = this.base64ToArrayBuffer(saveData.state);
+
+            const success = this.emulator.load_state(stateData);
+            if (!success) {
+                throw new Error('Invalid or incompatible save state');
+            }
+
+            console.log(`State loaded from slot ${slot} (${stateData.length} bytes)`);
+
+            // Resume emulation if paused
+            if (this.paused) {
+                this.togglePause();
+            }
+        } catch (error) {
+            console.error(`Failed to load from slot ${slot}:`, error);
+            this.showError(`Failed to load from slot ${slot}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Check if a save slot has data
+     * @param {number} slot - Slot number (1-4)
+     * @returns {object|null} Save metadata or null if empty
+     */
+    getSlotInfo(slot) {
+        try {
+            const savedJson = localStorage.getItem(`${SAVE_SLOT_PREFIX}${slot}`);
+            if (!savedJson) {
+                return null;
+            }
+
+            const saveData = JSON.parse(savedJson);
+            return {
+                timestamp: saveData.timestamp,
+                size: saveData.size,
+                diskName: saveData.diskName,
+                version: saveData.version
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Clear a specific save slot
+     * @param {number} slot - Slot number (1-4)
+     */
+    clearSlot(slot) {
+        localStorage.removeItem(`${SAVE_SLOT_PREFIX}${slot}`);
+        this.updateSaveSlotUI();
+        console.log(`Slot ${slot} cleared`);
+    }
+
+    /**
+     * Clear all save slots (T111)
+     */
+    clearAllSlots() {
+        if (!confirm('Clear all save slots? This cannot be undone.')) {
+            return;
+        }
+
+        for (let slot = 1; slot <= SAVE_SLOT_COUNT; slot++) {
+            localStorage.removeItem(`${SAVE_SLOT_PREFIX}${slot}`);
+        }
+
+        this.updateSaveSlotUI();
+        console.log('All save slots cleared');
+    }
+
+    /**
+     * Update save slot UI to reflect current state (T111)
+     */
+    updateSaveSlotUI() {
+        for (let slot = 1; slot <= SAVE_SLOT_COUNT; slot++) {
+            const slotInfo = this.getSlotInfo(slot);
+            const slotEl = document.querySelector(`.save-slot[data-slot="${slot}"]`);
+            const loadBtn = document.querySelector(`.slot-load-btn[data-slot="${slot}"]`);
+            const saveBtn = document.querySelector(`.slot-save-btn[data-slot="${slot}"]`);
+
+            if (slotEl) {
+                if (slotInfo) {
+                    slotEl.classList.add('has-data');
+
+                    // Format timestamp for tooltip
+                    const date = new Date(slotInfo.timestamp);
+                    const timeStr = date.toLocaleString();
+                    const diskStr = slotInfo.diskName ? ` | ${slotInfo.diskName}` : '';
+
+                    if (saveBtn) {
+                        saveBtn.title = `Save to Slot ${slot}\nLast saved: ${timeStr}${diskStr}`;
+                    }
+                    if (loadBtn) {
+                        loadBtn.title = `Load from Slot ${slot}\nSaved: ${timeStr}${diskStr}`;
+                        loadBtn.disabled = false;
+                        loadBtn.classList.add('has-save');
+                    }
+                } else {
+                    slotEl.classList.remove('has-data');
+
+                    if (saveBtn) {
+                        saveBtn.title = `Save to Slot ${slot}`;
+                    }
+                    if (loadBtn) {
+                        loadBtn.title = `Load from Slot ${slot} (empty)`;
+                        loadBtn.disabled = true;
+                        loadBtn.classList.remove('has-save');
+                    }
+                }
+            }
+        }
+    }
 }
 
 // Initialize the application when the page loads
@@ -1455,4 +1769,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Export for debugging and potential use by components
 window.c64App = app;
-export { C64App, C64_PALETTE, ROM_SIZES };
+export { C64App, C64_PALETTE, ROM_SIZES, SAVE_SLOT_PREFIX, SAVE_SLOT_COUNT };

@@ -477,6 +477,101 @@ main {
 }
 
 /* ============================================
+   Save State Controls
+   ============================================ */
+.save-state-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.save-slots-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    flex-wrap: wrap;
+}
+
+.save-slots-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.save-slot-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.save-slot {
+    display: flex;
+    gap: 2px;
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-width: 28px;
+}
+
+.slot-save-btn {
+    background: var(--bg-panel);
+    border-color: var(--c64-cyan);
+    color: var(--c64-cyan);
+}
+
+.slot-save-btn:hover {
+    background: rgba(112, 164, 178, 0.2);
+}
+
+.slot-load-btn {
+    background: var(--bg-panel);
+    border-color: var(--c64-light-green);
+    color: var(--c64-light-green);
+}
+
+.slot-load-btn:hover:not(:disabled) {
+    background: rgba(154, 210, 132, 0.2);
+}
+
+.slot-load-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.slot-load-btn.has-save {
+    opacity: 1;
+}
+
+/* Save slot with data indicator */
+.save-slot.has-data .slot-save-btn {
+    position: relative;
+}
+
+.save-slot.has-data .slot-save-btn::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 6px;
+    height: 6px;
+    background: var(--c64-light-green);
+    border-radius: 50%;
+}
+
+#clear-slots-btn {
+    margin-left: auto;
+}
+
+/* ============================================
    File Loading Section
    ============================================ */
 .file-section {

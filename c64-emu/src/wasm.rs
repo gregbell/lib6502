@@ -5,7 +5,7 @@
 
 use wasm_bindgen::prelude::*;
 
-use crate::system::{joystick_bits, map_pc_keycode, C64System, Region};
+use crate::system::{map_pc_keycode, C64System, Region};
 
 /// Screen width in pixels.
 pub const SCREEN_WIDTH: u32 = 320;
@@ -15,30 +15,6 @@ pub const SCREEN_HEIGHT: u32 = 200;
 
 /// Framebuffer size in bytes (320 × 200 indexed color pixels).
 pub const FRAMEBUFFER_SIZE: u32 = SCREEN_WIDTH * SCREEN_HEIGHT;
-
-// ============================================================================
-// Joystick Constants (exported for JavaScript)
-// ============================================================================
-
-/// Joystick up direction bit.
-#[wasm_bindgen]
-pub const JOY_UP: u8 = joystick_bits::JOY_UP;
-
-/// Joystick down direction bit.
-#[wasm_bindgen]
-pub const JOY_DOWN: u8 = joystick_bits::JOY_DOWN;
-
-/// Joystick left direction bit.
-#[wasm_bindgen]
-pub const JOY_LEFT: u8 = joystick_bits::JOY_LEFT;
-
-/// Joystick right direction bit.
-#[wasm_bindgen]
-pub const JOY_RIGHT: u8 = joystick_bits::JOY_RIGHT;
-
-/// Joystick fire button bit.
-#[wasm_bindgen]
-pub const JOY_FIRE: u8 = joystick_bits::JOY_FIRE;
 
 /// WASM wrapper for the C64 emulator system.
 #[wasm_bindgen]

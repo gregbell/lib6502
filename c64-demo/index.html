@@ -89,6 +89,36 @@
                     <button id="joystick-swap-btn" class="btn btn-secondary" title="Swap joystick ports (for games that use port 1)">Ports: Normal</button>
                     <span id="gamepad-indicator" class="gamepad-indicator" style="display: none;" title="Gamepad connected">🎮</span>
                 </div>
+
+                <div class="control-group save-state-controls">
+                    <button id="save-state-btn" class="btn btn-secondary" title="Download save state file">Save State</button>
+                    <button id="load-state-btn" class="btn btn-secondary" title="Load save state file">Load State</button>
+                    <input type="file" id="load-state-file" accept=".c64state,.sav" style="display: none;">
+                </div>
+            </div>
+
+            <!-- Quick Save Slots -->
+            <div class="save-slots-bar">
+                <span class="save-slots-label">Quick Saves:</span>
+                <div class="save-slot-buttons">
+                    <div class="save-slot" data-slot="1">
+                        <button class="slot-save-btn btn btn-small" data-slot="1" title="Save to Slot 1">S1</button>
+                        <button class="slot-load-btn btn btn-small" data-slot="1" title="Load from Slot 1" disabled>L1</button>
+                    </div>
+                    <div class="save-slot" data-slot="2">
+                        <button class="slot-save-btn btn btn-small" data-slot="2" title="Save to Slot 2">S2</button>
+                        <button class="slot-load-btn btn btn-small" data-slot="2" title="Load from Slot 2" disabled>L2</button>
+                    </div>
+                    <div class="save-slot" data-slot="3">
+                        <button class="slot-save-btn btn btn-small" data-slot="3" title="Save to Slot 3">S3</button>
+                        <button class="slot-load-btn btn btn-small" data-slot="3" title="Load from Slot 3" disabled>L3</button>
+                    </div>
+                    <div class="save-slot" data-slot="4">
+                        <button class="slot-save-btn btn btn-small" data-slot="4" title="Save to Slot 4">S4</button>
+                        <button class="slot-load-btn btn btn-small" data-slot="4" title="Load from Slot 4" disabled>L4</button>
+                    </div>
+                </div>
+                <button id="clear-slots-btn" class="btn btn-small btn-warning" title="Clear all save slots">Clear All</button>
             </div>
 
             <!-- File Loading Section -->

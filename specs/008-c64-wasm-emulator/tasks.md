@@ -268,11 +268,11 @@
 
 ### Web Frontend State
 
-- [ ] T109 [US5] Implement save state button with file download in c64-demo/components/controls.js
-- [ ] T110 [US5] Implement load state button with file picker in c64-demo/components/controls.js
-- [ ] T111 [US5] Implement multiple save slots with localStorage in c64-demo/components/controls.js
+- [x] T109 [US5] Implement save state button with file download in c64-demo/c64.js
+- [x] T110 [US5] Implement load state button with file picker in c64-demo/c64.js
+- [x] T111 [US5] Implement multiple save slots with localStorage in c64-demo/c64.js
 
-**Checkpoint**: User Story 5 complete - Save/load states work across browser sessions
+**Checkpoint**: User Story 5 complete - Save/load states work across browser sessions ✓ COMPLETE
 
 ---
 
@@ -416,10 +416,10 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
 | Phase 5: US3 | T067-T091 | 25/25 | Graphics & audio ✓ COMPLETE |
 | Phase 6: US4 | T092-T098 | 7/7 | Joystick controls ✓ COMPLETE |
-| Phase 7: US5 | T099-T111 | 10/13 | Save/load states (Rust complete, web UI pending) |
+| Phase 7: US5 | T099-T111 | 13/13 | Save/load states ✓ COMPLETE |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **107/132** | |
+| **Total** | **132 tasks** | **110/132** | |
 
 ---
 
