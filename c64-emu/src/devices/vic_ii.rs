@@ -1013,6 +1013,12 @@ impl VicII {
             return;
         }
 
+        // T076: Collision detection tracking
+        // Track which sprites have drawn non-transparent pixels at each X position
+        // on this scanline. Used for sprite-sprite collision detection.
+        // Each element contains a bitmask of sprites that have drawn at that X position.
+        let mut sprite_pixel_mask: [u8; SCREEN_WIDTH] = [0; SCREEN_WIDTH];
+
         // Render sprites in reverse order so that sprite 0 has highest priority
         // (drawn last, appearing on top)
         for sprite_num in (0..SPRITE_COUNT).rev() {
@@ -1135,9 +1141,25 @@ impl VicII {
 
                             let x = screen_x as usize;
 
+                            // T076: Sprite-background collision detection
+                            // Collision is detected even if sprite is behind background
+                            if self.is_foreground_pixel(display_line, x) {
+                                self.sprite_collision_sb |= 1 << sprite_num;
+                            }
+
+                            // T076: Sprite-sprite collision detection
+                            // Check if any other sprite has already drawn at this position
+                            let existing_sprites = sprite_pixel_mask[x];
+                            if existing_sprites != 0 {
+                                // Collision! Mark both this sprite and all sprites already at this position
+                                self.sprite_collision_ss |= (1 << sprite_num) | existing_sprites;
+                            }
+                            // Mark this sprite as having drawn at this position
+                            sprite_pixel_mask[x] |= 1 << sprite_num;
+
                             // T075: Sprite-to-background priority
                             // If sprite is behind background and there's foreground at this pixel,
-                            // don't draw the sprite pixel
+                            // don't draw the sprite pixel (but collision was still detected above)
                             if sprite_behind_bg && self.is_foreground_pixel(display_line, x) {
                                 continue;
                             }
@@ -1185,9 +1207,25 @@ impl VicII {
 
                             let x = screen_x as usize;
 
+                            // T076: Sprite-background collision detection
+                            // Collision is detected even if sprite is behind background
+                            if self.is_foreground_pixel(display_line, x) {
+                                self.sprite_collision_sb |= 1 << sprite_num;
+                            }
+
+                            // T076: Sprite-sprite collision detection
+                            // Check if any other sprite has already drawn at this position
+                            let existing_sprites = sprite_pixel_mask[x];
+                            if existing_sprites != 0 {
+                                // Collision! Mark both this sprite and all sprites already at this position
+                                self.sprite_collision_ss |= (1 << sprite_num) | existing_sprites;
+                            }
+                            // Mark this sprite as having drawn at this position
+                            sprite_pixel_mask[x] |= 1 << sprite_num;
+
                             // T075: Sprite-to-background priority
                             // If sprite is behind background and there's foreground at this pixel,
-                            // don't draw the sprite pixel
+                            // don't draw the sprite pixel (but collision was still detected above)
                             if sprite_behind_bg && self.is_foreground_pixel(display_line, x) {
                                 continue;
                             }
@@ -4089,6 +4127,330 @@ mod tests {
         assert_eq!(
             vic.framebuffer[0][0], 0x02,
             "Sprite 0 (higher priority) should appear on top of sprite 1"
+        );
+    }
+
+    // T076: Sprite Collision Detection Tests
+
+    #[test]
+    fn test_sprite_sprite_collision_two_overlapping() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0 and 1 at the same position
+        vic.registers[0x15] = 0x03; // Enable sprites 0 and 1
+        vic.registers[0x00] = 24; // Sprite 0 X = 24
+        vic.registers[0x01] = 51; // Sprite 0 Y = 51
+        vic.registers[0x02] = 24; // Sprite 1 X = 24 (same as sprite 0)
+        vic.registers[0x03] = 51; // Sprite 1 Y = 51 (same as sprite 0)
+        vic.registers[0x10] = 0; // X MSB = 0 for all sprites
+        vic.registers[0x27] = 0x02; // Sprite 0 color
+        vic.registers[0x28] = 0x05; // Sprite 1 color
+
+        // Clear foreground mask and collision registers
+        vic.clear_foreground_mask_line(0);
+        vic.sprite_collision_ss = 0;
+        vic.sprite_collision_sb = 0;
+
+        // Both sprites have the same pixel set
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // Sprite 0: leftmost pixel
+        sprite_data[1][0] = 0x80; // Sprite 1: leftmost pixel (same position)
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Both sprites should be marked as colliding (bits 0 and 1 set)
+        assert_eq!(
+            vic.sprite_collision_ss, 0x03,
+            "Sprite-sprite collision should mark sprites 0 and 1"
+        );
+    }
+
+    #[test]
+    fn test_sprite_sprite_collision_no_overlap() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0 and 1 at different positions (no overlap)
+        vic.registers[0x15] = 0x03; // Enable sprites 0 and 1
+        vic.registers[0x00] = 24; // Sprite 0 X = 24
+        vic.registers[0x01] = 51; // Sprite 0 Y = 51
+        vic.registers[0x02] = 100; // Sprite 1 X = 100 (far from sprite 0)
+        vic.registers[0x03] = 51; // Sprite 1 Y = 51
+        vic.registers[0x10] = 0;
+        vic.registers[0x27] = 0x02;
+        vic.registers[0x28] = 0x05;
+
+        vic.clear_foreground_mask_line(0);
+        vic.sprite_collision_ss = 0;
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // Sprite 0: leftmost pixel
+        sprite_data[1][0] = 0x80; // Sprite 1: leftmost pixel (but at different X)
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // No collision because sprites don't overlap
+        assert_eq!(
+            vic.sprite_collision_ss, 0,
+            "No sprite-sprite collision when sprites don't overlap"
+        );
+    }
+
+    #[test]
+    fn test_sprite_sprite_collision_three_sprites() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0, 1, and 2 at the same position
+        vic.registers[0x15] = 0x07; // Enable sprites 0, 1, 2
+        vic.registers[0x00] = 24; // Sprite 0 X
+        vic.registers[0x01] = 51; // Sprite 0 Y
+        vic.registers[0x02] = 24; // Sprite 1 X
+        vic.registers[0x03] = 51; // Sprite 1 Y
+        vic.registers[0x04] = 24; // Sprite 2 X
+        vic.registers[0x05] = 51; // Sprite 2 Y
+        vic.registers[0x10] = 0;
+
+        vic.clear_foreground_mask_line(0);
+        vic.sprite_collision_ss = 0;
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80;
+        sprite_data[1][0] = 0x80;
+        sprite_data[2][0] = 0x80;
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // All three sprites should be marked as colliding (bits 0, 1, 2 set)
+        assert_eq!(
+            vic.sprite_collision_ss, 0x07,
+            "Sprite-sprite collision should mark sprites 0, 1, and 2"
+        );
+    }
+
+    #[test]
+    fn test_sprite_background_collision() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0
+        vic.registers[0x15] = 0x01;
+        vic.registers[0x00] = 24; // Sprite 0 X = 24
+        vic.registers[0x01] = 51; // Sprite 0 Y = 51
+        vic.registers[0x10] = 0;
+        vic.registers[0x27] = 0x02; // Sprite color
+
+        // Set foreground at position (0, 0)
+        vic.foreground_mask[0][0] = true;
+        vic.sprite_collision_sb = 0;
+        vic.sprite_collision_ss = 0;
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // Sprite pixel at position that has foreground
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Sprite 0 should be marked as colliding with background
+        assert_eq!(
+            vic.sprite_collision_sb, 0x01,
+            "Sprite-background collision should mark sprite 0"
+        );
+    }
+
+    #[test]
+    fn test_sprite_background_collision_no_foreground() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0
+        vic.registers[0x15] = 0x01;
+        vic.registers[0x00] = 24; // Sprite 0 X = 24
+        vic.registers[0x01] = 51; // Sprite 0 Y = 51
+        vic.registers[0x10] = 0;
+        vic.registers[0x27] = 0x02;
+
+        // Ensure no foreground at sprite position
+        vic.clear_foreground_mask_line(0);
+        vic.sprite_collision_sb = 0;
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80;
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // No collision because no foreground at sprite position
+        assert_eq!(
+            vic.sprite_collision_sb, 0,
+            "No sprite-background collision when no foreground"
+        );
+    }
+
+    #[test]
+    fn test_sprite_collision_with_priority_behind_background() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0 and set it behind background
+        vic.registers[0x15] = 0x01; // Enable sprite 0
+        vic.registers[0x1B] = 0x01; // Sprite 0 behind background
+        vic.registers[0x00] = 24; // Sprite 0 X
+        vic.registers[0x01] = 51; // Sprite 0 Y
+        vic.registers[0x10] = 0;
+        vic.registers[0x27] = 0x02;
+
+        // Set foreground at sprite position
+        vic.foreground_mask[0][0] = true;
+        vic.framebuffer[0][0] = 0x05; // Some foreground color
+        vic.sprite_collision_sb = 0;
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80;
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Collision should still be detected even though sprite is behind background
+        assert_eq!(
+            vic.sprite_collision_sb, 0x01,
+            "Sprite-background collision should be detected even when sprite is behind"
+        );
+
+        // But the sprite should NOT be visible (foreground color preserved)
+        assert_eq!(
+            vic.framebuffer[0][0], 0x05,
+            "Sprite behind background should not overwrite foreground"
+        );
+    }
+
+    #[test]
+    fn test_collision_registers_cleared_on_read() {
+        let mut vic = VicII::new();
+
+        // Set collision flags
+        vic.sprite_collision_ss = 0x55;
+        vic.sprite_collision_sb = 0xAA;
+
+        // Read collision registers (this returns the value)
+        let ss = vic.read(0x1E);
+        let sb = vic.read(0x1F);
+
+        assert_eq!(ss, 0x55);
+        assert_eq!(sb, 0xAA);
+
+        // Note: In the real implementation, clearing is handled by C64Memory
+        // after reading. Here we test that the clear methods work.
+        vic.clear_sprite_collision_ss();
+        vic.clear_sprite_collision_sb();
+
+        assert_eq!(vic.sprite_collision_ss, 0);
+        assert_eq!(vic.sprite_collision_sb, 0);
+    }
+
+    #[test]
+    fn test_collision_accumulates_across_scanlines() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0, 1, 2 - all at the same position
+        vic.registers[0x15] = 0x07;
+        vic.registers[0x10] = 0;
+
+        // All sprites at line 51, same X position
+        vic.registers[0x00] = 24; // Sprite 0 X
+        vic.registers[0x01] = 51; // Sprite 0 Y
+        vic.registers[0x02] = 24; // Sprite 1 X
+        vic.registers[0x03] = 51; // Sprite 1 Y
+        vic.registers[0x04] = 24; // Sprite 2 X
+        vic.registers[0x05] = 51; // Sprite 2 Y
+
+        vic.sprite_collision_ss = 0;
+
+        // Set pixels in first two lines for all sprites
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        // First line (data offset 0)
+        sprite_data[0][0] = 0x80;
+        sprite_data[1][0] = 0x80;
+        sprite_data[2][0] = 0x80;
+        // Second line (data offset 3, since 3 bytes per line)
+        sprite_data[0][3] = 0x80;
+        sprite_data[1][3] = 0x80;
+        sprite_data[2][3] = 0x80;
+
+        // First scanline: all three sprites collide
+        vic.clear_foreground_mask_line(0);
+        vic.render_sprites_scanline(51, &sprite_data);
+        assert_eq!(
+            vic.sprite_collision_ss, 0x07,
+            "Line 51: sprites 0, 1, and 2 collide"
+        );
+
+        // Clear collision register to test that second scanline re-detects
+        vic.sprite_collision_ss = 0;
+
+        // Second scanline: collisions still detected
+        vic.clear_foreground_mask_line(1);
+        vic.render_sprites_scanline(52, &sprite_data);
+        assert_eq!(
+            vic.sprite_collision_ss, 0x07,
+            "Line 52: sprites 0, 1, and 2 collide again"
+        );
+    }
+
+    #[test]
+    fn test_multicolor_sprite_collision() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0 and 1 in multicolor mode at same position
+        vic.registers[0x15] = 0x03; // Enable sprites 0 and 1
+        vic.registers[0x1C] = 0x03; // Multicolor mode for sprites 0 and 1
+        vic.registers[0x00] = 24; // Sprite 0 X
+        vic.registers[0x01] = 51; // Sprite 0 Y
+        vic.registers[0x02] = 24; // Sprite 1 X
+        vic.registers[0x03] = 51; // Sprite 1 Y
+        vic.registers[0x10] = 0;
+        vic.registers[0x25] = 0x03; // Multicolor 0
+        vic.registers[0x26] = 0x04; // Multicolor 1
+        vic.registers[0x27] = 0x02; // Sprite 0 color
+        vic.registers[0x28] = 0x05; // Sprite 1 color
+
+        vic.clear_foreground_mask_line(0);
+        vic.sprite_collision_ss = 0;
+
+        // Both sprites have non-transparent pixels at same position
+        // Bit pair 10 = sprite color (non-transparent)
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0b10_00_00_00; // First multicolor pixel set
+        sprite_data[1][0] = 0b10_00_00_00; // Same position
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Both sprites should collide
+        assert_eq!(
+            vic.sprite_collision_ss, 0x03,
+            "Multicolor sprites should detect collision"
+        );
+    }
+
+    #[test]
+    fn test_expanded_sprite_collision() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0 and 1 with X expansion
+        vic.registers[0x15] = 0x03;
+        vic.registers[0x1D] = 0x03; // X expansion for sprites 0 and 1
+        vic.registers[0x00] = 24; // Sprite 0 X
+        vic.registers[0x01] = 51; // Sprite 0 Y
+        // Sprite 1 positioned so expanded pixel overlaps with sprite 0
+        vic.registers[0x02] = 25; // Sprite 1 X = 25 (1 pixel offset)
+        vic.registers[0x03] = 51; // Sprite 1 Y
+        vic.registers[0x10] = 0;
+
+        vic.clear_foreground_mask_line(0);
+        vic.sprite_collision_ss = 0;
+
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // Sprite 0: leftmost pixel (expands to 2 pixels)
+        sprite_data[1][0] = 0x80; // Sprite 1: leftmost pixel
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Sprites should collide because expanded pixels overlap
+        assert_eq!(
+            vic.sprite_collision_ss, 0x03,
+            "Expanded sprites should detect collision when overlapping"
         );
     }
 }
