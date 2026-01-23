@@ -819,6 +819,99 @@ impl C64System {
         self.joystick_ports.physical_port2_mut().set(port2);
         self.sync_joystick_to_cia();
     }
+
+    // =========================================================================
+    // Debug API (T123-T127)
+    // =========================================================================
+
+    /// Read a byte from memory (same as peek, for API consistency).
+    pub fn read_memory(&mut self, address: u16) -> u8 {
+        self.cpu.memory_mut().read(address)
+    }
+
+    /// Write a byte to memory (same as poke, for API consistency).
+    pub fn write_memory(&mut self, address: u16, value: u8) {
+        self.cpu.memory_mut().write(address, value);
+    }
+
+    /// Read a byte directly from RAM (ignoring ROMs and I/O).
+    pub fn read_ram(&mut self, address: u16) -> u8 {
+        self.cpu.memory_mut().read_ram(address)
+    }
+
+    /// Get a 256-byte memory page for inspection.
+    pub fn get_memory_page(&mut self, page: u8) -> Vec<u8> {
+        let start = (page as u16) << 8;
+        let mut result = Vec::with_capacity(256);
+        for i in 0..256 {
+            result.push(self.cpu.memory_mut().read(start + i as u16));
+        }
+        result
+    }
+
+    /// Get CPU state for debugging.
+    ///
+    /// Returns: (a, x, y, sp, pc, status_flags, cycles)
+    pub fn get_cpu_state(&self) -> (u8, u8, u8, u8, u16, u8, u64) {
+        let cpu = &self.cpu;
+        // Reconstruct status register from individual flags
+        let flags: u8 = (if cpu.flag_n() { 0x80 } else { 0 })
+            | (if cpu.flag_v() { 0x40 } else { 0 })
+            | 0x20 // Unused bit is always 1
+            | (if cpu.flag_b() { 0x10 } else { 0 })
+            | (if cpu.flag_d() { 0x08 } else { 0 })
+            | (if cpu.flag_i() { 0x04 } else { 0 })
+            | (if cpu.flag_z() { 0x02 } else { 0 })
+            | (if cpu.flag_c() { 0x01 } else { 0 });
+
+        (
+            cpu.a(),
+            cpu.x(),
+            cpu.y(),
+            cpu.sp(),
+            cpu.pc(),
+            flags,
+            cpu.cycles(),
+        )
+    }
+
+    /// Get all VIC-II registers (47 bytes).
+    pub fn get_vic_registers(&mut self) -> Vec<u8> {
+        self.cpu.memory_mut().vic.get_all_registers().to_vec()
+    }
+
+    /// Get all SID registers (29 bytes).
+    pub fn get_sid_registers(&mut self) -> Vec<u8> {
+        self.cpu.memory_mut().sid.get_all_registers().to_vec()
+    }
+
+    /// Get all CIA1 registers (16 bytes).
+    pub fn get_cia1_registers(&mut self) -> Vec<u8> {
+        self.cpu.memory_mut().cia1.get_all_registers().to_vec()
+    }
+
+    /// Get all CIA2 registers (16 bytes).
+    pub fn get_cia2_registers(&mut self) -> Vec<u8> {
+        self.cpu.memory_mut().cia2.get_all_registers().to_vec()
+    }
+
+    /// Get memory bank configuration.
+    ///
+    /// Returns: (loram, hiram, charen, vic_bank)
+    /// - loram: BASIC ROM visible
+    /// - hiram: KERNAL ROM visible
+    /// - charen: true = I/O visible, false = CHAR ROM visible
+    /// - vic_bank: VIC-II bank 0-3
+    pub fn get_bank_config(&mut self) -> (bool, bool, bool, u8) {
+        let mem = self.cpu.memory_mut();
+        let port_value = mem.port.read(0x01);
+        let loram = port_value & 0x01 != 0;
+        let hiram = port_value & 0x02 != 0;
+        let charen = port_value & 0x04 != 0;
+        let vic_bank = mem.vic_bank();
+
+        (loram, hiram, charen, vic_bank)
+    }
 }
 
 /// Convert ASCII character to PETSCII.

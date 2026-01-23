@@ -185,6 +185,15 @@ impl VicII {
         }
     }
 
+    /// Get all VIC-II registers as a copy.
+    ///
+    /// Returns all 47 registers for debugging/inspection.
+    /// Note: Read-only registers like collision flags may not reflect
+    /// current state since they're cleared on read.
+    pub fn get_all_registers(&self) -> [u8; VIC_REGISTER_COUNT] {
+        self.registers
+    }
+
     /// Get the border color (0-15).
     pub fn border_color(&self) -> u8 {
         self.registers[0x20] & 0x0F

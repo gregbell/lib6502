@@ -528,6 +528,138 @@ impl C64Emulator {
     pub fn get_state_version(&self) -> u32 {
         crate::system::SAVESTATE_VERSION
     }
+
+    // =========================================================================
+    // Debug API (T123-T127)
+    // =========================================================================
+
+    /// Read byte from CPU's memory view.
+    ///
+    /// Respects current banking configuration (ROMs visible where configured).
+    /// Same as `peek()` - provided for API consistency with contracts.
+    ///
+    /// # Arguments
+    /// * `address` - 16-bit address (0x0000-0xFFFF)
+    ///
+    /// # Returns
+    /// Byte value at the address.
+    #[wasm_bindgen]
+    pub fn read_memory(&mut self, address: u16) -> u8 {
+        self.system.read_memory(address)
+    }
+
+    /// Write byte to CPU's memory view.
+    ///
+    /// Respects current banking configuration. Same as `poke()` - provided
+    /// for API consistency with contracts.
+    ///
+    /// # Arguments
+    /// * `address` - 16-bit address (0x0000-0xFFFF)
+    /// * `value` - Byte value to write
+    #[wasm_bindgen]
+    pub fn write_memory(&mut self, address: u16, value: u8) {
+        self.system.write_memory(address, value);
+    }
+
+    /// Read byte directly from RAM (ignoring ROMs).
+    ///
+    /// Useful for inspecting RAM that's hidden behind ROMs.
+    ///
+    /// # Arguments
+    /// * `address` - 16-bit address (0x0000-0xFFFF)
+    #[wasm_bindgen]
+    pub fn read_ram(&mut self, address: u16) -> u8 {
+        self.system.read_ram(address)
+    }
+
+    /// Get 256-byte memory page.
+    ///
+    /// Useful for memory viewer UI. Reads through bank configuration.
+    ///
+    /// # Arguments
+    /// * `page` - Page number 0-255 (page 0 = $0000-$00FF, page 255 = $FF00-$FFFF)
+    #[wasm_bindgen]
+    pub fn get_memory_page(&mut self, page: u8) -> Vec<u8> {
+        self.system.get_memory_page(page)
+    }
+
+    /// Get current CPU register state.
+    ///
+    /// Returns an object with all CPU registers and flags.
+    /// Note: wasm-bindgen doesn't support returning structs directly,
+    /// so this returns values as a flat array: [a, x, y, sp, pc_lo, pc_hi, flags]
+    ///
+    /// The cycles count is available via `get_cpu_cycles()`.
+    #[wasm_bindgen]
+    pub fn get_cpu_state(&self) -> Vec<u8> {
+        let (a, x, y, sp, pc, flags, _cycles) = self.system.get_cpu_state();
+        vec![a, x, y, sp, (pc & 0xFF) as u8, (pc >> 8) as u8, flags]
+    }
+
+    /// Get total CPU cycles executed since reset.
+    #[wasm_bindgen]
+    pub fn get_cpu_cycles(&self) -> u64 {
+        let (_, _, _, _, _, _, cycles) = self.system.get_cpu_state();
+        cycles
+    }
+
+    /// Get current memory banking configuration.
+    ///
+    /// Returns: [loram, hiram, charen, vic_bank]
+    /// - loram: BASIC ROM visible (0/1)
+    /// - hiram: KERNAL ROM visible (0/1)
+    /// - charen: I/O visible (0/1), if 0 then Character ROM visible
+    /// - vic_bank: VIC-II bank 0-3
+    #[wasm_bindgen]
+    pub fn get_bank_config(&mut self) -> Vec<u8> {
+        let (loram, hiram, charen, vic_bank) = self.system.get_bank_config();
+        vec![
+            loram as u8,
+            hiram as u8,
+            charen as u8,
+            vic_bank,
+        ]
+    }
+
+    /// Get all VIC-II registers.
+    ///
+    /// Returns 47 bytes representing VIC-II registers at $D000-$D02E.
+    /// Note: Collision registers (offset $1E, $1F) are read-only and
+    /// clear on read on real hardware, so may not reflect current state.
+    #[wasm_bindgen]
+    pub fn get_vic_registers(&mut self) -> Vec<u8> {
+        self.system.get_vic_registers()
+    }
+
+    /// Get all SID registers.
+    ///
+    /// Returns 29 bytes representing SID registers at $D400-$D41C.
+    /// Note: SID registers are mostly write-only, so this returns
+    /// the last written values reconstructed from internal state.
+    #[wasm_bindgen]
+    pub fn get_sid_registers(&mut self) -> Vec<u8> {
+        self.system.get_sid_registers()
+    }
+
+    /// Get CIA1 registers.
+    ///
+    /// Returns 16 bytes representing CIA1 at $DC00-$DC0F.
+    /// Note: Reading register $0D on real hardware clears interrupt flags.
+    /// This method does not have that side effect.
+    #[wasm_bindgen]
+    pub fn get_cia1_registers(&mut self) -> Vec<u8> {
+        self.system.get_cia1_registers()
+    }
+
+    /// Get CIA2 registers.
+    ///
+    /// Returns 16 bytes representing CIA2 at $DD00-$DD0F.
+    /// Note: Reading register $0D on real hardware clears interrupt flags.
+    /// This method does not have that side effect.
+    #[wasm_bindgen]
+    pub fn get_cia2_registers(&mut self) -> Vec<u8> {
+        self.system.get_cia2_registers()
+    }
 }
 
 impl Default for C64Emulator {

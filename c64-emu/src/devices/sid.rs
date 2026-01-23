@@ -1033,6 +1033,56 @@ impl Sid6581 {
     pub fn set_sample_accumulator(&mut self, value: f32) {
         self.sample_accumulator = value;
     }
+
+    /// Get all SID registers as a 29-byte array.
+    ///
+    /// Reconstructs register values from internal state for debugging.
+    /// Note: SID registers are mostly write-only, so this returns the
+    /// last written values reconstructed from internal state.
+    pub fn get_all_registers(&self) -> [u8; 29] {
+        let mut regs = [0u8; 29];
+
+        // Voice 1 (0x00-0x06)
+        regs[0x00] = (self.voices[0].freq & 0xFF) as u8;
+        regs[0x01] = ((self.voices[0].freq >> 8) & 0xFF) as u8;
+        regs[0x02] = (self.voices[0].pulse_width & 0xFF) as u8;
+        regs[0x03] = ((self.voices[0].pulse_width >> 8) & 0x0F) as u8;
+        regs[0x04] = self.voices[0].control;
+        regs[0x05] = self.voices[0].attack_decay;
+        regs[0x06] = self.voices[0].sustain_release;
+
+        // Voice 2 (0x07-0x0D)
+        regs[0x07] = (self.voices[1].freq & 0xFF) as u8;
+        regs[0x08] = ((self.voices[1].freq >> 8) & 0xFF) as u8;
+        regs[0x09] = (self.voices[1].pulse_width & 0xFF) as u8;
+        regs[0x0A] = ((self.voices[1].pulse_width >> 8) & 0x0F) as u8;
+        regs[0x0B] = self.voices[1].control;
+        regs[0x0C] = self.voices[1].attack_decay;
+        regs[0x0D] = self.voices[1].sustain_release;
+
+        // Voice 3 (0x0E-0x14)
+        regs[0x0E] = (self.voices[2].freq & 0xFF) as u8;
+        regs[0x0F] = ((self.voices[2].freq >> 8) & 0xFF) as u8;
+        regs[0x10] = (self.voices[2].pulse_width & 0xFF) as u8;
+        regs[0x11] = ((self.voices[2].pulse_width >> 8) & 0x0F) as u8;
+        regs[0x12] = self.voices[2].control;
+        regs[0x13] = self.voices[2].attack_decay;
+        regs[0x14] = self.voices[2].sustain_release;
+
+        // Filter (0x15-0x18)
+        regs[0x15] = (self.filter.cutoff & 0x07) as u8;
+        regs[0x16] = ((self.filter.cutoff >> 3) & 0xFF) as u8;
+        regs[0x17] = (self.filter.routing & 0x0F) | ((self.filter.resonance & 0x0F) << 4);
+        regs[0x18] = (self.volume & 0x0F) | ((self.filter.mode_bits & 0x07) << 4);
+
+        // Read-only registers (0x19-0x1C)
+        regs[0x19] = 0xFF; // Paddle X (not implemented)
+        regs[0x1A] = 0xFF; // Paddle Y (not implemented)
+        regs[0x1B] = ((self.voices[2].accumulator >> 16) & 0xFF) as u8; // Voice 3 oscillator
+        regs[0x1C] = self.voices[2].envelope_counter; // Voice 3 envelope
+
+        regs
+    }
 }
 
 impl Default for Sid6581 {

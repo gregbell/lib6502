@@ -413,6 +413,42 @@ impl Cia6526 {
         self.timer_b.running = crb & 0x01 != 0;
         self.timer_b.one_shot = crb & 0x08 != 0;
     }
+
+    /// Get all CIA registers as a 16-byte array.
+    ///
+    /// Returns the current state of all 16 registers for debugging.
+    /// Note: Reading register 0x0D on real hardware clears interrupt flags,
+    /// but this method does not have that side effect.
+    pub fn get_all_registers(&self) -> [u8; 16] {
+        let mut regs = [0u8; 16];
+
+        // Port A/B data
+        regs[0x00] = self.port_a.read(self.external_a);
+        regs[0x01] = self.port_b.read(self.external_b);
+        // Port A/B DDR
+        regs[0x02] = self.port_a.ddr;
+        regs[0x03] = self.port_b.ddr;
+        // Timer A counter
+        regs[0x04] = (self.timer_a.counter & 0xFF) as u8;
+        regs[0x05] = (self.timer_a.counter >> 8) as u8;
+        // Timer B counter
+        regs[0x06] = (self.timer_b.counter & 0xFF) as u8;
+        regs[0x07] = (self.timer_b.counter >> 8) as u8;
+        // TOD (use live values, not latched)
+        regs[0x08] = self.tod.tenths;
+        regs[0x09] = self.tod.seconds;
+        regs[0x0A] = self.tod.minutes;
+        regs[0x0B] = self.tod.hours;
+        // Serial data register
+        regs[0x0C] = self.sdr;
+        // Interrupt control (flags with pending bit)
+        regs[0x0D] = self.interrupt_flags | if self.interrupt_pending { 0x80 } else { 0 };
+        // Control registers
+        regs[0x0E] = self.cra;
+        regs[0x0F] = self.crb;
+
+        regs
+    }
 }
 
 impl Device for Cia6526 {

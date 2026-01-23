@@ -309,11 +309,11 @@
 
 ### Debug Features
 
-- [ ] T123 [P] Implement read_memory() and write_memory() for debugging in src/wasm/c64_api.rs
-- [ ] T124 [P] Implement get_cpu_state() returning register values in src/wasm/c64_api.rs
-- [ ] T125 [P] Implement get_vic_registers() and get_sid_registers() in src/wasm/c64_api.rs
-- [ ] T126 [P] Implement get_cia1_registers() and get_cia2_registers() in src/wasm/c64_api.rs
-- [ ] T127 [P] Implement get_bank_config() for memory banking status in src/wasm/c64_api.rs
+- [x] T123 [P] Implement read_memory() and write_memory() for debugging in c64-emu/src/wasm.rs
+- [x] T124 [P] Implement get_cpu_state() returning register values in c64-emu/src/wasm.rs
+- [x] T125 [P] Implement get_vic_registers() and get_sid_registers() in c64-emu/src/wasm.rs
+- [x] T126 [P] Implement get_cia1_registers() and get_cia2_registers() in c64-emu/src/wasm.rs
+- [x] T127 [P] Implement get_bank_config() for memory banking status in c64-emu/src/wasm.rs
 
 ### Disk Write Support
 
@@ -418,8 +418,8 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 6: US4 | T092-T098 | 7/7 | Joystick controls ✓ COMPLETE |
 | Phase 7: US5 | T099-T111 | 13/13 | Save/load states ✓ COMPLETE |
 | Phase 8: US6 | T112-T118 | 7/7 | Settings ✓ COMPLETE |
-| Phase 9: Polish | T119-T132 | 4/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **122/132** | |
+| Phase 9: Polish | T119-T132 | 9/14 | Edge cases, debug, deploy |
+| **Total** | **132 tasks** | **127/132** | |
 
 ---
 
