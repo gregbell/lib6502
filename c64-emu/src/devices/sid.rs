@@ -47,7 +47,11 @@ pub struct SidVoice {
     /// Previous MSB state for hard sync detection.
     /// Used to detect 0->1 transition on bit 23.
     pub prev_msb: bool,
-    /// 23-bit noise LFSR.
+    /// Previous bit 19 state for noise LFSR clocking.
+    /// The LFSR is clocked when bit 19 transitions from 0 to 1.
+    pub prev_bit19: bool,
+    /// 23-bit noise LFSR (Linear Feedback Shift Register).
+    /// Feedback taps at bits 22 and 17 (XOR).
     pub lfsr: u32,
     /// Current envelope state.
     pub envelope_state: EnvelopeState,
@@ -70,7 +74,8 @@ impl SidVoice {
             sustain_release: 0,
             accumulator: 0,
             prev_msb: false,
-            lfsr: 0x7FFFF8, // Initial LFSR state
+            prev_bit19: false,
+            lfsr: 0x7FFFF8, // Initial LFSR state (23-bit)
             envelope_state: EnvelopeState::Release,
             envelope_counter: 0,
             rate_counter: 0,
@@ -137,6 +142,30 @@ impl SidVoice {
     #[inline]
     pub fn accumulator_msb(&self) -> bool {
         self.accumulator & 0x0080_0000 != 0
+    }
+
+    /// Get bit 19 of the accumulator (used for LFSR clocking).
+    #[inline]
+    pub fn accumulator_bit19(&self) -> bool {
+        self.accumulator & 0x0008_0000 != 0
+    }
+
+    /// Clock the 23-bit noise LFSR.
+    ///
+    /// The LFSR uses feedback taps at bits 22 and 17 (XOR).
+    /// The feedback bit is shifted into position 0, and the register
+    /// shifts left, masking to 23 bits.
+    ///
+    /// This produces the characteristic pseudo-random noise sequence.
+    #[inline]
+    pub fn clock_lfsr(&mut self) {
+        // Feedback = bit22 XOR bit17
+        let bit22 = (self.lfsr >> 22) & 1;
+        let bit17 = (self.lfsr >> 17) & 1;
+        let feedback = bit22 ^ bit17;
+
+        // Shift left and insert feedback at bit 0, mask to 23 bits
+        self.lfsr = ((self.lfsr << 1) | feedback) & 0x7F_FFFF;
     }
 
     /// Generate the sawtooth waveform output.
@@ -470,7 +499,7 @@ impl Sid6581 {
         Some(self.voices[voice_idx].generate_waveform(ring_mod_msb))
     }
 
-    /// Clock all voice phase accumulators with hard sync support.
+    /// Clock all voice phase accumulators with hard sync and noise LFSR support.
     ///
     /// The 24-bit phase accumulator is incremented by the 16-bit frequency
     /// register value on each clock cycle. This produces the fundamental
@@ -482,12 +511,21 @@ impl Sid6581 {
     ///
     /// Hard sync: When voice N has SYNC bit set, it resets when the MSB of
     /// the sync source voice (N-1, with wraparound) transitions from 0 to 1.
+    ///
+    /// Noise LFSR: The 23-bit LFSR is clocked when bit 19 of the accumulator
+    /// transitions from 0 to 1. This creates the characteristic noise frequency
+    /// that tracks the voice frequency.
     fn clock_phase_accumulators(&mut self) {
-        // Store previous MSB states before updating accumulators
+        // Store previous MSB and bit19 states before updating accumulators
         let prev_msb = [
             self.voices[0].accumulator_msb(),
             self.voices[1].accumulator_msb(),
             self.voices[2].accumulator_msb(),
+        ];
+        let prev_bit19 = [
+            self.voices[0].accumulator_bit19(),
+            self.voices[1].accumulator_bit19(),
+            self.voices[2].accumulator_bit19(),
         ];
 
         // Update each voice's accumulator
@@ -495,18 +533,27 @@ impl Sid6581 {
         for voice_idx in 0..VOICE_COUNT {
             let voice = &mut self.voices[voice_idx];
 
-            // Store previous MSB for sync detection
+            // Store previous states for sync and LFSR detection
             voice.prev_msb = prev_msb[voice_idx];
+            voice.prev_bit19 = prev_bit19[voice_idx];
 
             // Handle test bit - when set, resets and holds accumulator at zero
+            // Also resets the LFSR to its initial state
             if voice.test_bit() {
                 voice.accumulator = 0;
+                voice.lfsr = 0x7F_FFFF; // Reset LFSR to all 1s (max value)
                 continue;
             }
 
             // Increment phase accumulator by frequency value (wraps at 24 bits)
             voice.accumulator = voice.accumulator.wrapping_add(voice.freq as u32);
             voice.accumulator &= 0x00FF_FFFF; // Mask to 24 bits
+
+            // Clock LFSR on bit 19 transition from 0 to 1
+            // This makes the noise frequency track the voice frequency
+            if !voice.prev_bit19 && voice.accumulator_bit19() {
+                voice.clock_lfsr();
+            }
         }
 
         // Apply hard sync after all accumulators have been updated
@@ -1003,17 +1050,17 @@ mod tests {
 
         // Accumulator just past 50% (MSB=1, falling phase begins)
         voice.accumulator = 0x800000; // MSB=1, bits 11-22 = 0
-        // XOR with 0x7FF: 0 ^ 0x7FF = 0x7FF
+                                      // XOR with 0x7FF: 0 ^ 0x7FF = 0x7FF
         assert_eq!(voice.generate_triangle(false), 0x7FF);
 
         // Accumulator at 75% (MSB=1, falling)
         voice.accumulator = 0xC00000; // Bits 11-22 = 0x400
-        // XOR: 0x400 ^ 0x7FF = 0x3FF
+                                      // XOR: 0x400 ^ 0x7FF = 0x3FF
         assert_eq!(voice.generate_triangle(false), 0x3FF);
 
         // Near end (MSB=1)
         voice.accumulator = 0xFFF000; // Bits 11-22 = 0x7FF
-        // XOR: 0x7FF ^ 0x7FF = 0
+                                      // XOR: 0x7FF ^ 0x7FF = 0
         assert_eq!(voice.generate_triangle(false), 0);
     }
 
@@ -1030,7 +1077,7 @@ mod tests {
 
         // Ring mod enabled - use provided MSB (true = 1)
         voice.control = 0x14; // Triangle + ring mod
-        // With ring_mod_msb=true, XOR with 0x7FF
+                              // With ring_mod_msb=true, XOR with 0x7FF
         assert_eq!(voice.generate_triangle(true), 0x400 ^ 0x7FF);
     }
 
@@ -1102,6 +1149,285 @@ mod tests {
 
         // Different LFSR should produce different noise
         assert_ne!(noise1, noise2);
+    }
+
+    // =====================================================
+    // Noise LFSR Clocking Tests (T080)
+    // =====================================================
+
+    #[test]
+    fn test_lfsr_clock_produces_new_state() {
+        let mut voice = SidVoice::new();
+
+        // Initial LFSR state
+        let initial_lfsr = voice.lfsr;
+
+        // Clock the LFSR
+        voice.clock_lfsr();
+
+        // LFSR should have changed
+        assert_ne!(voice.lfsr, initial_lfsr);
+
+        // LFSR should still be 23 bits (masked)
+        assert!(voice.lfsr <= 0x7F_FFFF);
+    }
+
+    #[test]
+    fn test_lfsr_feedback_taps() {
+        let mut voice = SidVoice::new();
+
+        // Set LFSR to known state to verify feedback calculation
+        // Feedback = bit22 XOR bit17
+        // If bit22=1 and bit17=0, feedback = 1
+        voice.lfsr = 0x40_0000; // bit22=1, bit17=0
+
+        voice.clock_lfsr();
+
+        // Shifted left by 1, with feedback=1 at bit 0, masked to 23 bits
+        // 0x40_0000 << 1 = 0x80_0000 (before mask)
+        // 0x80_0000 | 1 = 0x80_0001
+        // 0x80_0001 & 0x7F_FFFF = 0x00_0001
+        assert_eq!(voice.lfsr, 0x00_0001);
+    }
+
+    #[test]
+    fn test_lfsr_feedback_both_bits_same() {
+        let mut voice = SidVoice::new();
+
+        // If bit22=1 and bit17=1, feedback = 0 (XOR)
+        voice.lfsr = 0x42_0000; // bit22=1, bit17=1
+
+        voice.clock_lfsr();
+
+        // feedback=0, so bit 0 is 0 after shift
+        // 0x42_0000 << 1 = 0x84_0000
+        // 0x84_0000 & 0x7F_FFFF = 0x04_0000
+        assert_eq!(voice.lfsr, 0x04_0000);
+    }
+
+    #[test]
+    fn test_lfsr_sequence_is_deterministic() {
+        let mut voice1 = SidVoice::new();
+        let mut voice2 = SidVoice::new();
+
+        // Both start with same state
+        assert_eq!(voice1.lfsr, voice2.lfsr);
+
+        // Clock both 100 times
+        for _ in 0..100 {
+            voice1.clock_lfsr();
+            voice2.clock_lfsr();
+        }
+
+        // Should end up at same state
+        assert_eq!(voice1.lfsr, voice2.lfsr);
+    }
+
+    #[test]
+    fn test_lfsr_never_zero() {
+        let mut voice = SidVoice::new();
+
+        // Clock LFSR many times and verify it never becomes zero
+        // (a proper LFSR should never reach all-zeros state)
+        for _ in 0..1000 {
+            voice.clock_lfsr();
+            assert_ne!(voice.lfsr, 0, "LFSR should never become zero");
+        }
+    }
+
+    #[test]
+    fn test_lfsr_clocked_on_bit19_transition() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 1 frequency high enough to trigger bit19 transition quickly
+        // Frequency 0x8000 means accumulator adds 0x8000 each clock
+        // Bit 19 is at 0x0008_0000
+        // To transition from 0 to 1, we need accumulator to pass 0x0007_FFFF
+        // With freq 0x8000, after 16 clocks: 16 * 0x8000 = 0x8_0000 (bit 19 set)
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x80); // freq = 0x8000
+
+        let initial_lfsr = sid.voices[0].lfsr;
+
+        // Clock 15 times - bit 19 not yet set (accumulator = 0x7_8000)
+        for _ in 0..15 {
+            sid.clock();
+        }
+
+        // LFSR should NOT have been clocked yet (bit 19 still 0)
+        assert_eq!(
+            sid.voices[0].lfsr, initial_lfsr,
+            "LFSR should not clock until bit19 transitions"
+        );
+
+        // Clock once more - bit 19 transitions from 0 to 1
+        sid.clock();
+
+        // LFSR should now have been clocked
+        assert_ne!(
+            sid.voices[0].lfsr, initial_lfsr,
+            "LFSR should clock on bit19 0->1 transition"
+        );
+    }
+
+    #[test]
+    fn test_lfsr_not_clocked_on_bit19_already_set() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 1 with frequency
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x80);
+
+        // Set accumulator so bit 19 is already set
+        sid.voices[0].accumulator = 0x0008_0000;
+        sid.voices[0].prev_bit19 = true; // Was already set
+
+        let initial_lfsr = sid.voices[0].lfsr;
+
+        // Clock once - bit19 stays 1 (no 0->1 transition)
+        sid.clock();
+
+        // LFSR should NOT have been clocked (no transition)
+        assert_eq!(
+            sid.voices[0].lfsr, initial_lfsr,
+            "LFSR should not clock when bit19 stays at 1"
+        );
+    }
+
+    #[test]
+    fn test_test_bit_resets_lfsr() {
+        let mut sid = Sid6581::new();
+
+        // Set frequency and clock to change LFSR
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x80);
+
+        // Clock enough to change LFSR
+        for _ in 0..100 {
+            sid.clock();
+        }
+
+        // LFSR should have changed
+        assert_ne!(sid.voices[0].lfsr, 0x7FFFF8);
+
+        // Set test bit
+        sid.write(0x04, 0x08);
+
+        // Clock once with test bit - LFSR should reset to 0x7F_FFFF (all 1s)
+        sid.clock();
+
+        assert_eq!(
+            sid.voices[0].lfsr, 0x7F_FFFF,
+            "Test bit should reset LFSR to all 1s"
+        );
+        assert_eq!(
+            sid.voices[0].accumulator, 0,
+            "Test bit should also reset accumulator"
+        );
+    }
+
+    #[test]
+    fn test_noise_output_changes_as_lfsr_clocks() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 1 to noise waveform
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x80); // High frequency
+        sid.write(0x04, 0x81); // Noise + gate
+
+        // Collect noise outputs
+        let mut outputs = Vec::new();
+
+        // Clock enough times to get multiple LFSR clocks
+        for _ in 0..200 {
+            sid.clock();
+            outputs.push(sid.voices[0].generate_noise());
+        }
+
+        // Verify we got some different values (noise is changing)
+        let unique_count = outputs
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+        assert!(
+            unique_count > 1,
+            "Noise output should change as LFSR clocks (got {} unique values)",
+            unique_count
+        );
+    }
+
+    #[test]
+    fn test_lfsr_masks_to_23_bits() {
+        let mut voice = SidVoice::new();
+
+        // Set LFSR to max 23-bit value
+        voice.lfsr = 0x7F_FFFF;
+
+        // Clock it
+        voice.clock_lfsr();
+
+        // Result should still be within 23 bits
+        assert!(voice.lfsr <= 0x7F_FFFF);
+
+        // Clock many more times
+        for _ in 0..1000 {
+            voice.clock_lfsr();
+            assert!(voice.lfsr <= 0x7F_FFFF, "LFSR exceeded 23 bits");
+        }
+    }
+
+    #[test]
+    fn test_accumulator_bit19_helper() {
+        let mut voice = SidVoice::new();
+
+        // Test bit 19 detection
+        voice.accumulator = 0x0000_0000;
+        assert!(!voice.accumulator_bit19());
+
+        voice.accumulator = 0x0007_FFFF; // Just below bit 19
+        assert!(!voice.accumulator_bit19());
+
+        voice.accumulator = 0x0008_0000; // Exactly bit 19
+        assert!(voice.accumulator_bit19());
+
+        voice.accumulator = 0x00FF_FFFF; // Bit 19 and higher bits set
+        assert!(voice.accumulator_bit19());
+    }
+
+    #[test]
+    fn test_all_three_voices_have_independent_lfsr() {
+        let mut sid = Sid6581::new();
+
+        // Set different frequencies for all three voices
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x40); // Voice 1: freq = 0x4000
+        sid.write(0x07, 0x00);
+        sid.write(0x08, 0x60); // Voice 2: freq = 0x6000
+        sid.write(0x0E, 0x00);
+        sid.write(0x0F, 0x80); // Voice 3: freq = 0x8000
+
+        // Record initial LFSR states
+        let initial = [sid.voices[0].lfsr, sid.voices[1].lfsr, sid.voices[2].lfsr];
+
+        // All start the same
+        assert_eq!(initial[0], initial[1]);
+        assert_eq!(initial[1], initial[2]);
+
+        // Clock many times
+        for _ in 0..1000 {
+            sid.clock();
+        }
+
+        // Each voice should have evolved differently due to different frequencies
+        // (bit 19 transitions at different rates)
+        let final_states = [sid.voices[0].lfsr, sid.voices[1].lfsr, sid.voices[2].lfsr];
+
+        // At least some should be different (with high probability)
+        let all_same = final_states[0] == final_states[1] && final_states[1] == final_states[2];
+        assert!(
+            !all_same,
+            "Different frequencies should produce different LFSR evolution"
+        );
     }
 
     #[test]
@@ -1331,8 +1657,7 @@ mod tests {
         let output = sid.voice_waveform_output(0);
 
         // With ring mod from voice 3 (MSB=1), triangle should be inverted
-        let expected_triangle =
-            ((sid.voices[0].accumulator >> 12) & 0x7FF) as u16 ^ 0x7FF;
+        let expected_triangle = ((sid.voices[0].accumulator >> 12) & 0x7FF) as u16 ^ 0x7FF;
 
         assert_eq!(output.unwrap(), expected_triangle);
     }

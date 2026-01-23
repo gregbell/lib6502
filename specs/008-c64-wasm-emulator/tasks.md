@@ -194,8 +194,8 @@
 
 - [x] T077 [US3] Implement 24-bit phase accumulator per voice in c64-emu/src/devices/sid.rs
 - [x] T078 [US3] Implement waveform generation (triangle, sawtooth, pulse, noise) in c64-emu/src/devices/sid.rs
-- [ ] T079 [US3] Implement pulse width modulation (12-bit duty cycle) in src/devices/c64/sid.rs
-- [ ] T080 [US3] Implement noise LFSR (23-bit feedback shift register) in src/devices/c64/sid.rs
+- [x] T079 [US3] Implement pulse width modulation (12-bit duty cycle) in c64-emu/src/devices/sid.rs (completed as part of T078)
+- [x] T080 [US3] Implement noise LFSR (23-bit feedback shift register) in c64-emu/src/devices/sid.rs
 - [ ] T081 [US3] Implement ADSR envelope generator with rate tables in src/devices/c64/sid.rs
 - [ ] T082 [US3] Implement exponential decay approximation in src/devices/c64/sid.rs
 - [ ] T083 [US3] Implement simplified biquad filter (LP/BP/HP/Notch modes) in src/devices/c64/sid.rs
@@ -414,12 +414,12 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
 | Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
 | Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
-| Phase 5: US3 | T067-T091 | 12/25 | Graphics & audio |
+| Phase 5: US3 | T067-T091 | 14/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **77/132** | |
+| **Total** | **132 tasks** | **79/132** | |
 
 ---
 
