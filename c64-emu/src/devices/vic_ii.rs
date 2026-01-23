@@ -79,6 +79,11 @@ pub struct VicII {
     /// Framebuffer: indexed color values (0-15) for each pixel.
     framebuffer: Box<[[u8; SCREEN_WIDTH]; SCREEN_HEIGHT]>,
 
+    /// Foreground mask: tracks which pixels have foreground graphics (for sprite priority).
+    /// When a pixel is set, it means there's foreground content (not background color).
+    /// Used by sprite-to-background priority (register $1B).
+    foreground_mask: Box<[[bool; SCREEN_WIDTH]; SCREEN_HEIGHT]>,
+
     /// IRQ pending flag.
     irq_pending: bool,
 }
@@ -93,6 +98,7 @@ impl VicII {
             sprite_collision_ss: 0,
             sprite_collision_sb: 0,
             framebuffer: Box::new([[0; SCREEN_WIDTH]; SCREEN_HEIGHT]),
+            foreground_mask: Box::new([[false; SCREEN_WIDTH]; SCREEN_HEIGHT]),
             irq_pending: false,
         };
 
@@ -173,6 +179,33 @@ impl VicII {
         self.registers[0x11] & 0x40 != 0
     }
 
+    /// Set a pixel in the framebuffer and update the foreground mask.
+    ///
+    /// # Arguments
+    /// * `line` - The display line (0-199)
+    /// * `x` - The x coordinate (0-319)
+    /// * `color` - The color index (0-15)
+    /// * `is_foreground` - True if this is foreground graphics (not background color)
+    #[inline(always)]
+    fn set_pixel(&mut self, line: usize, x: usize, color: u8, is_foreground: bool) {
+        self.framebuffer[line][x] = color;
+        self.foreground_mask[line][x] = is_foreground;
+    }
+
+    /// Clear a scanline's foreground mask (called at start of each scanline).
+    #[inline(always)]
+    fn clear_foreground_mask_line(&mut self, line: usize) {
+        for x in 0..SCREEN_WIDTH {
+            self.foreground_mask[line][x] = false;
+        }
+    }
+
+    /// Check if a pixel has foreground content (for sprite priority).
+    #[inline(always)]
+    fn is_foreground_pixel(&self, line: usize, x: usize) -> bool {
+        self.foreground_mask[line][x]
+    }
+
     /// Step one scanline of VIC-II emulation.
     ///
     /// This renders one scanline of the display into the framebuffer.
@@ -201,11 +234,14 @@ impl VicII {
 
         let display_line = (scanline - display_start) as usize;
 
+        // Clear foreground mask for this scanline (for sprite priority)
+        self.clear_foreground_mask_line(display_line);
+
         // If display is disabled (DEN=0), fill with background color
         if !self.display_enabled() {
             let bg_color = self.background_color();
             for x in 0..SCREEN_WIDTH {
-                self.framebuffer[display_line][x] = bg_color;
+                self.set_pixel(display_line, x, bg_color, false);
             }
             return;
         }
@@ -254,7 +290,7 @@ impl VicII {
             _ => {
                 let bg_color = self.background_color();
                 for x in 0..SCREEN_WIDTH {
-                    self.framebuffer[display_line][x] = bg_color;
+                    self.set_pixel(display_line, x, bg_color, false);
                 }
             }
         }
@@ -284,7 +320,7 @@ impl VicII {
             // Fill remaining lines with background
             let bg_color = self.background_color();
             for x in 0..SCREEN_WIDTH {
-                self.framebuffer[display_line][x] = bg_color;
+                self.set_pixel(display_line, x, bg_color, false);
             }
             return;
         }
@@ -323,7 +359,8 @@ impl VicII {
                 // Bit 7 is the leftmost pixel
                 let pixel_set = (pattern & (0x80 >> bit)) != 0;
                 let color = if pixel_set { fg_color } else { bg_color };
-                self.framebuffer[display_line][x_base + bit] = color;
+                // In text mode, foreground pixels (pixel_set) are graphics
+                self.set_pixel(display_line, x_base + bit, color, pixel_set);
             }
         }
     }
@@ -353,7 +390,7 @@ impl VicII {
         if char_row >= CHAR_ROWS {
             let bg_color = self.background_color();
             for x in 0..SCREEN_WIDTH {
-                self.framebuffer[display_line][x] = bg_color;
+                self.set_pixel(display_line, x, bg_color, false);
             }
             return;
         }
@@ -401,6 +438,10 @@ impl VicII {
                     let shift = 6 - (bit_pair * 2);
                     let bits = (pattern >> shift) & 0x03;
 
+                    // In multicolor text mode, bit pattern 00 is background (not foreground)
+                    // Other patterns (01, 10, 11) are considered foreground for sprite priority
+                    let is_foreground = bits != 0b00;
+
                     let color = match bits {
                         0b00 => bg_color_0, // Background 0
                         0b01 => bg_color_1, // Background 1
@@ -411,8 +452,8 @@ impl VicII {
 
                     // Each bit pair produces 2 pixels of the same color
                     let px = x_base + bit_pair * 2;
-                    self.framebuffer[display_line][px] = color;
-                    self.framebuffer[display_line][px + 1] = color;
+                    self.set_pixel(display_line, px, color, is_foreground);
+                    self.set_pixel(display_line, px + 1, color, is_foreground);
                 }
             } else {
                 // Standard hires mode for this character (bit 3 clear)
@@ -421,7 +462,7 @@ impl VicII {
                 for bit in 0..8 {
                     let pixel_set = (pattern & (0x80 >> bit)) != 0;
                     let color = if pixel_set { fg_color } else { bg_color_0 };
-                    self.framebuffer[display_line][x_base + bit] = color;
+                    self.set_pixel(display_line, x_base + bit, color, pixel_set);
                 }
             }
         }
@@ -454,7 +495,7 @@ impl VicII {
         if char_row >= CHAR_ROWS {
             let bg_color = self.background_color();
             for x in 0..SCREEN_WIDTH {
-                self.framebuffer[display_line][x] = bg_color;
+                self.set_pixel(display_line, x, bg_color, false);
             }
             return;
         }
@@ -496,7 +537,8 @@ impl VicII {
                 // Bit 7 is the leftmost pixel
                 let pixel_set = (pattern & (0x80 >> bit)) != 0;
                 let color = if pixel_set { fg_color } else { bg_color };
-                self.framebuffer[display_line][x_base + bit] = color;
+                // In bitmap mode, set pixels are foreground graphics
+                self.set_pixel(display_line, x_base + bit, color, pixel_set);
             }
         }
     }
@@ -531,7 +573,7 @@ impl VicII {
         if char_row >= CHAR_ROWS {
             let bg_color = self.background_color();
             for x in 0..SCREEN_WIDTH {
-                self.framebuffer[display_line][x] = bg_color;
+                self.set_pixel(display_line, x, bg_color, false);
             }
             return;
         }
@@ -579,6 +621,10 @@ impl VicII {
                 let shift = 6 - (bit_pair * 2);
                 let bits = (pattern >> shift) & 0x03;
 
+                // In multicolor bitmap mode, bit pattern 00 is background
+                // Other patterns (01, 10, 11) are foreground graphics
+                let is_foreground = bits != 0b00;
+
                 let color = match bits {
                     0b00 => bg_color_0, // Background 0
                     0b01 => color_01,   // Screen RAM upper nibble
@@ -589,8 +635,8 @@ impl VicII {
 
                 // Each bit pair produces 2 pixels of the same color
                 let px = x_base + bit_pair * 2;
-                self.framebuffer[display_line][px] = color;
-                self.framebuffer[display_line][px + 1] = color;
+                self.set_pixel(display_line, px, color, is_foreground);
+                self.set_pixel(display_line, px + 1, color, is_foreground);
             }
         }
     }
@@ -620,7 +666,7 @@ impl VicII {
         if char_row >= CHAR_ROWS {
             let bg_color = self.background_color();
             for x in 0..SCREEN_WIDTH {
-                self.framebuffer[display_line][x] = bg_color;
+                self.set_pixel(display_line, x, bg_color, false);
             }
             return;
         }
@@ -673,7 +719,8 @@ impl VicII {
                 // Bit 7 is the leftmost pixel
                 let pixel_set = (pattern & (0x80 >> bit)) != 0;
                 let color = if pixel_set { fg_color } else { bg_color };
-                self.framebuffer[display_line][x_base + bit] = color;
+                // In ECM text mode, foreground pixels (pixel_set) are graphics
+                self.set_pixel(display_line, x_base + bit, color, pixel_set);
             }
         }
     }
@@ -1025,9 +1072,14 @@ impl VicII {
                 SPRITE_WIDTH
             };
 
+            // Check sprite-to-background priority (T075)
+            // When the bit is set in $1B, the sprite appears BEHIND foreground graphics
+            let sprite_behind_bg = self.sprite_behind_background(sprite_num);
+
             // Get the 3 bytes of sprite data for this line
             let data_offset = sprite_data_line * SPRITE_BYTES_PER_LINE;
-            let line_data = &sprite_data[sprite_num][data_offset..data_offset + SPRITE_BYTES_PER_LINE];
+            let line_data =
+                &sprite_data[sprite_num][data_offset..data_offset + SPRITE_BYTES_PER_LINE];
 
             // Check if sprite is in multicolor mode (T073)
             let multicolor = self.sprite_multicolor(sprite_num);
@@ -1081,9 +1133,16 @@ impl VicII {
                                 continue;
                             }
 
-                            // Draw the pixel
-                            // TODO (T075): Handle sprite-to-background priority
-                            self.framebuffer[display_line][screen_x as usize] = color;
+                            let x = screen_x as usize;
+
+                            // T075: Sprite-to-background priority
+                            // If sprite is behind background and there's foreground at this pixel,
+                            // don't draw the sprite pixel
+                            if sprite_behind_bg && self.is_foreground_pixel(display_line, x) {
+                                continue;
+                            }
+
+                            self.framebuffer[display_line][x] = color;
                         }
                     }
                 }
@@ -1124,9 +1183,16 @@ impl VicII {
                                 continue;
                             }
 
-                            // Draw the pixel
-                            // TODO (T075): Handle sprite-to-background priority
-                            self.framebuffer[display_line][screen_x as usize] = sprite_color;
+                            let x = screen_x as usize;
+
+                            // T075: Sprite-to-background priority
+                            // If sprite is behind background and there's foreground at this pixel,
+                            // don't draw the sprite pixel
+                            if sprite_behind_bg && self.is_foreground_pixel(display_line, x) {
+                                continue;
+                            }
+
+                            self.framebuffer[display_line][x] = sprite_color;
                         }
                     }
                 }
@@ -3298,8 +3364,14 @@ mod tests {
         );
 
         // Adjacent pixels should still be background
-        assert_eq!(vic.framebuffer[10][49], 0x06, "Left of sprite should be background");
-        assert_eq!(vic.framebuffer[10][51], 0x06, "Right of sprite should be background");
+        assert_eq!(
+            vic.framebuffer[10][49], 0x06,
+            "Left of sprite should be background"
+        );
+        assert_eq!(
+            vic.framebuffer[10][51], 0x06,
+            "Right of sprite should be background"
+        );
     }
 
     #[test]
@@ -3459,7 +3531,10 @@ mod tests {
         vic.render_sprites_scanline(51, &sprite_data);
 
         // Screen X = 300 - 24 = 276
-        assert_eq!(vic.framebuffer[0][276], 0x01, "Sprite should render at X=276");
+        assert_eq!(
+            vic.framebuffer[0][276], 0x01,
+            "Sprite should render at X=276"
+        );
     }
 
     #[test]
@@ -3491,7 +3566,10 @@ mod tests {
 
         // Both lines should have the sprite pixel
         assert_eq!(vic.framebuffer[0][0], 0x01, "First line should have sprite");
-        assert_eq!(vic.framebuffer[1][0], 0x01, "Second line should also have sprite (Y expand)");
+        assert_eq!(
+            vic.framebuffer[1][0], 0x01,
+            "Second line should also have sprite (Y expand)"
+        );
     }
 
     #[test]
@@ -3520,9 +3598,18 @@ mod tests {
         vic.render_sprites_scanline(51, &sprite_data);
 
         // With X expansion, one pixel should become two pixels
-        assert_eq!(vic.framebuffer[0][0], 0x01, "First pixel of expanded sprite");
-        assert_eq!(vic.framebuffer[0][1], 0x01, "Second pixel of expanded sprite");
-        assert_eq!(vic.framebuffer[0][2], 0x06, "Third pixel should be background");
+        assert_eq!(
+            vic.framebuffer[0][0], 0x01,
+            "First pixel of expanded sprite"
+        );
+        assert_eq!(
+            vic.framebuffer[0][1], 0x01,
+            "Second pixel of expanded sprite"
+        );
+        assert_eq!(
+            vic.framebuffer[0][2], 0x06,
+            "Third pixel should be background"
+        );
     }
 
     #[test]
@@ -3612,12 +3699,30 @@ mod tests {
 
         assert_eq!(vic.framebuffer[0][0], 0x05, "Pixel 0 should be MC0 (green)");
         assert_eq!(vic.framebuffer[0][1], 0x05, "Pixel 1 should be MC0 (green)");
-        assert_eq!(vic.framebuffer[0][2], 0x02, "Pixel 2 should be sprite color (red)");
-        assert_eq!(vic.framebuffer[0][3], 0x02, "Pixel 3 should be sprite color (red)");
-        assert_eq!(vic.framebuffer[0][4], 0x07, "Pixel 4 should be MC1 (yellow)");
-        assert_eq!(vic.framebuffer[0][5], 0x07, "Pixel 5 should be MC1 (yellow)");
-        assert_eq!(vic.framebuffer[0][6], 0x06, "Pixel 6 should be background (transparent)");
-        assert_eq!(vic.framebuffer[0][7], 0x06, "Pixel 7 should be background (transparent)");
+        assert_eq!(
+            vic.framebuffer[0][2], 0x02,
+            "Pixel 2 should be sprite color (red)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][3], 0x02,
+            "Pixel 3 should be sprite color (red)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][4], 0x07,
+            "Pixel 4 should be MC1 (yellow)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][5], 0x07,
+            "Pixel 5 should be MC1 (yellow)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][6], 0x06,
+            "Pixel 6 should be background (transparent)"
+        );
+        assert_eq!(
+            vic.framebuffer[0][7], 0x06,
+            "Pixel 7 should be background (transparent)"
+        );
     }
 
     #[test]
@@ -3655,11 +3760,15 @@ mod tests {
         for x in 0..24 {
             assert_eq!(
                 vic.framebuffer[0][x], 0x02,
-                "Pixel {} should be sprite color", x
+                "Pixel {} should be sprite color",
+                x
             );
         }
         // Next pixel should be background
-        assert_eq!(vic.framebuffer[0][24], 0x06, "Pixel 24 should be background");
+        assert_eq!(
+            vic.framebuffer[0][24], 0x06,
+            "Pixel 24 should be background"
+        );
     }
 
     #[test]
@@ -3805,19 +3914,181 @@ mod tests {
         vic.render_sprites_scanline(51, &sprite_data);
 
         // Pattern 00: Transparent (pixels 0-1)
-        assert_eq!(vic.framebuffer[0][0], 0x06, "Pattern 00 pixel 0 = transparent");
-        assert_eq!(vic.framebuffer[0][1], 0x06, "Pattern 00 pixel 1 = transparent");
+        assert_eq!(
+            vic.framebuffer[0][0], 0x06,
+            "Pattern 00 pixel 0 = transparent"
+        );
+        assert_eq!(
+            vic.framebuffer[0][1], 0x06,
+            "Pattern 00 pixel 1 = transparent"
+        );
 
         // Pattern 01: MC0 (pixels 2-3)
         assert_eq!(vic.framebuffer[0][2], 0x05, "Pattern 01 pixel 0 = MC0");
         assert_eq!(vic.framebuffer[0][3], 0x05, "Pattern 01 pixel 1 = MC0");
 
         // Pattern 10: Sprite color (pixels 4-5)
-        assert_eq!(vic.framebuffer[0][4], 0x02, "Pattern 10 pixel 0 = sprite color");
-        assert_eq!(vic.framebuffer[0][5], 0x02, "Pattern 10 pixel 1 = sprite color");
+        assert_eq!(
+            vic.framebuffer[0][4], 0x02,
+            "Pattern 10 pixel 0 = sprite color"
+        );
+        assert_eq!(
+            vic.framebuffer[0][5], 0x02,
+            "Pattern 10 pixel 1 = sprite color"
+        );
 
         // Pattern 11: MC1 (pixels 6-7)
         assert_eq!(vic.framebuffer[0][6], 0x07, "Pattern 11 pixel 0 = MC1");
         assert_eq!(vic.framebuffer[0][7], 0x07, "Pattern 11 pixel 1 = MC1");
+    }
+
+    #[test]
+    fn test_sprite_to_background_priority_sprite_in_front() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0 and place it at a visible position
+        vic.registers[0x15] = 0x01; // Enable sprite 0
+        vic.registers[0x00] = 24; // Sprite 0 X = 24 (left edge of display)
+        vic.registers[0x01] = 51; // Sprite 0 Y = 51 (first visible line)
+        vic.registers[0x10] = 0; // X MSB = 0 for all sprites
+        vic.registers[0x27] = 0x02; // Sprite 0 color = red
+        vic.registers[0x1B] = 0x00; // All sprites in FRONT of background
+
+        // Create character ROM with a pattern that has foreground pixels
+        let mut char_rom = vec![0u8; 2048];
+        char_rom[0] = 0xFF; // Character 0, line 0: all pixels set (foreground)
+
+        // Screen RAM: character 0 at position 0
+        let screen_ram = vec![0u8; 1000];
+
+        // Color RAM: foreground color = 1 (white)
+        let color_ram = vec![0x01u8; 1000];
+
+        // First render the text (creates foreground mask)
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Now render sprites
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        // Sprite 0: first line has pixel set at leftmost position
+        sprite_data[0][0] = 0x80; // Bit 7 set = leftmost pixel
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Sprite is in front, so sprite color should win over text foreground
+        assert_eq!(
+            vic.framebuffer[0][0], 0x02,
+            "Sprite in front should override foreground text"
+        );
+    }
+
+    #[test]
+    fn test_sprite_to_background_priority_sprite_behind() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0 and place it at a visible position
+        vic.registers[0x15] = 0x01; // Enable sprite 0
+        vic.registers[0x00] = 24; // Sprite 0 X = 24 (left edge of display)
+        vic.registers[0x01] = 51; // Sprite 0 Y = 51 (first visible line)
+        vic.registers[0x10] = 0; // X MSB = 0 for all sprites
+        vic.registers[0x27] = 0x02; // Sprite 0 color = red
+        vic.registers[0x1B] = 0x01; // Sprite 0 BEHIND background
+
+        // Create character ROM with a pattern that has foreground pixels
+        let mut char_rom = vec![0u8; 2048];
+        char_rom[0] = 0xFF; // Character 0, line 0: all pixels set (foreground)
+
+        // Screen RAM: character 0 at position 0
+        let screen_ram = vec![0u8; 1000];
+
+        // Color RAM: foreground color = 1 (white)
+        let color_ram = vec![0x01u8; 1000];
+
+        // First render the text (creates foreground mask)
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Now render sprites
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        // Sprite 0: first line has pixel set at leftmost position
+        sprite_data[0][0] = 0x80; // Bit 7 set = leftmost pixel
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Sprite is behind foreground, so text foreground color should be preserved
+        assert_eq!(
+            vic.framebuffer[0][0], 0x01,
+            "Sprite behind should not override foreground text"
+        );
+    }
+
+    #[test]
+    fn test_sprite_to_background_priority_sprite_behind_shows_in_background_area() {
+        let mut vic = VicII::new();
+
+        // Enable sprite 0 and place it at a visible position
+        vic.registers[0x15] = 0x01; // Enable sprite 0
+        vic.registers[0x00] = 24; // Sprite 0 X = 24 (left edge of display)
+        vic.registers[0x01] = 51; // Sprite 0 Y = 51 (first visible line)
+        vic.registers[0x10] = 0; // X MSB = 0 for all sprites
+        vic.registers[0x27] = 0x02; // Sprite 0 color = red
+        vic.registers[0x21] = 0x06; // Background color = blue
+        vic.registers[0x1B] = 0x01; // Sprite 0 BEHIND background
+
+        // Create character ROM with a pattern that has some background pixels
+        let mut char_rom = vec![0u8; 2048];
+        char_rom[0] = 0x00; // Character 0, line 0: all pixels clear (background)
+
+        // Screen RAM: character 0 at position 0
+        let screen_ram = vec![0u8; 1000];
+
+        // Color RAM: foreground color = 1 (white)
+        let color_ram = vec![0x01u8; 1000];
+
+        // First render the text (creates foreground mask)
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Now render sprites
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        // Sprite 0: first line has pixel set at leftmost position
+        sprite_data[0][0] = 0x80; // Bit 7 set = leftmost pixel
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Sprite is behind, but this area is background (not foreground),
+        // so sprite should still be visible
+        assert_eq!(
+            vic.framebuffer[0][0], 0x02,
+            "Sprite behind should show through background color areas"
+        );
+    }
+
+    #[test]
+    fn test_sprite_to_sprite_priority() {
+        let mut vic = VicII::new();
+
+        // Enable sprites 0 and 1 at the same position
+        vic.registers[0x15] = 0x03; // Enable sprites 0 and 1
+        vic.registers[0x00] = 24; // Sprite 0 X = 24
+        vic.registers[0x01] = 51; // Sprite 0 Y = 51
+        vic.registers[0x02] = 24; // Sprite 1 X = 24 (same as sprite 0)
+        vic.registers[0x03] = 51; // Sprite 1 Y = 51 (same as sprite 0)
+        vic.registers[0x10] = 0; // X MSB = 0 for all sprites
+        vic.registers[0x27] = 0x02; // Sprite 0 color = red
+        vic.registers[0x28] = 0x05; // Sprite 1 color = green
+
+        // Clear foreground mask for this line
+        vic.clear_foreground_mask_line(0);
+
+        // Both sprites have the same pixel set
+        let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
+        sprite_data[0][0] = 0x80; // Sprite 0: leftmost pixel
+        sprite_data[1][0] = 0x80; // Sprite 1: leftmost pixel (same position)
+
+        vic.render_sprites_scanline(51, &sprite_data);
+
+        // Sprite 0 has higher priority than sprite 1, so sprite 0 color should win
+        assert_eq!(
+            vic.framebuffer[0][0], 0x02,
+            "Sprite 0 (higher priority) should appear on top of sprite 1"
+        );
     }
 }
