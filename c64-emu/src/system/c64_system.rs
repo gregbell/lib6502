@@ -170,23 +170,21 @@ impl C64System {
     /// Render one scanline of the display.
     ///
     /// This extracts the necessary memory regions (screen RAM, color RAM,
-    /// character ROM) and calls the VIC-II scanline renderer.
+    /// character ROM/bitmap data) and calls the VIC-II scanline renderer.
     fn render_scanline(&mut self, scanline: u16) {
         let mem = self.cpu.memory_mut();
 
         // Get VIC-II memory pointers from register $D018
         // Bits 4-7: Screen memory base address (× $0400)
-        // Bits 1-3: Character memory base address (× $0800)
+        // Bits 1-3: Character/Bitmap memory base address (× $0800 for char, bit 3 for bitmap)
         let mem_pointers = mem.vic.read(0x18);
 
         // Calculate screen RAM base address within VIC bank
         // Default: $0400 (screen RAM at $0400-$07E7)
         let screen_offset = ((mem_pointers >> 4) & 0x0F) as u16 * 0x0400;
 
-        // Calculate character base address within VIC bank
-        // Bits 1-3 of $D018: character base × $0800
-        // Default: $1000 (character ROM at $1000-$1FFF in bank 0)
-        let char_offset = ((mem_pointers >> 1) & 0x07) as u16 * 0x0800;
+        // Check if we're in bitmap mode (BMM bit in $D011)
+        let is_bitmap_mode = mem.vic.bitmap_mode();
 
         // Get VIC bank (0-3) from CIA2 port A
         let vic_bank = mem.vic_bank();
@@ -200,24 +198,48 @@ impl C64System {
             *byte = mem.vic_read(addr);
         }
 
-        // Build character ROM/RAM slice (2048 bytes for 256 characters × 8 lines)
-        // In banks 0 and 2, character ROM is visible at $1000-$1FFF
-        // In other banks/addresses, character data comes from RAM
-        let mut char_data = [0u8; 2048];
-        for (i, byte) in char_data.iter_mut().enumerate() {
-            let addr = char_offset + i as u16;
-            *byte = mem.vic_read(addr);
-        }
-
         // Get color RAM directly (always at $D800, not banked)
         let mut color_ram = [0u8; 1000];
         for (i, byte) in color_ram.iter_mut().enumerate() {
             *byte = mem.color_ram.read(i as u16) & 0x0F;
         }
 
-        // Call VIC-II scanline renderer
-        mem.vic
-            .step_scanline(scanline, &char_data, &screen_ram, &color_ram);
+        if is_bitmap_mode {
+            // Bitmap mode: fetch 8000 bytes of bitmap data
+            // In bitmap mode, bit 3 of $D018 selects base address:
+            // - Bit 3 = 0: $0000 within VIC bank
+            // - Bit 3 = 1: $2000 within VIC bank
+            let bitmap_offset = if (mem_pointers & 0x08) != 0 {
+                0x2000u16
+            } else {
+                0x0000u16
+            };
+
+            let mut bitmap_data = [0u8; 8000];
+            for (i, byte) in bitmap_data.iter_mut().enumerate() {
+                let addr = bitmap_offset + i as u16;
+                *byte = mem.vic_read(addr);
+            }
+
+            // Call VIC-II scanline renderer with bitmap data
+            mem.vic
+                .step_scanline(scanline, &bitmap_data, &screen_ram, &color_ram);
+        } else {
+            // Text mode: fetch character ROM/RAM (2048 bytes)
+            // Bits 1-3 of $D018: character base × $0800
+            // Default: $1000 (character ROM at $1000-$1FFF in bank 0)
+            let char_offset = ((mem_pointers >> 1) & 0x07) as u16 * 0x0800;
+
+            let mut char_data = [0u8; 2048];
+            for (i, byte) in char_data.iter_mut().enumerate() {
+                let addr = char_offset + i as u16;
+                *byte = mem.vic_read(addr);
+            }
+
+            // Call VIC-II scanline renderer with character data
+            mem.vic
+                .step_scanline(scanline, &char_data, &screen_ram, &color_ram);
+        }
 
         // Suppress unused warning for bank_base (will be used when VIC bank selection is refined)
         let _ = bank_base;
