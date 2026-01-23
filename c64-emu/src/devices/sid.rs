@@ -44,6 +44,9 @@ pub struct SidVoice {
 
     /// 24-bit phase accumulator.
     pub accumulator: u32,
+    /// Previous MSB state for hard sync detection.
+    /// Used to detect 0->1 transition on bit 23.
+    pub prev_msb: bool,
     /// 23-bit noise LFSR.
     pub lfsr: u32,
     /// Current envelope state.
@@ -66,6 +69,7 @@ impl SidVoice {
             attack_decay: 0,
             sustain_release: 0,
             accumulator: 0,
+            prev_msb: false,
             lfsr: 0x7FFFF8, // Initial LFSR state
             envelope_state: EnvelopeState::Release,
             envelope_counter: 0,
@@ -84,6 +88,24 @@ impl SidVoice {
     #[inline]
     pub fn waveform(&self) -> u8 {
         (self.control >> 4) & 0x0F
+    }
+
+    /// Check if test bit is set (resets and holds accumulator).
+    #[inline]
+    pub fn test_bit(&self) -> bool {
+        self.control & 0x08 != 0
+    }
+
+    /// Check if hard sync is enabled.
+    #[inline]
+    pub fn sync_enabled(&self) -> bool {
+        self.control & 0x02 != 0
+    }
+
+    /// Get the current MSB of the accumulator (bit 23).
+    #[inline]
+    pub fn accumulator_msb(&self) -> bool {
+        self.accumulator & 0x0080_0000 != 0
     }
 }
 
@@ -190,16 +212,81 @@ impl Sid6581 {
     }
 
     /// Step the SID by one clock cycle.
+    ///
+    /// This clocks all three voices, updating their phase accumulators and
+    /// envelope generators, then generates audio samples at the configured rate.
     pub fn clock(&mut self) {
-        // TODO: Implement voice clocking, envelope, and waveform generation
-        // This will be implemented in tasks T077-T085
+        // Clock all voice phase accumulators and handle hard sync
+        self.clock_phase_accumulators();
 
+        // TODO: Implement envelope clocking (T081)
+        // TODO: Implement waveform generation and mixing (T078-T080)
+        // TODO: Implement filter processing (T083-T084)
+
+        // Audio sample generation
         self.sample_accumulator += 1.0;
         if self.sample_accumulator >= self.cycles_per_sample {
             self.sample_accumulator -= self.cycles_per_sample;
             if self.audio_enabled {
-                // Generate a sample (currently silent)
+                // Generate a sample (currently silent until T078+)
                 self.sample_buffer.push(0.0);
+            }
+        }
+    }
+
+    /// Clock all voice phase accumulators with hard sync support.
+    ///
+    /// The 24-bit phase accumulator is incremented by the 16-bit frequency
+    /// register value on each clock cycle. This produces the fundamental
+    /// waveform frequency: F = (Fn × Fclk/16777216) Hz
+    ///
+    /// Where:
+    /// - Fn = 16-bit frequency register value
+    /// - Fclk = system clock (985248 Hz PAL, 1022727 Hz NTSC)
+    ///
+    /// Hard sync: When voice N has SYNC bit set, it resets when the MSB of
+    /// the sync source voice (N-1, with wraparound) transitions from 0 to 1.
+    fn clock_phase_accumulators(&mut self) {
+        // Store previous MSB states before updating accumulators
+        let prev_msb = [
+            self.voices[0].accumulator_msb(),
+            self.voices[1].accumulator_msb(),
+            self.voices[2].accumulator_msb(),
+        ];
+
+        // Update each voice's accumulator
+        for voice_idx in 0..VOICE_COUNT {
+            let voice = &mut self.voices[voice_idx];
+
+            // Store previous MSB for sync detection
+            voice.prev_msb = prev_msb[voice_idx];
+
+            // Handle test bit - when set, resets and holds accumulator at zero
+            if voice.test_bit() {
+                voice.accumulator = 0;
+                continue;
+            }
+
+            // Increment phase accumulator by frequency value (wraps at 24 bits)
+            voice.accumulator = voice.accumulator.wrapping_add(voice.freq as u32);
+            voice.accumulator &= 0x00FF_FFFF; // Mask to 24 bits
+        }
+
+        // Apply hard sync after all accumulators have been updated
+        // Sync source mapping: Voice 1 <- Voice 3, Voice 2 <- Voice 1, Voice 3 <- Voice 2
+        for voice_idx in 0..VOICE_COUNT {
+            if self.voices[voice_idx].sync_enabled() {
+                // Get sync source voice index (with wraparound)
+                let sync_source_idx = if voice_idx == 0 { 2 } else { voice_idx - 1 };
+
+                // Check if sync source had a 0->1 MSB transition
+                let source_had_transition =
+                    !prev_msb[sync_source_idx] && self.voices[sync_source_idx].accumulator_msb();
+
+                if source_had_transition {
+                    // Reset this voice's accumulator
+                    self.voices[voice_idx].accumulator = 0;
+                }
             }
         }
     }
@@ -426,5 +513,213 @@ mod tests {
     fn test_size() {
         let sid = Sid6581::new();
         assert_eq!(sid.size(), 32);
+    }
+
+    // =====================================================
+    // Phase Accumulator Tests (T077)
+    // =====================================================
+
+    #[test]
+    fn test_phase_accumulator_increments() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 1 frequency to 0x0100 (256)
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x01);
+
+        // Initial accumulator is 0
+        assert_eq!(sid.voices[0].accumulator, 0);
+
+        // After one clock, accumulator should be 256
+        sid.clock();
+        assert_eq!(sid.voices[0].accumulator, 256);
+
+        // After two clocks, accumulator should be 512
+        sid.clock();
+        assert_eq!(sid.voices[0].accumulator, 512);
+    }
+
+    #[test]
+    fn test_phase_accumulator_wraps_at_24_bits() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 1 frequency to 0x1000 (4096)
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x10);
+
+        // Set accumulator near the wrap point
+        sid.voices[0].accumulator = 0x00FF_F000; // Near 24-bit max
+
+        // Clock should wrap the accumulator
+        sid.clock();
+        // Expected: 0x00FF_F000 + 0x1000 = 0x0100_0000, masked to 24 bits = 0x0000_0000
+        assert_eq!(sid.voices[0].accumulator, 0);
+    }
+
+    #[test]
+    fn test_phase_accumulator_frequency_change() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 1 frequency to 0x0001
+        sid.write(0x00, 0x01);
+        sid.write(0x01, 0x00);
+
+        // Clock a few times
+        for _ in 0..10 {
+            sid.clock();
+        }
+        assert_eq!(sid.voices[0].accumulator, 10);
+
+        // Change frequency to 0x0100
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x01);
+
+        // Clock a few more times
+        for _ in 0..10 {
+            sid.clock();
+        }
+        // Should now be 10 + (10 * 256) = 2570
+        assert_eq!(sid.voices[0].accumulator, 2570);
+    }
+
+    #[test]
+    fn test_test_bit_resets_accumulator() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 1 frequency
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x10);
+
+        // Clock to build up accumulator
+        for _ in 0..100 {
+            sid.clock();
+        }
+        assert!(sid.voices[0].accumulator > 0);
+
+        // Set test bit (bit 3 of control register)
+        sid.write(0x04, 0x08);
+
+        // Clock - accumulator should be held at 0
+        sid.clock();
+        assert_eq!(sid.voices[0].accumulator, 0);
+
+        // Clear test bit
+        sid.write(0x04, 0x00);
+
+        // Clock - accumulator should start incrementing again
+        sid.clock();
+        assert_eq!(sid.voices[0].accumulator, 0x1000);
+    }
+
+    #[test]
+    fn test_hard_sync_resets_target_voice() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 1 frequency high (will quickly wrap)
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x80); // 0x8000
+
+        // Set voice 2 frequency lower
+        sid.write(0x07, 0x00);
+        sid.write(0x08, 0x10); // 0x1000
+
+        // Enable sync on voice 2 (synced by voice 1)
+        // Control register for voice 2 is at offset 0x0B
+        sid.write(0x0B, 0x02); // SYNC bit set
+
+        // Clock until voice 1's MSB transitions 0->1
+        // MSB is bit 23, so we need accumulator >= 0x800000
+        // With freq 0x8000, after 256 clocks: 256 * 0x8000 = 0x800000
+        for _ in 0..256 {
+            sid.clock();
+        }
+
+        // At this point voice 1's accumulator MSB should have just transitioned
+        // Voice 2 should have been reset (accumulator = 0)
+        // Voice 2's accumulator would have been: 256 * 0x1000 = 0x100000
+        // But sync should have reset it to 0
+        assert_eq!(
+            sid.voices[1].accumulator, 0,
+            "Voice 2 should be reset by sync from voice 1"
+        );
+    }
+
+    #[test]
+    fn test_all_three_voices_accumulate_independently() {
+        let mut sid = Sid6581::new();
+
+        // Set different frequencies for all three voices
+        sid.write(0x00, 0x01);
+        sid.write(0x01, 0x00); // Voice 1: freq = 1
+        sid.write(0x07, 0x02);
+        sid.write(0x08, 0x00); // Voice 2: freq = 2
+        sid.write(0x0E, 0x03);
+        sid.write(0x0F, 0x00); // Voice 3: freq = 3
+
+        // Clock 100 times
+        for _ in 0..100 {
+            sid.clock();
+        }
+
+        // Each voice should have accumulated its frequency * 100
+        assert_eq!(sid.voices[0].accumulator, 100);
+        assert_eq!(sid.voices[1].accumulator, 200);
+        assert_eq!(sid.voices[2].accumulator, 300);
+    }
+
+    #[test]
+    fn test_voice_3_readback_reflects_accumulator() {
+        let mut sid = Sid6581::new();
+
+        // Set voice 3 frequency
+        sid.write(0x0E, 0x00);
+        sid.write(0x0F, 0x10); // 0x1000
+
+        // Clock to build up accumulator
+        for _ in 0..256 {
+            sid.clock();
+        }
+        // Accumulator: 256 * 0x1000 = 0x100000
+
+        // Read voice 3 oscillator output (register $D41B = offset 0x1B)
+        // Returns bits 16-23 of accumulator
+        let osc_output = sid.read(0x1B);
+        assert_eq!(
+            osc_output, 0x10,
+            "OSC3 should reflect accumulator bits 16-23"
+        );
+    }
+
+    #[test]
+    fn test_sync_voice_mapping() {
+        // Test the sync source mapping:
+        // Voice 1 is synced by Voice 3
+        // Voice 2 is synced by Voice 1
+        // Voice 3 is synced by Voice 2
+
+        let mut sid = Sid6581::new();
+
+        // Set all voices to high frequency that will wrap quickly
+        for voice in 0..3 {
+            let base_offset = voice * 7;
+            sid.write(base_offset as u16, 0x00);
+            sid.write(base_offset as u16 + 1, 0x80); // 0x8000
+        }
+
+        // Enable sync on voice 1 (synced by voice 3)
+        sid.write(0x04, 0x02);
+
+        // Run until voice 3's MSB transitions
+        // Initial accumulator = 0, freq = 0x8000
+        // After 256 clocks: 0x800000 (MSB = 1)
+        for _ in 0..256 {
+            sid.clock();
+        }
+
+        // Voice 1 should have been reset by voice 3's sync
+        assert_eq!(
+            sid.voices[0].accumulator, 0,
+            "Voice 1 should be reset by voice 3"
+        );
     }
 }
