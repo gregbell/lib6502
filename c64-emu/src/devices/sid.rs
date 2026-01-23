@@ -421,22 +421,60 @@ impl Default for SidVoice {
     }
 }
 
+/// Filter mode flags from register $D418 bits 4-6.
+///
+/// Multiple modes can be enabled simultaneously to create combined responses.
+/// The outputs are mixed in hardware, creating notch (LP+HP) or other combinations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FilterMode {
+    /// Low-pass filter enabled (bit 4).
+    pub low_pass: bool,
+    /// Band-pass filter enabled (bit 5).
+    pub band_pass: bool,
+    /// High-pass filter enabled (bit 6).
+    pub high_pass: bool,
+}
+
+impl FilterMode {
+    /// Create filter mode from register value.
+    pub fn from_register(value: u8) -> Self {
+        Self {
+            low_pass: value & 0x10 != 0,
+            band_pass: value & 0x20 != 0,
+            high_pass: value & 0x40 != 0,
+        }
+    }
+
+    /// Check if any filter mode is enabled.
+    pub fn any_enabled(&self) -> bool {
+        self.low_pass || self.band_pass || self.high_pass
+    }
+}
+
+
 /// SID filter state.
+///
+/// Implements a simplified state-variable (biquad) filter that approximates
+/// the 6581's analog filter. The filter provides low-pass, band-pass, and
+/// high-pass outputs that can be mixed in various combinations.
+///
+/// The state-variable filter architecture uses two integrators to produce
+/// simultaneous LP/BP/HP outputs with a single cutoff and resonance control.
 #[derive(Debug, Clone)]
 pub struct SidFilter {
     /// 11-bit cutoff frequency.
     pub cutoff: u16,
-    /// 4-bit resonance.
+    /// 4-bit resonance (0-15).
     pub resonance: u8,
-    /// Voice routing through filter (bits 0-2).
+    /// Voice routing through filter (bits 0-2 for voices 1-3, bit 3 for external).
     pub routing: u8,
-    /// Filter mode (bits 4-6 of $D418).
-    pub mode: u8,
+    /// Filter mode (LP/BP/HP from bits 4-6 of $D418).
+    pub mode: FilterMode,
+    /// Raw mode bits for register readback.
+    pub mode_bits: u8,
     /// Filter state: low-pass accumulator.
-    #[allow(dead_code)]
     pub low: f32,
     /// Filter state: band-pass accumulator.
-    #[allow(dead_code)]
     pub band: f32,
 }
 
@@ -447,10 +485,115 @@ impl SidFilter {
             cutoff: 0,
             resonance: 0,
             routing: 0,
-            mode: 0,
+            mode: FilterMode::default(),
+            mode_bits: 0,
             low: 0.0,
             band: 0.0,
         }
+    }
+
+    /// Check if a voice should be routed through the filter.
+    ///
+    /// voice_index: 0-2 for voices 1-3
+    #[inline]
+    pub fn voice_routed(&self, voice_index: usize) -> bool {
+        self.routing & (1 << voice_index) != 0
+    }
+
+    /// Check if external audio input should be routed through the filter.
+    #[inline]
+    pub fn external_routed(&self) -> bool {
+        self.routing & 0x08 != 0
+    }
+
+    /// Calculate the filter cutoff coefficient.
+    ///
+    /// This converts the 11-bit cutoff register value to a coefficient suitable
+    /// for the state-variable filter. The relationship between register value
+    /// and actual frequency is non-linear on the real 6581.
+    ///
+    /// The simplified mapping uses:
+    /// f = 2 * sin(pi * Fc / Fs)
+    ///
+    /// where Fc is the cutoff frequency and Fs is the sample rate.
+    /// For simplicity, we map the 11-bit register (0-2047) to a 0-1 range
+    /// and apply a curve that approximates the 6581's behavior.
+    #[inline]
+    pub fn cutoff_coefficient(&self, sample_rate: f32) -> f32 {
+        // The 6581 filter has a non-linear frequency response.
+        // Cutoff range is roughly 30Hz to ~12kHz depending on chip.
+        // We map the 11-bit register to this range.
+
+        // Normalize cutoff (0-2047) to 0-1
+        let normalized = self.cutoff as f32 / 2047.0;
+
+        // Map to frequency range (30 Hz to ~12 kHz)
+        // Using exponential mapping for more musical response
+        let min_freq = 30.0f32;
+        let max_freq = 12000.0f32;
+        let fc = min_freq * (max_freq / min_freq).powf(normalized);
+
+        // Calculate coefficient: f = 2 * sin(pi * Fc / Fs)
+        // Clamped to prevent instability at high frequencies
+        let w0 = std::f32::consts::PI * fc / sample_rate;
+        (2.0 * w0.sin()).min(0.99)
+    }
+
+    /// Calculate the resonance (Q) coefficient.
+    ///
+    /// The 4-bit resonance register (0-15) controls the feedback amount.
+    /// Higher resonance values create a peak at the cutoff frequency.
+    /// At maximum resonance, the filter can self-oscillate on real hardware.
+    #[inline]
+    pub fn resonance_coefficient(&self) -> f32 {
+        // Map resonance 0-15 to Q^-1 range
+        // Higher resonance = lower damping = higher Q
+        // Q^-1 typically ranges from ~2.0 (no resonance) to ~0.1 (high resonance)
+        let res = self.resonance as f32;
+        // 1/Q ranges from 2.0 (res=0) to ~0.125 (res=15)
+        2.0 - (res * 1.875 / 15.0)
+    }
+
+    /// Process a sample through the filter.
+    ///
+    /// Uses a state-variable filter architecture that produces low-pass,
+    /// band-pass, and high-pass outputs simultaneously. The final output
+    /// is selected based on the filter mode bits.
+    ///
+    /// Returns the filtered sample.
+    pub fn process(&mut self, input: f32, sample_rate: f32) -> f32 {
+        let f = self.cutoff_coefficient(sample_rate);
+        let q_inv = self.resonance_coefficient();
+
+        // State-variable filter update
+        // Reference: Hal Chamberlin's "Musical Applications of Microprocessors"
+        self.low += f * self.band;
+        let high = input - self.low - q_inv * self.band;
+        self.band += f * high;
+
+        // Mix outputs based on filter mode
+        // Multiple modes can be enabled simultaneously
+        let mut output = 0.0f32;
+
+        if self.mode.low_pass {
+            output += self.low;
+        }
+        if self.mode.band_pass {
+            output += self.band;
+        }
+        if self.mode.high_pass {
+            output += high;
+        }
+
+        // If no mode is selected, filter is effectively bypassed for routed voices
+        // (they become silent since filter output is used)
+        output
+    }
+
+    /// Reset filter state (for hard reset or significant parameter changes).
+    pub fn reset_state(&mut self) {
+        self.low = 0.0;
+        self.band = 0.0;
     }
 }
 
@@ -476,12 +619,17 @@ pub struct Sid6581 {
     cycles_per_sample: f32,
     /// Accumulated cycles since last sample.
     sample_accumulator: f32,
+    /// Target sample rate in Hz (for filter calculations).
+    sample_rate: f32,
 
     /// Audio enabled flag.
     audio_enabled: bool,
 }
 
 impl Sid6581 {
+    /// Default sample rate (44.1 kHz).
+    pub const DEFAULT_SAMPLE_RATE: f32 = 44100.0;
+
     /// Create a new SID with default state.
     ///
     /// Default sample rate is 44100 Hz.
@@ -491,15 +639,22 @@ impl Sid6581 {
             filter: SidFilter::new(),
             volume: 0,
             sample_buffer: Vec::with_capacity(1024),
-            cycles_per_sample: 985248.0 / 44100.0, // PAL default
+            cycles_per_sample: 985248.0 / Self::DEFAULT_SAMPLE_RATE, // PAL default
             sample_accumulator: 0.0,
+            sample_rate: Self::DEFAULT_SAMPLE_RATE,
             audio_enabled: true,
         }
     }
 
     /// Set the target sample rate for audio output.
     pub fn set_sample_rate(&mut self, sample_rate: u32, clock_rate: u32) {
-        self.cycles_per_sample = clock_rate as f32 / sample_rate as f32;
+        self.sample_rate = sample_rate as f32;
+        self.cycles_per_sample = clock_rate as f32 / self.sample_rate;
+    }
+
+    /// Get the current sample rate.
+    pub fn sample_rate(&self) -> f32 {
+        self.sample_rate
     }
 
     /// Get and clear the sample buffer.
@@ -521,6 +676,10 @@ impl Sid6581 {
     ///
     /// This clocks all three voices, updating their phase accumulators and
     /// envelope generators, then generates audio samples at the configured rate.
+    ///
+    /// Audio samples are generated at approximately 44.1kHz (or configured sample rate)
+    /// by accumulating cycles and outputting a sample when enough cycles have passed.
+    /// This corresponds to roughly 22-23 SID clocks per sample at PAL clock rate.
     pub fn clock(&mut self) {
         // Clock all voice phase accumulators and handle hard sync
         self.clock_phase_accumulators();
@@ -528,29 +687,30 @@ impl Sid6581 {
         // Clock envelope generators for all voices
         self.clock_envelopes();
 
-        // TODO: Implement filter processing (T083-T084)
-
-        // Audio sample generation
+        // Audio sample generation at configured sample rate
+        // ~22.35 cycles per sample at 44.1kHz with PAL clock (985248 Hz)
         self.sample_accumulator += 1.0;
         if self.sample_accumulator >= self.cycles_per_sample {
             self.sample_accumulator -= self.cycles_per_sample;
             if self.audio_enabled {
-                // Generate waveform output for all voices and mix
+                // Generate waveform output for all voices, route through filter, and mix
                 let sample = self.generate_output();
                 self.sample_buffer.push(sample);
             }
         }
     }
 
-    /// Generate the mixed audio output from all three voices.
+    /// Generate the mixed audio output from all three voices with filter routing.
     ///
     /// This method:
     /// 1. Generates waveform output for each voice (with ring modulation)
-    /// 2. Applies envelope (when implemented)
-    /// 3. Routes through filter (when implemented)
-    /// 4. Applies master volume
-    /// 5. Returns normalized f32 sample
-    fn generate_output(&self) -> f32 {
+    /// 2. Applies envelope to each voice
+    /// 3. Separates voices into filtered and direct paths based on filter routing
+    /// 4. Processes filtered voices through the state-variable filter
+    /// 5. Mixes filtered and direct outputs
+    /// 6. Applies master volume
+    /// 7. Returns normalized f32 sample in range [-1.0, 1.0]
+    fn generate_output(&mut self) -> f32 {
         // Get ring modulation source MSBs for each voice
         // Voice 1 is modulated by voice 3, voice 2 by voice 1, voice 3 by voice 2
         let ring_mod_msb = [
@@ -568,36 +728,71 @@ impl Sid6581 {
 
         // Apply envelope to each voice
         // Waveform output is 0-0xFFF (12 bits), envelope is 0-255
-        // Result is 0 to (4095 * 255) = 1,044,225 before shift
-        // After >> 8, result is 0 to 4079
-        let voice_with_envelope: [i32; 3] = [
-            (voice_outputs[0] as i32 * self.voices[0].envelope_counter as i32) >> 8,
-            (voice_outputs[1] as i32 * self.voices[1].envelope_counter as i32) >> 8,
-            (voice_outputs[2] as i32 * self.voices[2].envelope_counter as i32) >> 8,
+        // Convert to signed float centered around zero for proper audio
+        let voice_with_envelope: [f32; 3] = [
+            Self::voice_to_float(voice_outputs[0], self.voices[0].envelope_counter),
+            Self::voice_to_float(voice_outputs[1], self.voices[1].envelope_counter),
+            Self::voice_to_float(voice_outputs[2], self.voices[2].envelope_counter),
         ];
 
-        // Mix voices (simple sum for now, filter routing in T083-T084)
-        // Max sum: ~4079 * 3 = ~12237
-        let mixed: i32 = voice_with_envelope[0] + voice_with_envelope[1] + voice_with_envelope[2];
+        // Separate voices into filtered and direct paths based on filter routing
+        let mut filter_input = 0.0f32;
+        let mut direct_output = 0.0f32;
+
+        for (voice_idx, &voice_output) in voice_with_envelope.iter().enumerate() {
+            if self.filter.voice_routed(voice_idx) {
+                // This voice goes through the filter
+                filter_input += voice_output;
+            } else {
+                // This voice bypasses the filter
+                direct_output += voice_output;
+            }
+        }
+
+        // Process filtered voices through the filter
+        let sample_rate = self.sample_rate;
+        let filtered_output = if filter_input != 0.0 || self.filter.mode.any_enabled() {
+            self.filter.process(filter_input, sample_rate)
+        } else {
+            0.0
+        };
+
+        // Mix filtered and direct outputs
+        let mixed = filtered_output + direct_output;
 
         // Apply master volume (0-15)
-        // Max: 12237 * 15 / 16 = ~11472
-        let with_volume = (mixed * self.volume as i32) >> 4;
+        let volume_scale = self.volume as f32 / 15.0;
+        let with_volume = mixed * volume_scale;
 
-        // Normalize to f32 range [-1.0, 1.0]
-        // The SID output is inherently unsigned (0 to max), so we need to
-        // center it around zero for audio output.
-        // Max value: ~11472, so mid-point is ~5736
-        // We scale so that max deviation maps to 1.0
-        const MAX_OUTPUT: f32 = 11472.0;
-        const MID_POINT: f32 = MAX_OUTPUT / 2.0;
+        // Clamp to valid range
+        // The maximum theoretical output is bounded by voice count and envelope
+        // We normalize assuming 3 voices at max output
+        let normalized = with_volume / 3.0;
 
-        if with_volume == 0 && self.volume == 0 {
+        if self.volume == 0 {
             // Special case: zero volume means silence
             0.0
         } else {
-            (with_volume as f32 - MID_POINT) / MID_POINT
+            normalized.clamp(-1.0, 1.0)
         }
+    }
+
+    /// Convert a voice output (waveform + envelope) to a centered float value.
+    ///
+    /// The waveform output is 0-0xFFF (12 bits), and envelope is 0-255.
+    /// We center this around zero for proper audio representation.
+    #[inline]
+    fn voice_to_float(waveform: u16, envelope: u8) -> f32 {
+        // Apply envelope: (waveform * envelope) >> 8
+        // This gives a range of 0 to ~4079
+        let value = (waveform as i32 * envelope as i32) >> 8;
+
+        // Center around zero: subtract half of max value (2048)
+        // and normalize to approximately -1.0 to 1.0
+        const MID_POINT: f32 = 2048.0;
+        const SCALE: f32 = 2048.0;
+
+        (value as f32 - MID_POINT) / SCALE
     }
 
     /// Get the current waveform output for a voice (for debugging/visualization).
@@ -807,6 +1002,16 @@ impl Sid6581 {
     pub fn voice(&self, index: usize) -> Option<&SidVoice> {
         self.voices.get(index)
     }
+
+    /// Get reference to the filter.
+    pub fn filter(&self) -> &SidFilter {
+        &self.filter
+    }
+
+    /// Get mutable reference to the filter (for testing).
+    pub fn filter_mut(&mut self) -> &mut SidFilter {
+        &mut self.filter
+    }
 }
 
 impl Default for Sid6581 {
@@ -909,7 +1114,8 @@ impl Device for Sid6581 {
             }
             0x18 => {
                 self.volume = value & 0x0F;
-                self.filter.mode = (value >> 4) & 0x07;
+                self.filter.mode_bits = (value >> 4) & 0x07;
+                self.filter.mode = FilterMode::from_register(value);
             }
 
             // Read-only registers or out of range
@@ -989,7 +1195,10 @@ mod tests {
         // Set volume and filter mode
         sid.write(0x18, 0x7F);
         assert_eq!(sid.volume, 0x0F);
-        assert_eq!(sid.filter.mode, 0x07);
+        assert_eq!(sid.filter.mode_bits, 0x07);
+        assert!(sid.filter.mode.low_pass);
+        assert!(sid.filter.mode.band_pass);
+        assert!(sid.filter.mode.high_pass);
     }
 
     #[test]
@@ -2317,5 +2526,401 @@ mod tests {
             "Should transition to sustain immediately at max"
         );
         assert_eq!(sid.voices[0].envelope_counter, 255);
+    }
+
+    // =====================================================
+    // Filter Tests (T083, T084, T085)
+    // =====================================================
+
+    #[test]
+    fn test_filter_mode_from_register() {
+        // Test individual modes
+        let lp_only = FilterMode::from_register(0x10);
+        assert!(lp_only.low_pass);
+        assert!(!lp_only.band_pass);
+        assert!(!lp_only.high_pass);
+
+        let bp_only = FilterMode::from_register(0x20);
+        assert!(!bp_only.low_pass);
+        assert!(bp_only.band_pass);
+        assert!(!bp_only.high_pass);
+
+        let hp_only = FilterMode::from_register(0x40);
+        assert!(!hp_only.low_pass);
+        assert!(!hp_only.band_pass);
+        assert!(hp_only.high_pass);
+
+        // Test combined modes
+        let notch = FilterMode::from_register(0x50); // LP + HP
+        assert!(notch.low_pass);
+        assert!(!notch.band_pass);
+        assert!(notch.high_pass);
+
+        let all_modes = FilterMode::from_register(0x70);
+        assert!(all_modes.low_pass);
+        assert!(all_modes.band_pass);
+        assert!(all_modes.high_pass);
+    }
+
+    #[test]
+    fn test_filter_mode_any_enabled() {
+        let none = FilterMode::from_register(0x00);
+        assert!(!none.any_enabled());
+
+        let lp = FilterMode::from_register(0x10);
+        assert!(lp.any_enabled());
+
+        let all = FilterMode::from_register(0x70);
+        assert!(all.any_enabled());
+    }
+
+    #[test]
+    fn test_filter_voice_routing() {
+        let mut filter = SidFilter::new();
+
+        // Test routing bits
+        filter.routing = 0x00;
+        assert!(!filter.voice_routed(0));
+        assert!(!filter.voice_routed(1));
+        assert!(!filter.voice_routed(2));
+        assert!(!filter.external_routed());
+
+        filter.routing = 0x01;
+        assert!(filter.voice_routed(0));
+        assert!(!filter.voice_routed(1));
+        assert!(!filter.voice_routed(2));
+
+        filter.routing = 0x02;
+        assert!(!filter.voice_routed(0));
+        assert!(filter.voice_routed(1));
+        assert!(!filter.voice_routed(2));
+
+        filter.routing = 0x04;
+        assert!(!filter.voice_routed(0));
+        assert!(!filter.voice_routed(1));
+        assert!(filter.voice_routed(2));
+
+        filter.routing = 0x07;
+        assert!(filter.voice_routed(0));
+        assert!(filter.voice_routed(1));
+        assert!(filter.voice_routed(2));
+
+        filter.routing = 0x08;
+        assert!(filter.external_routed());
+    }
+
+    #[test]
+    fn test_filter_cutoff_coefficient_range() {
+        let mut filter = SidFilter::new();
+        let sample_rate = 44100.0;
+
+        // At minimum cutoff, coefficient should be small
+        filter.cutoff = 0;
+        let coeff_min = filter.cutoff_coefficient(sample_rate);
+        assert!(coeff_min > 0.0);
+        assert!(coeff_min < 0.1);
+
+        // At maximum cutoff, coefficient should be larger (but clamped)
+        filter.cutoff = 2047;
+        let coeff_max = filter.cutoff_coefficient(sample_rate);
+        assert!(coeff_max > coeff_min);
+        assert!(coeff_max <= 0.99);
+    }
+
+    #[test]
+    fn test_filter_resonance_coefficient_range() {
+        let mut filter = SidFilter::new();
+
+        // At minimum resonance, Q^-1 should be high (less resonant)
+        filter.resonance = 0;
+        let q_inv_min = filter.resonance_coefficient();
+        assert!((q_inv_min - 2.0).abs() < 0.01);
+
+        // At maximum resonance, Q^-1 should be low (more resonant)
+        filter.resonance = 15;
+        let q_inv_max = filter.resonance_coefficient();
+        assert!(q_inv_max < q_inv_min);
+        assert!(q_inv_max > 0.0);
+    }
+
+    #[test]
+    fn test_filter_process_low_pass() {
+        let mut filter = SidFilter::new();
+        filter.cutoff = 1024; // Mid-range cutoff
+        filter.resonance = 8;
+        filter.mode = FilterMode::from_register(0x10); // LP only
+
+        let sample_rate = 44100.0;
+
+        // Process several samples to let the filter accumulate state
+        // The state-variable filter needs time to "charge up"
+        for _ in 0..10 {
+            let _ = filter.process(1.0, sample_rate);
+        }
+
+        // Low-pass state should have accumulated
+        assert!(filter.low != 0.0, "Low-pass state should accumulate");
+
+        // The output should reflect the low-pass state
+        let output = filter.process(1.0, sample_rate);
+        assert!(output != 0.0, "LP filter should produce output after warmup");
+    }
+
+    #[test]
+    fn test_filter_process_band_pass() {
+        let mut filter = SidFilter::new();
+        filter.cutoff = 1024;
+        filter.resonance = 8;
+        filter.mode = FilterMode::from_register(0x20); // BP only
+
+        let sample_rate = 44100.0;
+        let _output = filter.process(1.0, sample_rate);
+
+        // Band-pass state should have accumulated
+        assert!(filter.band != 0.0);
+    }
+
+    #[test]
+    fn test_filter_process_no_mode_silence() {
+        let mut filter = SidFilter::new();
+        filter.cutoff = 1024;
+        filter.resonance = 8;
+        filter.mode = FilterMode::from_register(0x00); // No mode
+
+        let sample_rate = 44100.0;
+        let output = filter.process(1.0, sample_rate);
+
+        // With no mode selected, output should be zero
+        assert_eq!(output, 0.0);
+    }
+
+    #[test]
+    fn test_filter_reset_state() {
+        let mut filter = SidFilter::new();
+
+        // Process some samples
+        for _ in 0..100 {
+            filter.process(0.5, 44100.0);
+        }
+
+        // State should have accumulated
+        assert!(filter.low != 0.0 || filter.band != 0.0);
+
+        // Reset
+        filter.reset_state();
+
+        // State should be cleared
+        assert_eq!(filter.low, 0.0);
+        assert_eq!(filter.band, 0.0);
+    }
+
+    #[test]
+    fn test_sid_filter_routing_via_registers() {
+        let mut sid = Sid6581::new();
+
+        // Set filter routing via register $D417
+        // Bits 0-3: voice routing (bit 0=voice1, bit 1=voice2, bit 2=voice3, bit 3=external)
+        // Bits 4-7: resonance
+        sid.write(0x17, 0x55); // 0x55 = 01010101 = resonance 5, route voice 1 and 3 (bits 0 and 2)
+
+        assert!(sid.filter().voice_routed(0)); // Voice 1 routed (bit 0)
+        assert!(!sid.filter().voice_routed(1)); // Voice 2 not routed (bit 1 = 0)
+        assert!(sid.filter().voice_routed(2)); // Voice 3 routed (bit 2)
+        assert_eq!(sid.filter().resonance, 5);
+    }
+
+    #[test]
+    fn test_sid_filter_mode_via_registers() {
+        let mut sid = Sid6581::new();
+
+        // Set filter mode via register $D418
+        // Bits 0-3: volume, bit 4: LP, bit 5: BP, bit 6: HP
+        sid.write(0x18, 0x3F); // Volume 15, BP + LP modes
+
+        assert_eq!(sid.volume(), 0x0F);
+        assert!(sid.filter().mode.low_pass);
+        assert!(sid.filter().mode.band_pass);
+        assert!(!sid.filter().mode.high_pass);
+    }
+
+    #[test]
+    fn test_sid_output_with_filter_routing() {
+        let mut sid = Sid6581::new();
+
+        // Set up voice 1 with sawtooth
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x10); // Frequency
+        sid.write(0x04, 0x21); // Sawtooth + gate
+        sid.voices[0].envelope_counter = 255;
+
+        // Set up voice 2 (different waveform)
+        sid.write(0x07, 0x00);
+        sid.write(0x08, 0x20);
+        sid.write(0x0B, 0x41); // Pulse + gate
+        sid.voices[1].pulse_width = 0x800;
+        sid.voices[1].envelope_counter = 255;
+
+        // Route voice 1 through filter, voice 2 direct
+        sid.write(0x17, 0x81); // Route voice 1, resonance = 8
+        sid.write(0x15, 0x00);
+        sid.write(0x16, 0x80); // Mid cutoff
+
+        // Set LP filter mode and volume
+        sid.write(0x18, 0x1F); // Volume 15, LP mode
+
+        // Clock enough to generate samples
+        for _ in 0..100 {
+            sid.clock();
+        }
+
+        let samples = sid.take_samples();
+        assert!(!samples.is_empty());
+
+        // Should have valid audio output
+        for sample in &samples {
+            assert!(sample.is_finite());
+            assert!(*sample >= -1.0 && *sample <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_sid_output_all_voices_filtered() {
+        let mut sid = Sid6581::new();
+
+        // Set up all three voices
+        for voice in 0..3 {
+            let base = voice * 7;
+            sid.write(base as u16, 0x00);
+            sid.write(base as u16 + 1, 0x10 + voice as u8);
+            sid.write(base as u16 + 4, 0x21); // Sawtooth + gate
+        }
+        sid.voices[0].envelope_counter = 255;
+        sid.voices[1].envelope_counter = 255;
+        sid.voices[2].envelope_counter = 255;
+
+        // Route all voices through filter
+        sid.write(0x17, 0xF7); // Route all 3 voices, max resonance
+        sid.write(0x16, 0xFF); // High cutoff
+        sid.write(0x18, 0x4F); // Volume 15, HP mode
+
+        // Clock and generate samples
+        for _ in 0..100 {
+            sid.clock();
+        }
+
+        let samples = sid.take_samples();
+        assert!(!samples.is_empty());
+
+        // HP filter should produce some output (not all zero)
+        let any_nonzero = samples.iter().any(|&s| s.abs() > 0.001);
+        assert!(any_nonzero, "HP filter should produce non-zero output");
+    }
+
+    #[test]
+    fn test_sid_output_no_filter_routing() {
+        let mut sid = Sid6581::new();
+
+        // Set up voice 1
+        sid.write(0x00, 0x00);
+        sid.write(0x01, 0x10);
+        sid.write(0x04, 0x21); // Sawtooth + gate
+        sid.voices[0].envelope_counter = 255;
+
+        // No filter routing (all voices bypass filter)
+        sid.write(0x17, 0x00); // No routing
+
+        // Set filter mode but no routing
+        sid.write(0x18, 0x1F); // Volume 15, LP mode
+
+        // Clock and generate samples
+        for _ in 0..100 {
+            sid.clock();
+        }
+
+        let samples = sid.take_samples();
+        assert!(!samples.is_empty());
+
+        // Voice should still produce output (goes direct, not through filter)
+        let any_nonzero = samples.iter().any(|&s| s.abs() > 0.001);
+        assert!(any_nonzero, "Unrouted voice should produce output");
+    }
+
+    #[test]
+    fn test_filter_notch_mode() {
+        let mut filter = SidFilter::new();
+        filter.cutoff = 1024;
+        filter.resonance = 8;
+        filter.mode = FilterMode::from_register(0x50); // LP + HP = Notch
+
+        assert!(filter.mode.low_pass);
+        assert!(!filter.mode.band_pass);
+        assert!(filter.mode.high_pass);
+
+        let sample_rate = 44100.0;
+
+        // Process some samples
+        for _ in 0..100 {
+            let _ = filter.process(0.5, sample_rate);
+        }
+
+        // Both LP and HP outputs should contribute
+        // The notch filter attenuates frequencies around cutoff
+        assert!(filter.low != 0.0);
+    }
+
+    #[test]
+    fn test_sample_rate_affects_filter() {
+        let mut filter1 = SidFilter::new();
+        let mut filter2 = SidFilter::new();
+
+        filter1.cutoff = 1024;
+        filter2.cutoff = 1024;
+        filter1.mode = FilterMode::from_register(0x10);
+        filter2.mode = FilterMode::from_register(0x10);
+
+        // Different sample rates should produce different coefficients
+        let coeff_44k = filter1.cutoff_coefficient(44100.0);
+        let coeff_48k = filter2.cutoff_coefficient(48000.0);
+
+        // Higher sample rate = lower coefficient (same Hz cutoff is smaller fraction of Nyquist)
+        assert!(coeff_48k < coeff_44k);
+    }
+
+    #[test]
+    fn test_sid_sample_rate_getter() {
+        let mut sid = Sid6581::new();
+
+        // Default should be 44100
+        assert!((sid.sample_rate() - 44100.0).abs() < 0.01);
+
+        // After setting, should reflect new rate
+        sid.set_sample_rate(48000, 985248);
+        assert!((sid.sample_rate() - 48000.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_voice_to_float_centered() {
+        // Test that voice output is properly centered around zero
+
+        // Zero waveform + zero envelope = mid-point (maps to 0)
+        let zero_zero = Sid6581::voice_to_float(0, 0);
+        assert!(
+            (zero_zero - (-1.0)).abs() < 0.01,
+            "0,0 should map to -1.0 (below midpoint)"
+        );
+
+        // Max waveform + max envelope
+        let max_max = Sid6581::voice_to_float(0xFFF, 255);
+        assert!(max_max > 0.9, "Max should be near +1.0");
+
+        // Mid waveform + max envelope
+        let mid_max = Sid6581::voice_to_float(0x800, 255);
+        // 0x800 = 2048, with envelope 255: (2048 * 255) >> 8 = 2040
+        // Centered: (2040 - 2048) / 2048 ≈ -0.004
+        assert!(
+            mid_max.abs() < 0.1,
+            "Mid waveform should be near zero: {}",
+            mid_max
+        );
     }
 }

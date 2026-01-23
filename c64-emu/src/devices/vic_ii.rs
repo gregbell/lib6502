@@ -1100,6 +1100,7 @@ impl VicII {
                 let mc0 = self.sprite_multicolor_0();
                 let mc1 = self.sprite_multicolor_1();
 
+                #[allow(clippy::needless_range_loop)]
                 for byte_idx in 0..SPRITE_BYTES_PER_LINE {
                     let byte = line_data[byte_idx];
 
@@ -1171,6 +1172,7 @@ impl VicII {
             } else {
                 // Standard hires mode: 24 pixels from 3 bytes (8 pixels per byte)
                 // Bit 7 of each byte is the leftmost pixel
+                #[allow(clippy::needless_range_loop)]
                 for byte_idx in 0..SPRITE_BYTES_PER_LINE {
                     let byte = line_data[byte_idx];
 
@@ -4433,7 +4435,7 @@ mod tests {
         vic.registers[0x1D] = 0x03; // X expansion for sprites 0 and 1
         vic.registers[0x00] = 24; // Sprite 0 X
         vic.registers[0x01] = 51; // Sprite 0 Y
-        // Sprite 1 positioned so expanded pixel overlaps with sprite 0
+                                  // Sprite 1 positioned so expanded pixel overlaps with sprite 0
         vic.registers[0x02] = 25; // Sprite 1 X = 25 (1 pixel offset)
         vic.registers[0x03] = 51; // Sprite 1 Y
         vic.registers[0x10] = 0;

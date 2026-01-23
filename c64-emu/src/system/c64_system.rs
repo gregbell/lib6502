@@ -270,7 +270,7 @@ impl C64System {
         let mut sprite_data = [[0u8; SPRITE_DATA_SIZE]; SPRITE_COUNT];
 
         // Only fetch data for enabled sprites
-        for sprite_num in 0..SPRITE_COUNT {
+        for (sprite_num, data) in sprite_data.iter_mut().enumerate() {
             if enabled & (1 << sprite_num) != 0 {
                 // Get sprite pointer from screen RAM + $3F8
                 let pointer = mem.vic.get_sprite_pointer(screen_ram, sprite_num);
@@ -278,8 +278,8 @@ impl C64System {
                 // Fetch 63 bytes of sprite data
                 // Sprite data address = pointer * 64
                 let base_addr = (pointer as u16) * 64;
-                for i in 0..SPRITE_DATA_SIZE {
-                    sprite_data[sprite_num][i] = mem.vic_read(base_addr + i as u16);
+                for (i, byte) in data.iter_mut().enumerate() {
+                    *byte = mem.vic_read(base_addr + i as u16);
                 }
             }
         }

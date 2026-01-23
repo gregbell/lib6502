@@ -198,9 +198,9 @@
 - [x] T080 [US3] Implement noise LFSR (23-bit feedback shift register) in c64-emu/src/devices/sid.rs
 - [x] T081 [US3] Implement ADSR envelope generator with rate tables in c64-emu/src/devices/sid.rs
 - [x] T082 [US3] Implement exponential decay approximation in c64-emu/src/devices/sid.rs
-- [ ] T083 [US3] Implement simplified biquad filter (LP/BP/HP/Notch modes) in src/devices/c64/sid.rs
-- [ ] T084 [US3] Implement voice routing through filter in src/devices/c64/sid.rs
-- [ ] T085 [US3] Implement sample output generation (~23 clocks per 44.1kHz sample) in src/devices/c64/sid.rs
+- [x] T083 [US3] Implement simplified biquad filter (LP/BP/HP/Notch modes) in c64-emu/src/devices/sid.rs
+- [x] T084 [US3] Implement voice routing through filter in c64-emu/src/devices/sid.rs
+- [x] T085 [US3] Implement sample output generation (~23 clocks per 44.1kHz sample) in c64-emu/src/devices/sid.rs
 
 ### WASM Audio API
 
@@ -414,12 +414,12 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
 | Phase 3: US1 | T029-T050 | 22/22 | Boot, keyboard, display ✓ COMPLETE |
 | Phase 4: US2 | T051-T066 | 16/16 | Disk image loading ✓ COMPLETE |
-| Phase 5: US3 | T067-T091 | 16/25 | Graphics & audio |
+| Phase 5: US3 | T067-T091 | 19/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **81/132** | |
+| **Total** | **132 tasks** | **84/132** | |
 
 ---
 
