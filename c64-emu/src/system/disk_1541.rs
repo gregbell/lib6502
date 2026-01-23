@@ -612,10 +612,7 @@ impl D64Image {
     /// Find a file's directory entry.
     ///
     /// Returns (dir_track, dir_sector, entry_offset, first_track, first_sector).
-    fn find_file_entry(
-        &self,
-        filename: &str,
-    ) -> Result<(u8, u8, usize, u8, u8), D64Error> {
+    fn find_file_entry(&self, filename: &str) -> Result<(u8, u8, usize, u8, u8), D64Error> {
         let search_name = filename.to_uppercase();
         let mut dir_track = DIRECTORY_TRACK;
         let mut dir_sector = DIRECTORY_FIRST_SECTOR;
@@ -723,7 +720,9 @@ impl D64Image {
         if dir_sector >= max_sectors {
             return Err(D64Error::CorruptedImage(format!(
                 "Invalid directory sector pointer in BAM: sector {} exceeds track {} maximum ({})",
-                dir_sector, dir_track, max_sectors - 1
+                dir_sector,
+                dir_track,
+                max_sectors - 1
             )));
         }
 
@@ -1662,10 +1661,11 @@ impl Drive1541 {
                 .read_sector(prev_track, prev_sector)?;
             prev_data[0] = track;
             prev_data[1] = sector;
-            self.mounted_image
-                .as_mut()
-                .unwrap()
-                .write_sector(prev_track, prev_sector, &prev_data)?;
+            self.mounted_image.as_mut().unwrap().write_sector(
+                prev_track,
+                prev_sector,
+                &prev_data,
+            )?;
         }
 
         // Set link bytes for this sector (will be updated when next sector allocated)
@@ -1765,24 +1765,30 @@ impl Drive1541 {
             let block_count = write_state.block_count + 1;
 
             // Create directory entry
-            self.mounted_image.as_mut().unwrap().create_directory_entry(
-                &write_state.filename,
-                write_state.file_type,
-                first_track,
-                first_sector,
-                block_count,
-            )?;
+            self.mounted_image
+                .as_mut()
+                .unwrap()
+                .create_directory_entry(
+                    &write_state.filename,
+                    write_state.file_type,
+                    first_track,
+                    first_sector,
+                    block_count,
+                )?;
 
             self.status = DriveStatus::ok();
         } else if write_state.block_count > 0 {
             // File has sectors but empty final buffer - create directory entry
-            self.mounted_image.as_mut().unwrap().create_directory_entry(
-                &write_state.filename,
-                write_state.file_type,
-                write_state.first_track,
-                write_state.first_sector,
-                write_state.block_count,
-            )?;
+            self.mounted_image
+                .as_mut()
+                .unwrap()
+                .create_directory_entry(
+                    &write_state.filename,
+                    write_state.file_type,
+                    write_state.first_track,
+                    write_state.first_sector,
+                    write_state.block_count,
+                )?;
 
             self.status = DriveStatus::ok();
         }
@@ -1865,7 +1871,9 @@ impl Drive1541 {
         // Parse filename from "S:FILENAME" or "S0:FILENAME"
         let filename = if cmd.starts_with("S:") {
             &cmd[2..]
-        } else if cmd.len() > 3 && cmd.chars().nth(1) == Some('0') && cmd.chars().nth(2) == Some(':')
+        } else if cmd.len() > 3
+            && cmd.chars().nth(1) == Some('0')
+            && cmd.chars().nth(2) == Some(':')
         {
             &cmd[3..]
         } else {
@@ -1908,7 +1916,9 @@ impl Drive1541 {
         // Parse: "N:DISKNAME,ID" or "N0:DISKNAME,ID"
         let params = if cmd.starts_with("N:") {
             &cmd[2..]
-        } else if cmd.len() > 3 && cmd.chars().nth(1) == Some('0') && cmd.chars().nth(2) == Some(':')
+        } else if cmd.len() > 3
+            && cmd.chars().nth(1) == Some('0')
+            && cmd.chars().nth(2) == Some(':')
         {
             &cmd[3..]
         } else {
@@ -2128,8 +2138,7 @@ mod tests {
         let (track, sector) = image.allocate_sector().unwrap();
 
         // Create directory entry
-        let result =
-            image.create_directory_entry("MYFILE", 0x02, track, sector, 1);
+        let result = image.create_directory_entry("MYFILE", 0x02, track, sector, 1);
         assert!(result.is_ok());
 
         // Verify file can be found
@@ -2170,7 +2179,10 @@ mod tests {
 
         // Verify the sector data looks correct
         let sector_data = drive.image().unwrap().read_sector(track, sector).unwrap();
-        assert_eq!(sector_data[0], 0, "Next track should be 0 (no more sectors)");
+        assert_eq!(
+            sector_data[0], 0,
+            "Next track should be 0 (no more sectors)"
+        );
         // Last byte position should be 21 (position 2 + 20 bytes - 1)
         assert_eq!(sector_data[1], 21, "Last byte position should be 21");
         // First data byte should be 'H'
@@ -2210,9 +2222,7 @@ mod tests {
         drive.mount(data).unwrap();
 
         // Create a file
-        drive
-            .open_channel(2, "MYFILE", ChannelMode::Write)
-            .unwrap();
+        drive.open_channel(2, "MYFILE", ChannelMode::Write).unwrap();
         drive.write_byte(2, 0x41).unwrap();
         drive.close_channel(2);
 
@@ -2269,9 +2279,7 @@ mod tests {
         assert!(!drive.is_disk_modified());
 
         // Write a file
-        drive
-            .open_channel(2, "TEST", ChannelMode::Write)
-            .unwrap();
+        drive.open_channel(2, "TEST", ChannelMode::Write).unwrap();
         drive.write_byte(2, 0x41).unwrap();
         drive.close_channel(2);
 

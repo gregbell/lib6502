@@ -49,7 +49,8 @@ fn test_basic_boot_with_real_roms() {
 
     // Create C64 system
     let mut c64 = C64System::new(Region::PAL);
-    c64.load_roms(&basic, &kernal, &charrom).expect("Failed to load ROMs");
+    c64.load_roms(&basic, &kernal, &charrom)
+        .expect("Failed to load ROMs");
     c64.reset();
 
     println!("Starting C64 emulation...");
@@ -69,7 +70,10 @@ fn test_basic_boot_with_real_roms() {
 
         if basic_start != 0 && !basic_started {
             basic_started = true;
-            println!("Frame {}: BASIC started! basicStart = ${:04X}", frame, basic_start);
+            println!(
+                "Frame {}: BASIC started! basicStart = ${:04X}",
+                frame, basic_start
+            );
         }
 
         // Every 50 frames, print status
@@ -112,7 +116,10 @@ fn test_basic_boot_with_real_roms() {
     }
 
     // If we get here, BASIC didn't boot
-    println!("\n=== FAILED: BASIC did not boot after {} frames ===", max_frames);
+    println!(
+        "\n=== FAILED: BASIC did not boot after {} frames ===",
+        max_frames
+    );
 
     // Print final state for debugging
     let pc = c64.pc();
@@ -142,7 +149,8 @@ fn test_cia_icr_clears_on_read() {
     let charrom = load_rom("characters.901225-01.bin");
 
     let mut c64 = C64System::new(Region::PAL);
-    c64.load_roms(&basic, &kernal, &charrom).expect("Failed to load ROMs");
+    c64.load_roms(&basic, &kernal, &charrom)
+        .expect("Failed to load ROMs");
     c64.reset();
 
     // Run a few frames to let timers generate interrupts
@@ -169,7 +177,8 @@ fn test_framebuffer_has_characters() {
     let charrom = load_rom("characters.901225-01.bin");
 
     let mut c64 = C64System::new(Region::PAL);
-    c64.load_roms(&basic, &kernal, &charrom).expect("Failed to load ROMs");
+    c64.load_roms(&basic, &kernal, &charrom)
+        .expect("Failed to load ROMs");
     c64.reset();
 
     // Run until BASIC boots
@@ -184,7 +193,11 @@ fn test_framebuffer_has_characters() {
     // Check VIC-II state
     let vic_regs = c64.get_vic_registers();
     println!("VIC-II registers:");
-    println!("  $D011 (CR1): ${:02X} - DEN={}", vic_regs[0x11], (vic_regs[0x11] & 0x10) != 0);
+    println!(
+        "  $D011 (CR1): ${:02X} - DEN={}",
+        vic_regs[0x11],
+        (vic_regs[0x11] & 0x10) != 0
+    );
     println!("  $D016 (CR2): ${:02X}", vic_regs[0x16]);
     println!("  $D018 (Mem): ${:02X}", vic_regs[0x18]);
     println!("  $D020 (Border): ${:02X}", vic_regs[0x20]);
@@ -192,8 +205,10 @@ fn test_framebuffer_has_characters() {
 
     // Check bank config
     let (basic_on, kernal_on, charrom_on, port01) = c64.get_bank_config();
-    println!("Bank config: BASIC={}, KERNAL={}, CHARROM={}, Port01=${:02X}",
-             basic_on, kernal_on, charrom_on, port01);
+    println!(
+        "Bank config: BASIC={}, KERNAL={}, CHARROM={}, Port01=${:02X}",
+        basic_on, kernal_on, charrom_on, port01
+    );
 
     // Check screen memory ($0400) - first few characters
     println!("\nScreen RAM at $0400:");
@@ -241,13 +256,21 @@ fn test_framebuffer_has_characters() {
     // Text color from color RAM (should be 14 = light blue)
     let text_color = c64.read_memory(0xD800) & 0x0F;
 
-    let non_bg_pixels: u32 = color_counts.iter().enumerate()
+    let non_bg_pixels: u32 = color_counts
+        .iter()
+        .enumerate()
         .filter(|(c, _)| *c != bg_color as usize)
         .map(|(_, count)| count)
         .sum();
 
-    println!("\nBorder color: {}, BG color: {}, Text color: {}", border_color, bg_color, text_color);
-    println!("Non-background pixels (text + any other): {}", non_bg_pixels);
+    println!(
+        "\nBorder color: {}, BG color: {}, Text color: {}",
+        border_color, bg_color, text_color
+    );
+    println!(
+        "Non-background pixels (text + any other): {}",
+        non_bg_pixels
+    );
 
     // Print first 8 rows of framebuffer for row 0 (first character line)
     println!("\nFramebuffer row 0 (first 80 pixels):");
@@ -272,7 +295,10 @@ fn test_framebuffer_has_characters() {
         // Check VIC bank from CIA2
         let cia2_regs = c64.get_cia2_registers();
         let vic_bank = (!cia2_regs[0]) & 0x03;
-        println!("VIC bank: {} (from CIA2 $DD00=${:02X})", vic_bank, cia2_regs[0]);
+        println!(
+            "VIC bank: {} (from CIA2 $DD00=${:02X})",
+            vic_bank, cia2_regs[0]
+        );
 
         // Check current raster
         let raster = c64.get_current_raster();
@@ -294,7 +320,8 @@ fn test_vic_reads_character_rom() {
     let charrom = load_rom("characters.901225-01.bin");
 
     let mut c64 = C64System::new(Region::PAL);
-    c64.load_roms(&basic, &kernal, &charrom).expect("Failed to load ROMs");
+    c64.load_roms(&basic, &kernal, &charrom)
+        .expect("Failed to load ROMs");
     c64.reset();
 
     // The character ROM has known patterns. Let's check the '@' character (code 0).
@@ -342,7 +369,8 @@ fn test_vic_direct_rendering() {
     let charrom = load_rom("characters.901225-01.bin");
 
     let mut c64 = C64System::new(Region::PAL);
-    c64.load_roms(&basic, &kernal, &charrom).expect("Failed to load ROMs");
+    c64.load_roms(&basic, &kernal, &charrom)
+        .expect("Failed to load ROMs");
     c64.reset();
 
     // Run until BASIC boots
@@ -371,29 +399,41 @@ fn test_vic_direct_rendering() {
 
     println!("Screen RAM[0..10]: {:?}", &screen_ram[0..10]);
     println!("Color RAM[0..10]: {:?}", &color_ram[0..10]);
-    println!("Char data for space ($20): {:?}", &char_data[0x20*8..0x20*8+8]);
-    println!("Char data for '*' ($2A): {:?}", &char_data[0x2A*8..0x2A*8+8]);
+    println!(
+        "Char data for space ($20): {:?}",
+        &char_data[0x20 * 8..0x20 * 8 + 8]
+    );
+    println!(
+        "Char data for '*' ($2A): {:?}",
+        &char_data[0x2A * 8..0x2A * 8 + 8]
+    );
 
     // Get VIC state before rendering
     let d011 = mem.vic.read(0x11);
     let d018 = mem.vic.read(0x18);
     println!("$D011: ${:02X}, $D018: ${:02X}", d011, d018);
-    println!("DEN: {}, BMM: {}, ECM: {}, MCM: {}",
-             (d011 & 0x10) != 0,
-             (d011 & 0x20) != 0,
-             (d011 & 0x40) != 0,
-             mem.vic.read(0x16) & 0x10 != 0);
+    println!(
+        "DEN: {}, BMM: {}, ECM: {}, MCM: {}",
+        (d011 & 0x10) != 0,
+        (d011 & 0x20) != 0,
+        (d011 & 0x40) != 0,
+        mem.vic.read(0x16) & 0x10 != 0
+    );
 
     // Get framebuffer before rendering
     let fb_before = mem.vic.framebuffer().clone();
     println!("Framebuffer[0][0..10] before: {:?}", &fb_before[0][0..10]);
 
     // Manually call step_scanline for scanline 51 (first visible line)
-    mem.vic.step_scanline(51, &char_data, &screen_ram, &color_ram);
+    mem.vic
+        .step_scanline(51, &char_data, &screen_ram, &color_ram);
 
     // Get framebuffer after rendering
     let fb_after = mem.vic.framebuffer();
-    println!("Framebuffer[0][0..10] after scanline 51: {:?}", &fb_after[0][0..10]);
+    println!(
+        "Framebuffer[0][0..10] after scanline 51: {:?}",
+        &fb_after[0][0..10]
+    );
 
     // Check if anything changed
     let mut diff_count = 0;
@@ -406,7 +446,8 @@ fn test_vic_direct_rendering() {
 
     // Render more scanlines
     for scanline in 52..60 {
-        mem.vic.step_scanline(scanline, &char_data, &screen_ram, &color_ram);
+        mem.vic
+            .step_scanline(scanline, &char_data, &screen_ram, &color_ram);
     }
 
     // Check row 1 of framebuffer (should have part of character row 0)
