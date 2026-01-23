@@ -119,7 +119,7 @@
 
 - [x] T043 [P] [US1] Create HTML structure with canvas element (320x200) in c64-demo/index.html
 - [x] T044 [P] [US1] Create C64-themed CSS styling (blue background, border) in c64-demo/style.css
-- [ ] T045 [US1] Implement WASM module loading and initialization in c64-demo/c64.js
+- [x] T045 [US1] Implement WASM module loading and initialization in c64-demo/c64.js
 - [ ] T046 [US1] Implement ROM upload UI and localStorage caching in c64-demo/components/rom-manager.js
 - [ ] T047 [US1] Implement framebuffer-to-canvas rendering with C64 palette in c64-demo/components/screen.js
 - [ ] T048 [US1] Implement requestAnimationFrame render loop (50/60 FPS) in c64-demo/c64.js
@@ -412,14 +412,14 @@ Task: "Implement framebuffer-to-canvas rendering in c64-demo/components/screen.j
 |-------|-------|-----------|-------------|
 | Phase 1: Setup | T001-T006 | 5/6 | Project structure (sub-crate) |
 | Phase 2: Foundational | T007-T028 | 22/22 | Core infrastructure |
-| Phase 3: US1 | T029-T050 | 16/22 | Boot, keyboard, display |
+| Phase 3: US1 | T029-T050 | 17/22 | Boot, keyboard, display |
 | Phase 4: US2 | T051-T066 | 0/16 | Disk image loading |
 | Phase 5: US3 | T067-T091 | 0/25 | Graphics & audio |
 | Phase 6: US4 | T092-T098 | 0/7 | Joystick controls |
 | Phase 7: US5 | T099-T111 | 0/13 | Save/load states |
 | Phase 8: US6 | T112-T118 | 0/7 | Settings |
 | Phase 9: Polish | T119-T132 | 0/14 | Edge cases, debug, deploy |
-| **Total** | **132 tasks** | **43/132** | |
+| **Total** | **132 tasks** | **44/132** | |
 
 ---
 
