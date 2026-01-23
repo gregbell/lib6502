@@ -219,7 +219,14 @@ impl VicII {
             (true, false, true) => {
                 self.render_multicolor_bitmap_scanline(display_line, char_rom, screen_ram, color_ram);
             }
-            // Other modes not yet implemented - fill with background
+            // ECM (Extended Color Mode) text mode (BMM=0, ECM=1, MCM=0)
+            // In this mode, bits 6-7 of the character code select one of 4 background colors
+            // Only 64 characters are addressable (bits 0-5)
+            (false, true, false) => {
+                self.render_ecm_text_scanline(display_line, char_rom, screen_ram, color_ram);
+            }
+            // Illegal mode combinations (BMM+ECM or all three) produce garbled output
+            // We fill with background as a safe default
             _ => {
                 let bg_color = self.background_color();
                 for x in 0..SCREEN_WIDTH {
@@ -560,6 +567,89 @@ impl VicII {
                 let px = x_base + bit_pair * 2;
                 self.framebuffer[display_line][px] = color;
                 self.framebuffer[display_line][px + 1] = color;
+            }
+        }
+    }
+
+    /// Render one scanline in ECM (Extended Color Mode) text mode (40x25 characters).
+    ///
+    /// In ECM text mode (ECM=1, BMM=0, MCM=0):
+    /// - Character code bits 6-7 select one of 4 background colors ($D021-$D024)
+    /// - Character code bits 0-5 address character patterns (only 64 characters available)
+    /// - Foreground color comes from color RAM (full 16 colors)
+    /// - Each character is still 8x8 pixels at full 320x200 resolution
+    ///
+    /// This mode allows different background colors per character while using standard
+    /// hires rendering, useful for colorful text displays.
+    fn render_ecm_text_scanline(
+        &mut self,
+        display_line: usize,
+        char_rom: &[u8],
+        screen_ram: &[u8],
+        color_ram: &[u8],
+    ) {
+        // Calculate which character row and which line within that character
+        let char_row = display_line / CHAR_HEIGHT;
+        let char_line = display_line % CHAR_HEIGHT;
+
+        // Skip if we're past the character display area
+        if char_row >= CHAR_ROWS {
+            let bg_color = self.background_color();
+            for x in 0..SCREEN_WIDTH {
+                self.framebuffer[display_line][x] = bg_color;
+            }
+            return;
+        }
+
+        // Get all 4 background colors
+        let bg_colors = [
+            self.background_color(),   // $D021 - bits 00
+            self.background_color_1(), // $D022 - bits 01
+            self.background_color_2(), // $D023 - bits 10
+            self.background_color_3(), // $D024 - bits 11
+        ];
+
+        // Render each of the 40 character columns
+        for char_col in 0..CHAR_COLUMNS {
+            // Get the character code from screen RAM
+            let screen_offset = char_row * CHAR_COLUMNS + char_col;
+            let char_code = if screen_offset < screen_ram.len() {
+                screen_ram[screen_offset]
+            } else {
+                0
+            };
+
+            // Get the foreground color from color RAM (lower 4 bits)
+            let fg_color = if screen_offset < color_ram.len() {
+                color_ram[screen_offset] & 0x0F
+            } else {
+                0x0E // Default to light blue
+            };
+
+            // In ECM mode:
+            // - Bits 6-7 of char code select background color (0-3)
+            // - Bits 0-5 of char code select character pattern (0-63 only)
+            let bg_select = (char_code >> 6) & 0x03;
+            let char_index = char_code & 0x3F; // Only bits 0-5
+
+            let bg_color = bg_colors[bg_select as usize];
+
+            // Get the character pattern byte for this line
+            // Character ROM: each character is 8 bytes (one per line)
+            let char_offset = (char_index as usize) * 8 + char_line;
+            let pattern = if char_offset < char_rom.len() {
+                char_rom[char_offset]
+            } else {
+                0
+            };
+
+            // Render 8 pixels for this character cell
+            let x_base = char_col * 8;
+            for bit in 0..8 {
+                // Bit 7 is the leftmost pixel
+                let pixel_set = (pattern & (0x80 >> bit)) != 0;
+                let color = if pixel_set { fg_color } else { bg_color };
+                self.framebuffer[display_line][x_base + bit] = color;
             }
         }
     }
@@ -1758,6 +1848,417 @@ mod tests {
                     cell,
                     pixel,
                     expected_color
+                );
+            }
+        }
+    }
+
+    // =========================================================================
+    // ECM (Extended Color Mode) Text Mode Tests (BMM=0, ECM=1, MCM=0)
+    // =========================================================================
+
+    #[test]
+    fn test_ecm_text_mode_basic_rendering() {
+        let mut vic = VicII::new();
+
+        // Enable ECM mode (ECM bit = bit 6 of $D011)
+        vic.registers[0x11] |= 0x40;
+        assert!(vic.extended_color_mode());
+        assert!(!vic.bitmap_mode());
+        assert!(!vic.multicolor_mode());
+
+        // Set up 4 background colors
+        vic.registers[0x21] = 0x00; // Background 0: black
+        vic.registers[0x22] = 0x01; // Background 1: white
+        vic.registers[0x23] = 0x02; // Background 2: red
+        vic.registers[0x24] = 0x03; // Background 3: cyan
+
+        // Create character ROM with a simple pattern
+        // Character 1 (index 1): all bits set (0xFF) for full coverage
+        let mut char_rom = vec![0u8; 2048];
+        for i in 0..8 {
+            char_rom[8 + i] = 0xFF; // Character 1: all pixels on
+        }
+
+        // Screen RAM with character codes selecting different background colors
+        // Char code bits 6-7 select background, bits 0-5 select character pattern
+        let mut screen_ram = vec![0u8; 1000];
+        // Character index 1 with background 0 (bits 6-7 = 00)
+        screen_ram[0] = 0x01; // 00_000001 -> bg0, char 1
+        // Character index 1 with background 1 (bits 6-7 = 01)
+        screen_ram[1] = 0x41; // 01_000001 -> bg1, char 1
+        // Character index 1 with background 2 (bits 6-7 = 10)
+        screen_ram[2] = 0x81; // 10_000001 -> bg2, char 1
+        // Character index 1 with background 3 (bits 6-7 = 11)
+        screen_ram[3] = 0xC1; // 11_000001 -> bg3, char 1
+
+        // Color RAM: foreground color 5 (green) for all characters
+        let mut color_ram = vec![0u8; 1000];
+        for i in 0..4 {
+            color_ram[i] = 0x05;
+        }
+
+        // Render first visible scanline
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // All 4 cells have character 1 (all pixels set), so all should be foreground (green = 5)
+        for cell in 0..4 {
+            for pixel in 0..8 {
+                let x = cell * 8 + pixel;
+                assert_eq!(
+                    vic.framebuffer[0][x], 5,
+                    "Cell {} pixel {} should be foreground (green)",
+                    cell, pixel
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_ecm_text_mode_background_selection() {
+        let mut vic = VicII::new();
+
+        // Enable ECM mode
+        vic.registers[0x11] |= 0x40;
+
+        // Set up 4 distinct background colors
+        vic.registers[0x21] = 0x00; // Background 0: black
+        vic.registers[0x22] = 0x01; // Background 1: white
+        vic.registers[0x23] = 0x02; // Background 2: red
+        vic.registers[0x24] = 0x03; // Background 3: cyan
+
+        // Create character ROM where character 0 has all pixels OFF
+        // This way we'll see the background colors
+        let char_rom = vec![0u8; 2048]; // All zeros = all pixels off
+
+        // Screen RAM with character 0 (all pixels off) but different background selectors
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 0x00; // 00_000000 -> bg0, char 0
+        screen_ram[1] = 0x40; // 01_000000 -> bg1, char 0
+        screen_ram[2] = 0x80; // 10_000000 -> bg2, char 0
+        screen_ram[3] = 0xC0; // 11_000000 -> bg3, char 0
+
+        // Color RAM (doesn't matter since all pixels are off)
+        let color_ram = vec![0x0Fu8; 1000];
+
+        // Render first visible scanline
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Cell 0: background 0 (black = 0)
+        for pixel in 0..8 {
+            assert_eq!(
+                vic.framebuffer[0][pixel], 0,
+                "Cell 0 pixel {} should be bg0 (black)",
+                pixel
+            );
+        }
+
+        // Cell 1: background 1 (white = 1)
+        for pixel in 0..8 {
+            assert_eq!(
+                vic.framebuffer[0][8 + pixel], 1,
+                "Cell 1 pixel {} should be bg1 (white)",
+                pixel
+            );
+        }
+
+        // Cell 2: background 2 (red = 2)
+        for pixel in 0..8 {
+            assert_eq!(
+                vic.framebuffer[0][16 + pixel], 2,
+                "Cell 2 pixel {} should be bg2 (red)",
+                pixel
+            );
+        }
+
+        // Cell 3: background 3 (cyan = 3)
+        for pixel in 0..8 {
+            assert_eq!(
+                vic.framebuffer[0][24 + pixel], 3,
+                "Cell 3 pixel {} should be bg3 (cyan)",
+                pixel
+            );
+        }
+    }
+
+    #[test]
+    fn test_ecm_text_mode_64_character_limit() {
+        let mut vic = VicII::new();
+
+        // Enable ECM mode
+        vic.registers[0x11] |= 0x40;
+
+        // Set backgrounds
+        vic.registers[0x21] = 0x00;
+
+        // Create character ROM with distinct patterns for chars 0-63
+        // We'll use a simple pattern: each char's first line equals char index
+        let mut char_rom = vec![0u8; 2048];
+        for i in 0..64 {
+            // Make each character have a unique pattern
+            char_rom[i * 8] = 0xFF; // First line all on
+        }
+        // Characters 64-255 should NOT be accessed in ECM mode
+
+        // Screen RAM: Test that bits 6-7 select background, not character
+        let mut screen_ram = vec![0u8; 1000];
+        // Code 0x00 = bg0, char 0
+        screen_ram[0] = 0x00;
+        // Code 0x40 = bg1, char 0 (NOT char 64!)
+        screen_ram[1] = 0x40;
+        // Code 0x80 = bg2, char 0 (NOT char 128!)
+        screen_ram[2] = 0x80;
+        // Code 0xC0 = bg3, char 0 (NOT char 192!)
+        screen_ram[3] = 0xC0;
+
+        // All should use character 0's pattern, which has all pixels on
+        let mut color_ram = vec![0u8; 1000];
+        for i in 0..4 {
+            color_ram[i] = 0x05; // green foreground
+        }
+
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // All cells should show foreground (green = 5) because char 0 has all pixels on
+        for cell in 0..4 {
+            assert_eq!(
+                vic.framebuffer[0][cell * 8], 5,
+                "Cell {} should use char 0 pattern (foreground)",
+                cell
+            );
+        }
+    }
+
+    #[test]
+    fn test_ecm_text_mode_full_16_foreground_colors() {
+        let mut vic = VicII::new();
+
+        // Enable ECM mode
+        vic.registers[0x11] |= 0x40;
+
+        // Set background colors
+        vic.registers[0x21] = 0x00;
+
+        // Character ROM: char 0 has all pixels ON
+        let mut char_rom = vec![0u8; 2048];
+        for i in 0..8 {
+            char_rom[i] = 0xFF;
+        }
+
+        // Screen RAM: all char 0
+        let screen_ram = vec![0u8; 1000];
+
+        // Color RAM: each cell has a different foreground color (0-15)
+        let mut color_ram = vec![0u8; 1000];
+        for i in 0..16 {
+            color_ram[i] = i as u8;
+        }
+
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Each cell should have its own foreground color
+        for cell in 0..16 {
+            assert_eq!(
+                vic.framebuffer[0][cell * 8],
+                cell as u8,
+                "Cell {} should have foreground color {}",
+                cell,
+                cell
+            );
+        }
+    }
+
+    #[test]
+    fn test_ecm_text_mode_mixed_foreground_background() {
+        let mut vic = VicII::new();
+
+        // Enable ECM mode
+        vic.registers[0x11] |= 0x40;
+
+        // Set up distinct background colors
+        vic.registers[0x21] = 0x06; // bg0: blue
+        vic.registers[0x22] = 0x07; // bg1: yellow
+        vic.registers[0x23] = 0x08; // bg2: orange
+        vic.registers[0x24] = 0x09; // bg3: brown
+
+        // Character ROM: char 0 has alternating pattern (0xAA = 10101010)
+        let mut char_rom = vec![0u8; 2048];
+        for i in 0..8 {
+            char_rom[i] = 0xAA;
+        }
+
+        // Screen RAM: char 0 with different backgrounds
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 0x00; // bg0
+        screen_ram[1] = 0x40; // bg1
+        screen_ram[2] = 0x80; // bg2
+        screen_ram[3] = 0xC0; // bg3
+
+        // Color RAM: foreground color 1 (white)
+        let mut color_ram = vec![0u8; 1000];
+        for i in 0..4 {
+            color_ram[i] = 0x01;
+        }
+
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Pattern 0xAA = 10101010
+        // Pixel 0 = 1 (foreground = white)
+        // Pixel 1 = 0 (background)
+        // etc.
+
+        // Cell 0: foreground=white(1), background=blue(6)
+        assert_eq!(vic.framebuffer[0][0], 1, "Cell 0 pixel 0 should be white (fg)");
+        assert_eq!(vic.framebuffer[0][1], 6, "Cell 0 pixel 1 should be blue (bg0)");
+
+        // Cell 1: foreground=white(1), background=yellow(7)
+        assert_eq!(vic.framebuffer[0][8], 1, "Cell 1 pixel 0 should be white (fg)");
+        assert_eq!(vic.framebuffer[0][9], 7, "Cell 1 pixel 1 should be yellow (bg1)");
+
+        // Cell 2: foreground=white(1), background=orange(8)
+        assert_eq!(vic.framebuffer[0][16], 1, "Cell 2 pixel 0 should be white (fg)");
+        assert_eq!(vic.framebuffer[0][17], 8, "Cell 2 pixel 1 should be orange (bg2)");
+
+        // Cell 3: foreground=white(1), background=brown(9)
+        assert_eq!(vic.framebuffer[0][24], 1, "Cell 3 pixel 0 should be white (fg)");
+        assert_eq!(vic.framebuffer[0][25], 9, "Cell 3 pixel 1 should be brown (bg3)");
+    }
+
+    #[test]
+    fn test_ecm_text_mode_scanline_progression() {
+        let mut vic = VicII::new();
+
+        // Enable ECM mode
+        vic.registers[0x11] |= 0x40;
+
+        // Set backgrounds
+        vic.registers[0x21] = 0x00; // black
+
+        // Character ROM: char 0 has different patterns per line
+        let mut char_rom = vec![0u8; 2048];
+        char_rom[0] = 0xFF; // Line 0: all on
+        char_rom[1] = 0x00; // Line 1: all off
+        char_rom[2] = 0xF0; // Line 2: left half on
+        char_rom[3] = 0x0F; // Line 3: right half on
+
+        // Screen RAM: char 0 with bg0
+        let mut screen_ram = vec![0u8; 1000];
+        screen_ram[0] = 0x00;
+
+        // Color RAM: white foreground
+        let mut color_ram = vec![0u8; 1000];
+        color_ram[0] = 0x01;
+
+        // Render 4 scanlines
+        for line in 0..4 {
+            vic.step_scanline(51 + line as u16, &char_rom, &screen_ram, &color_ram);
+        }
+
+        // Line 0: all foreground (white)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[0][x], 1, "Line 0, pixel {} should be white", x);
+        }
+
+        // Line 1: all background (black)
+        for x in 0..8 {
+            assert_eq!(vic.framebuffer[1][x], 0, "Line 1, pixel {} should be black", x);
+        }
+
+        // Line 2: left half foreground, right half background
+        for x in 0..4 {
+            assert_eq!(vic.framebuffer[2][x], 1, "Line 2, pixel {} should be white", x);
+        }
+        for x in 4..8 {
+            assert_eq!(vic.framebuffer[2][x], 0, "Line 2, pixel {} should be black", x);
+        }
+
+        // Line 3: left half background, right half foreground
+        for x in 0..4 {
+            assert_eq!(vic.framebuffer[3][x], 0, "Line 3, pixel {} should be black", x);
+        }
+        for x in 4..8 {
+            assert_eq!(vic.framebuffer[3][x], 1, "Line 3, pixel {} should be white", x);
+        }
+    }
+
+    #[test]
+    fn test_ecm_text_mode_flag_detection() {
+        let mut vic = VicII::new();
+
+        // Initially ECM should be off
+        assert!(!vic.extended_color_mode());
+
+        // Enable ECM (bit 6 of $D011)
+        vic.registers[0x11] |= 0x40;
+        assert!(vic.extended_color_mode());
+
+        // Disable ECM
+        vic.registers[0x11] &= !0x40;
+        assert!(!vic.extended_color_mode());
+    }
+
+    #[test]
+    fn test_ecm_text_mode_disabled_display() {
+        let mut vic = VicII::new();
+
+        // Enable ECM but disable display (DEN=0)
+        vic.registers[0x11] = 0x40; // ECM=1, DEN=0
+
+        let char_rom = vec![0xFFu8; 2048];
+        let screen_ram = vec![0u8; 1000];
+        let color_ram = vec![0x0Fu8; 1000];
+
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // All pixels should be background color (6 = blue, default)
+        for x in 0..SCREEN_WIDTH {
+            assert_eq!(
+                vic.framebuffer[0][x], 6,
+                "Pixel {} should be background when display disabled",
+                x
+            );
+        }
+    }
+
+    #[test]
+    fn test_ecm_text_mode_full_row_coverage() {
+        let mut vic = VicII::new();
+
+        // Enable ECM mode
+        vic.registers[0x11] |= 0x40;
+
+        // Set up 4 background colors
+        vic.registers[0x21] = 0x00; // bg0: black
+        vic.registers[0x22] = 0x01; // bg1: white
+        vic.registers[0x23] = 0x02; // bg2: red
+        vic.registers[0x24] = 0x03; // bg3: cyan
+
+        // Character ROM: char 0 has all pixels off
+        let char_rom = vec![0u8; 2048];
+
+        // Screen RAM: cycle through all 4 backgrounds
+        let mut screen_ram = vec![0u8; 1000];
+        for cell in 0..40 {
+            let bg_select = (cell % 4) << 6;
+            screen_ram[cell] = bg_select as u8;
+        }
+
+        let color_ram = vec![0x0Fu8; 1000]; // doesn't matter since all pixels off
+
+        vic.step_scanline(51, &char_rom, &screen_ram, &color_ram);
+
+        // Verify all 40 cells have correct background colors
+        for cell in 0..40 {
+            let expected_bg = (cell % 4) as u8;
+            for pixel in 0..8 {
+                let x = cell * 8 + pixel;
+                assert_eq!(
+                    vic.framebuffer[0][x],
+                    expected_bg,
+                    "Cell {} pixel {} should be bg{}",
+                    cell,
+                    pixel,
+                    expected_bg
                 );
             }
         }
